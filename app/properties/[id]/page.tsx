@@ -3,6 +3,230 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '../../../lib/supabase'
 
+function DocumentsTab({ propertyId }) {
+  const [documents, setDocuments] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showAddCustom, setShowAddCustom] = useState(false)
+  const [customDoc, setCustomDoc] = useState({ name: '', assigned_to: '', due_date: '', notes: '' })
+
+  useEffect(() => {
+    fetchDocuments()
+  }, [propertyId])
+
+  const fetchDocuments = async () => {
+    setLoading(true)
+    const { data } = await supabase
+      .from('documents')
+      .select('*')
+      .eq('property_id', propertyId)
+      .order('sort_order')
+    if (data && data.length > 0) {
+      setDocuments(data)
+    } else {
+      await loadFromTemplates()
+    }
+    setLoading(false)
+  }
+
+  const loadFromTemplates = async () => {
+    const { data: tmpl } = await supabase
+      .from('document_templates')
+      .select('*')
+      .order('sort_order')
+    if (tmpl) {
+      const docs = tmpl.map((t, i) => ({
+        property_id: propertyId,
+        name: t.name,
+        category: t.category,
+        is_required: true,
+        status: 'Not Started',
+        is_custom: false,
+        sort_order: i
+      }))
+      const { data: inserted } = await supabase
+        .from('documents')
+        .insert(docs)
+        .select()
+      if (inserted) setDocuments(inserted.sort((a, b) => a.sort_order - b.sort_order))
+    }
+  }
+
+  const updateDoc = async (id, updates) => {
+    await supabase.from('documents').update(updates).eq('id', id)
+    setDocuments(docs => docs.map(d => d.id === id ? { ...d, ...updates } : d))
+  }
+
+  const moveDoc = async (index, direction) => {
+    const newDocs = [...documents]
+    const swapIndex = index + direction
+    if (swapIndex < 0 || swapIndex >= newDocs.length) return
+    
+    const temp = newDocs[index]
+    newDocs[index] = newDocs[swapIndex]
+    newDocs[swapIndex] = temp
+
+    const updated = newDocs.map((d, i) => ({ ...d, sort_order: i }))
+    setDocuments(updated)
+
+    await supabase.from('documents').update({ sort_order: updated[index].sort_order }).eq('id', updated[index].id)
+    await supabase.from('documents').update({ sort_order: updated[swapIndex].sort_order }).eq('id', updated[swapIndex].id)
+  }
+
+  const addCustomDoc = async () => {
+    if (!customDoc.name) return
+    const maxOrder = documents.length
+    const { data } = await supabase
+      .from('documents')
+      .insert([{ ...customDoc, property_id: propertyId, status: 'Not Started', is_custom: true, sort_order: maxOrder }])
+      .select()
+    if (data) {
+      setDocuments([...documents, ...data])
+      setCustomDoc({ name: '', assigned_to: '', due_date: '', notes: '' })
+      setShowAddCustom(false)
+    }
+  }
+
+const indexedDocs = documents.map((doc, index) => ({ ...doc, globalIndex: index }))
+  const completed = documents.filter(d => d.status === 'Submitted').length
+  const total = documents.length
+
+  if (loading) return <div className="bg-white rounded-lg shadow p-6 text-gray-500">Loading documents...</div>
+
+  return (
+    <div className="space-y-4">
+      {/* Progress Bar */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <div className="flex justify-between items-center mb-2">
+          <span className="text-sm font-medium text-gray-700">Progress: {completed} of {total} submitted</span>
+          <button
+            onClick={() => setShowAddCustom(true)}
+            className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+          >
+            + Add Custom Document
+          </button>
+        </div>
+        <div className="w-full bg-gray-200 rounded-full h-2">
+          <div
+            className="bg-blue-600 h-2 rounded-full transition-all"
+            style={{ width: total > 0 ? `${(completed / total) * 100}%` : '0%' }}
+          />
+        </div>
+      </div>
+
+{/* Documents List */}
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="divide-y">
+          {indexedDocs.map((doc) => (
+              <div key={doc.id} className="p-4">
+                <div className="flex items-start gap-2">
+                  {/* Up/Down arrows */}
+                  <div className="flex flex-col gap-1 mt-1">
+                    <button
+                      onClick={() => moveDoc(doc.globalIndex, -1)}
+                      className="text-gray-400 hover:text-gray-600 text-xs leading-none"
+                    >▲</button>
+                    <button
+                      onClick={() => moveDoc(doc.globalIndex, 1)}
+                      className="text-gray-400 hover:text-gray-600 text-xs leading-none"
+                    >▼</button>
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={doc.is_required}
+                        onChange={(e) => updateDoc(doc.id, { is_required: e.target.checked })}
+                        className="mt-1"
+                      />
+                      <span className={`text-sm ${!doc.is_required ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
+                        {doc.name}
+                        {doc.is_custom && <span className="ml-2 text-xs bg-purple-100 text-purple-700 px-1 rounded">Custom</span>}
+                      </span>
+                    </div>
+                    <div className="mt-2 grid grid-cols-3 gap-2 ml-6">
+                      <input
+                        type="text"
+                        placeholder="Assigned to"
+                        value={doc.assigned_to || ''}
+                        onChange={(e) => updateDoc(doc.id, { assigned_to: e.target.value })}
+                        className="border border-gray-200 rounded px-2 py-1 text-xs"
+                      />
+                      <input
+                        type="date"
+                        value={doc.due_date || ''}
+                        onChange={(e) => updateDoc(doc.id, { due_date: e.target.value })}
+                        className="border border-gray-200 rounded px-2 py-1 text-xs"
+                      />
+                      <select
+                        value={doc.status || 'Not Started'}
+                        onChange={(e) => updateDoc(doc.id, { status: e.target.value })}
+                        className="border border-gray-200 rounded px-2 py-1 text-xs"
+                      >
+                        <option value="Not Started">Not Started</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Uploaded">Uploaded</option>
+                        <option value="Submitted">Submitted</option>
+                      </select>
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Notes"
+                      value={doc.notes || ''}
+                      onChange={(e) => updateDoc(doc.id, { notes: e.target.value })}
+                      className="mt-1 ml-6 w-full border border-gray-200 rounded px-2 py-1 text-xs"
+                    />
+                  </div>
+                </div>
+              </div>
+       ))}
+        </div>
+      </div>
+
+      {/* Add Custom Document Modal */}
+      {showAddCustom && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-bold mb-4">Add Custom Document</h3>
+            <div className="space-y-3">
+              <input
+                type="text"
+                placeholder="Document name *"
+                value={customDoc.name}
+                onChange={(e) => setCustomDoc({...customDoc, name: e.target.value})}
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+              />
+              <input
+                type="text"
+                placeholder="Assigned to"
+                value={customDoc.assigned_to}
+                onChange={(e) => setCustomDoc({...customDoc, assigned_to: e.target.value})}
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+              />
+              <input
+                type="date"
+                value={customDoc.due_date}
+                onChange={(e) => setCustomDoc({...customDoc, due_date: e.target.value})}
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+              />
+              <input
+                type="text"
+                placeholder="Notes"
+                value={customDoc.notes}
+                onChange={(e) => setCustomDoc({...customDoc, notes: e.target.value})}
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="flex gap-3 justify-end mt-4">
+              <button onClick={() => setShowAddCustom(false)} className="px-4 py-2 text-sm text-gray-600">Cancel</button>
+              <button onClick={addCustomDoc} className="bg-blue-600 text-white px-4 py-2 rounded text-sm">Add Document</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function PropertyPage() {
   const { id } = useParams()
   const [property, setProperty] = useState(null)
@@ -221,10 +445,7 @@ export default function PropertyPage() {
         )}
 
         {activeTab === 'documents' && (
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-lg font-bold text-gray-800 mb-4">Document Checklist</h2>
-            <p className="text-gray-500 text-sm">Coming soon.</p>
-          </div>
+          <DocumentsTab propertyId={id} />
         )}
 
         {activeTab === 'tasks' && (
