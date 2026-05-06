@@ -189,6 +189,36 @@ const indexedDocs = documents.map((doc, index) => ({ ...doc, globalIndex: index 
                       onChange={(e) => updateDoc(doc.id, { notes: e.target.value })}
                       className="mt-1 ml-6 w-full border border-gray-200 rounded px-2 py-1 text-xs"
                     />
+                    <div className="mt-2 ml-6 flex items-center gap-2">
+                      {doc.file_url ? (
+                        <div className="flex items-center gap-2">
+                          <a href={doc.file_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">📎 View File</a>
+                          <button onClick={() => updateDoc(doc.id, { file_url: null })} className="text-xs text-red-400 hover:text-red-600">Remove</button>
+                        </div>
+                      ) : (
+                        <label className="cursor-pointer text-xs text-blue-600 hover:underline">
+                          📎 Upload File
+                          <input
+                            type="file"
+                            className="hidden"
+                            onChange={async (e) => {
+                              const file = e.target.files[0]
+                              if (!file) return
+                              const filePath = `${propertyId}/${doc.id}/${file.name}`
+                              const { error } = await supabase.storage
+                                .from('mor-documents')
+                                .upload(filePath, file, { upsert: true })
+                              if (!error) {
+                                const { data: urlData } = supabase.storage
+                                  .from('mor-documents')
+                                  .getPublicUrl(filePath)
+                                await updateDoc(doc.id, { file_url: urlData.publicUrl })
+                              }
+                            }}
+                          />
+                        </label>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -751,6 +781,39 @@ const daysLeft = deadline ? Math.ceil((deadline - new Date()) / (1000 * 60 * 60 
                     placeholder="Type your response to this finding here..."
                     className="w-full mt-1 border border-gray-200 rounded px-3 py-2 text-sm"
                   />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500">Supporting Document</label>
+                  <div className="mt-1 flex items-center gap-2">
+                    {finding.document_url ? (
+                      <div className="flex items-center gap-2">
+                        <a href={finding.document_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">📎 View Document</a>
+                        <button onClick={() => updateFinding(finding.id, { document_url: null })} className="text-xs text-red-400 hover:text-red-600">Remove</button>
+                      </div>
+                    ) : (
+                      <label className="cursor-pointer text-xs text-blue-600 hover:underline">
+                        📎 Upload Supporting Document
+                        <input
+                          type="file"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files[0]
+                            if (!file) return
+                            const filePath = `${propertyId}/findings/${finding.id}/${file.name}`
+                            const { error } = await supabase.storage
+                              .from('mor-documents')
+                              .upload(filePath, file, { upsert: true })
+                            if (!error) {
+                              const { data: urlData } = supabase.storage
+                                .from('mor-documents')
+                                .getPublicUrl(filePath)
+                              await updateFinding(finding.id, { document_url: urlData.publicUrl })
+                            }
+                          }}
+                        />
+                      </label>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
