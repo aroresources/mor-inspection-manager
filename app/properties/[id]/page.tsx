@@ -587,6 +587,222 @@ function MeetingsTab({ propertyId }) {
   )
 }
 
+function FindingsTab({ propertyId, reportDate }) {
+  const [findings, setFindings] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showAddFinding, setShowAddFinding] = useState(false)
+  const [newFinding, setNewFinding] = useState({ finding: '', assigned_to: '', response: '', due_date: '' })
+
+  useEffect(() => {
+    fetchFindings()
+  }, [propertyId])
+
+  const fetchFindings = async () => {
+    setLoading(true)
+    const { data } = await supabase
+      .from('findings')
+      .select('*')
+      .eq('property_id', propertyId)
+      .order('created_at')
+    if (data) setFindings(data)
+    setLoading(false)
+  }
+
+  const addFinding = async (e) => {
+    if (e) e.preventDefault()
+    if (!newFinding.finding) return
+    const { data } = await supabase
+      .from('findings')
+      .insert([{
+        property_id: propertyId,
+        finding: newFinding.finding,
+        assigned_to: newFinding.assigned_to || null,
+        response: newFinding.response || null,
+        due_date: newFinding.due_date || null,
+        status: 'Open'
+      }])
+      .select()
+    if (data) {
+      setFindings([...findings, ...data])
+      setNewFinding({ finding: '', assigned_to: '', response: '', due_date: '' })
+      setShowAddFinding(false)
+    }
+  }
+
+  const updateFinding = async (id, updates) => {
+    await supabase.from('findings').update(updates).eq('id', id)
+    setFindings(findings => findings.map(f => f.id === id ? { ...f, ...updates } : f))
+  }
+
+  const deleteFinding = async (id) => {
+    await supabase.from('findings').delete().eq('id', id)
+    setFindings(findings.filter(f => f.id !== id))
+  }
+
+  // Calculate 30-day deadline
+const deadline = reportDate ? new Date(new Date(reportDate).getTime() + 30 * 24 * 60 * 60 * 1000) : null
+const daysLeft = deadline ? Math.ceil((deadline - new Date()) / (1000 * 60 * 60 * 24)) : null
+
+  const open = findings.filter(f => f.status !== 'Submitted').length
+  const total = findings.length
+
+  if (loading) return <div className="bg-white rounded-lg shadow p-6 text-gray-500">Loading findings...</div>
+
+  return (
+    <div className="space-y-4">
+      {/* Deadline Banner */}
+      {deadline && (
+        <div className={`rounded-lg p-4 ${daysLeft < 0 ? 'bg-red-50 border border-red-200' : daysLeft <= 7 ? 'bg-yellow-50 border border-yellow-200' : 'bg-blue-50 border border-blue-200'}`}>
+          <p className={`text-sm font-medium ${daysLeft < 0 ? 'text-red-700' : daysLeft <= 7 ? 'text-yellow-700' : 'text-blue-700'}`}>
+            {daysLeft < 0
+              ? `⚠️ Response deadline was ${Math.abs(daysLeft)} days ago!`
+              : daysLeft === 0
+              ? '⚠️ Response due today!'
+              : `📅 Response deadline: ${deadline.toLocaleDateString()} (${daysLeft} days remaining)`
+            }
+          </p>
+        </div>
+      )}
+
+      {/* Summary */}
+      <div className="flex justify-between items-center">
+        <h2 className="text-lg font-bold text-gray-800">
+          Findings & Response
+          {total > 0 && <span className="ml-2 text-sm font-normal text-gray-500">({open} open of {total})</span>}
+        </h2>
+        <button
+          onClick={() => setShowAddFinding(true)}
+          className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+        >
+          + Add Finding
+        </button>
+      </div>
+
+      {findings.length === 0 ? (
+        <div className="bg-white rounded-lg shadow p-6 text-center text-gray-500 text-sm">
+          No findings yet. Click "+ Add Finding" to log findings from the MOR report.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {findings.map(finding => (
+            <div key={finding.id} className="bg-white rounded-lg shadow p-5">
+              <div className="flex justify-between items-start mb-3">
+                <select
+                  value={finding.status}
+                  onChange={(e) => updateFinding(finding.id, { status: e.target.value })}
+                  className={`text-xs px-2 py-1 rounded border ${
+                    finding.status === 'Submitted' ? 'bg-green-100 text-green-700 border-green-200' :
+                    finding.status === 'Ready' ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                    finding.status === 'In Progress' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
+                    'bg-red-100 text-red-700 border-red-200'
+                  }`}
+                >
+                  <option value="Open">Open</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="Ready">Ready</option>
+                  <option value="Submitted">Submitted</option>
+                </select>
+                <button
+                  onClick={() => deleteFinding(finding.id)}
+                  className="text-red-400 hover:text-red-600 text-xs"
+                >
+                  Delete
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs text-gray-500">Finding</label>
+                  <textarea
+                    value={finding.finding}
+                    onChange={(e) => updateFinding(finding.id, { finding: e.target.value })}
+                    rows={2}
+                    className="w-full mt-1 border border-gray-200 rounded px-3 py-2 text-sm"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-gray-500">Assigned To</label>
+                    <input
+                      type="text"
+                      value={finding.assigned_to || ''}
+                      onChange={(e) => updateFinding(finding.id, { assigned_to: e.target.value })}
+                      className="w-full mt-1 border border-gray-200 rounded px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500">Due Date</label>
+                    <input
+                      type="date"
+                      value={finding.due_date || ''}
+                      onChange={(e) => updateFinding(finding.id, { due_date: e.target.value || null })}
+                      className="w-full mt-1 border border-gray-200 rounded px-3 py-2 text-sm"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs text-gray-500">Written Response</label>
+                  <textarea
+                    value={finding.response || ''}
+                    onChange={(e) => updateFinding(finding.id, { response: e.target.value })}
+                    rows={3}
+                    placeholder="Type your response to this finding here..."
+                    className="w-full mt-1 border border-gray-200 rounded px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add Finding Modal */}
+      {showAddFinding && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-lg">
+            <h3 className="text-lg font-bold mb-4">Add Finding</h3>
+            <div className="space-y-3">
+              <textarea
+                placeholder="Finding description *"
+                value={newFinding.finding}
+                onChange={(e) => setNewFinding({...newFinding, finding: e.target.value})}
+                rows={3}
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+              />
+              <input
+                type="text"
+                placeholder="Assigned to"
+                value={newFinding.assigned_to}
+                onChange={(e) => setNewFinding({...newFinding, assigned_to: e.target.value})}
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+              />
+              <input
+                type="date"
+                value={newFinding.due_date}
+                onChange={(e) => setNewFinding({...newFinding, due_date: e.target.value})}
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+              />
+              <textarea
+                placeholder="Initial response (optional)"
+                value={newFinding.response}
+                onChange={(e) => setNewFinding({...newFinding, response: e.target.value})}
+                rows={3}
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="flex gap-3 justify-end mt-4">
+              <button onClick={() => setShowAddFinding(false)} className="px-4 py-2 text-sm text-gray-600">Cancel</button>
+              <button onClick={addFinding} className="bg-blue-600 text-white px-4 py-2 rounded text-sm">Add Finding</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function PropertyPage() {
   const { id } = useParams()
   const [property, setProperty] = useState(null)
@@ -618,7 +834,8 @@ export default function PropertyPage() {
 
   const saveProperty = async () => {
     setSaving(true)
-    await supabase.from('properties').update(form).eq('id', id)
+    const { companies, created_at, ...updateData } = form
+    await supabase.from('properties').update(updateData).eq('id', id)
     await fetchProperty()
     setEditing(false)
     setSaving(false)
@@ -700,6 +917,7 @@ export default function PropertyPage() {
                 { label: 'MOR Date', field: 'mor_date', type: 'date' },
                 { label: 'Last MOR Date', field: 'last_mor_date', type: 'date' },
                 { label: 'Last MOR Score', field: 'last_mor_score', type: 'text' },
+                { label: 'Report Received Date', field: 'report_received_date', type: 'date' },
               ].map(({ label, field, type }) => (
                 <div key={field}>
                   <label className="block text-xs text-gray-500 mb-1">{label}</label>
@@ -817,11 +1035,9 @@ export default function PropertyPage() {
 )}
 
         {activeTab === 'findings' && (
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-lg font-bold text-gray-800 mb-4">Findings & Response</h2>
-            <p className="text-gray-500 text-sm">Coming soon.</p>
-          </div>
-        )}
+  <FindingsTab propertyId={id} reportDate={property.report_received_date} />
+)}
+    
       </main>
     </div>
   )
