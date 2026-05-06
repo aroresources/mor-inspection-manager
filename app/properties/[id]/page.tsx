@@ -443,6 +443,150 @@ function TasksTab({ propertyId }) {
   )
 }
 
+function MeetingsTab({ propertyId }) {
+  const [meetings, setMeetings] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showAddMeeting, setShowAddMeeting] = useState(false)
+  const [newMeeting, setNewMeeting] = useState({ meeting_date: '', attendees: '', notes: '', action_items: '' })
+
+  useEffect(() => {
+    fetchMeetings()
+  }, [propertyId])
+
+  const fetchMeetings = async () => {
+    setLoading(true)
+    const { data } = await supabase
+      .from('meetings')
+      .select('*')
+      .eq('property_id', propertyId)
+      .order('meeting_date', { ascending: false })
+    if (data) setMeetings(data)
+    setLoading(false)
+  }
+
+  const addMeeting = async (e) => {
+    if (e) e.preventDefault()
+    if (!newMeeting.notes) return
+    const { data } = await supabase
+      .from('meetings')
+      .insert([{
+        property_id: propertyId,
+        meeting_date: newMeeting.meeting_date || null,
+        attendees: newMeeting.attendees || null,
+        notes: newMeeting.notes,
+        action_items: newMeeting.action_items || null
+      }])
+      .select()
+    if (data) {
+      setMeetings([...data, ...meetings])
+      setNewMeeting({ meeting_date: '', attendees: '', notes: '', action_items: '' })
+      setShowAddMeeting(false)
+    }
+  }
+
+  const deleteMeeting = async (id) => {
+    await supabase.from('meetings').delete().eq('id', id)
+    setMeetings(meetings.filter(m => m.id !== id))
+  }
+
+  if (loading) return <div className="bg-white rounded-lg shadow p-6 text-gray-500">Loading meetings...</div>
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h2 className="text-lg font-bold text-gray-800">Meeting Notes</h2>
+        <button
+          onClick={() => setShowAddMeeting(true)}
+          className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+        >
+          + Log Meeting
+        </button>
+      </div>
+
+      {meetings.length === 0 ? (
+        <div className="bg-white rounded-lg shadow p-6 text-center text-gray-500 text-sm">
+          No meetings logged yet. Click "+ Log Meeting" to add one.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {meetings.map(meeting => (
+            <div key={meeting.id} className="bg-white rounded-lg shadow p-5">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-sm font-medium text-gray-800">
+                    {meeting.meeting_date ? new Date(meeting.meeting_date).toLocaleDateString('en-US', { timeZone: 'UTC' }) : 'No date'}
+                  </p>
+                  {meeting.attendees && (
+                    <p className="text-xs text-gray-500 mt-1">Attendees: {meeting.attendees}</p>
+                  )}
+                </div>
+                <button
+                  onClick={() => deleteMeeting(meeting.id)}
+                  className="text-red-400 hover:text-red-600 text-xs"
+                >
+                  Delete
+                </button>
+              </div>
+              <div className="mt-3">
+                <p className="text-xs text-gray-500 font-medium mb-1">Notes:</p>
+                <p className="text-sm text-gray-700 whitespace-pre-wrap">{meeting.notes}</p>
+              </div>
+              {meeting.action_items && (
+                <div className="mt-3">
+                  <p className="text-xs text-gray-500 font-medium mb-1">Action Items:</p>
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap">{meeting.action_items}</p>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add Meeting Modal */}
+      {showAddMeeting && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-lg">
+            <h3 className="text-lg font-bold mb-4">Log Meeting</h3>
+            <div className="space-y-3">
+              <input
+                type="date"
+                value={newMeeting.meeting_date}
+                onChange={(e) => setNewMeeting({...newMeeting, meeting_date: e.target.value})}
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+              />
+              <input
+                type="text"
+                placeholder="Attendees (e.g. Ari, Property Manager, Asset Manager)"
+                value={newMeeting.attendees}
+                onChange={(e) => setNewMeeting({...newMeeting, attendees: e.target.value})}
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+              />
+              <textarea
+                placeholder="Meeting notes *"
+                value={newMeeting.notes}
+                onChange={(e) => setNewMeeting({...newMeeting, notes: e.target.value})}
+                rows={4}
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+              />
+              <textarea
+                placeholder="Action items"
+                value={newMeeting.action_items}
+                onChange={(e) => setNewMeeting({...newMeeting, action_items: e.target.value})}
+                rows={3}
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="flex gap-3 justify-end mt-4">
+              <button onClick={() => setShowAddMeeting(false)} className="px-4 py-2 text-sm text-gray-600">Cancel</button>
+              <button onClick={addMeeting} className="bg-blue-600 text-white px-4 py-2 rounded text-sm">Save Meeting</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function PropertyPage() {
   const { id } = useParams()
   const [property, setProperty] = useState(null)
@@ -669,11 +813,8 @@ export default function PropertyPage() {
         )}
 
         {activeTab === 'meetings' && (
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-lg font-bold text-gray-800 mb-4">Meeting Notes</h2>
-            <p className="text-gray-500 text-sm">Coming soon.</p>
-          </div>
-        )}
+  <MeetingsTab propertyId={id} />
+)}
 
         {activeTab === 'findings' && (
           <div className="bg-white rounded-lg shadow p-6">
