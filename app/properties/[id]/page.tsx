@@ -72,14 +72,28 @@ function DocumentsTab({ propertyId }) {
     await supabase.from('documents').update({ sort_order: updated[swapIndex].sort_order }).eq('id', updated[swapIndex].id)
   }
 
-  const addCustomDoc = async () => {
+  const addCustomDoc = async (e) => {
+    if (e) e.preventDefault()
     if (!customDoc.name) return
-    const maxOrder = documents.length
+    const docData = {
+      name: customDoc.name,
+      assigned_to: customDoc.assigned_to || null,
+      due_date: customDoc.due_date || null,
+      notes: customDoc.notes || null,
+      property_id: propertyId,
+      status: 'Not Started',
+      is_custom: true,
+      sort_order: documents.length
+    }
+    
     const { data } = await supabase
       .from('documents')
-      .insert([{ ...customDoc, property_id: propertyId, status: 'Not Started', is_custom: true, sort_order: maxOrder }])
+      .insert([docData])
       .select()
-    if (data) {
+    if (customDoc.addToTemplate) {
+      await supabase.from('document_templates').insert([{ name: customDoc.name }])
+    }
+      if (data) {
       setDocuments([...documents, ...data])
       setCustomDoc({ name: '', assigned_to: '', due_date: '', notes: '' })
       setShowAddCustom(false)
@@ -215,10 +229,212 @@ const indexedDocs = documents.map((doc, index) => ({ ...doc, globalIndex: index 
                 onChange={(e) => setCustomDoc({...customDoc, notes: e.target.value})}
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
               />
+              <label className="flex items-center gap-2 text-sm text-gray-600">
+                <input
+                  type="checkbox"
+                  checked={customDoc.addToTemplate || false}
+                  onChange={(e) => setCustomDoc({...customDoc, addToTemplate: e.target.checked})}
+                />
+                Add to template (include on all future properties)
+              </label>
             </div>
             <div className="flex gap-3 justify-end mt-4">
               <button onClick={() => setShowAddCustom(false)} className="px-4 py-2 text-sm text-gray-600">Cancel</button>
               <button onClick={addCustomDoc} className="bg-blue-600 text-white px-4 py-2 rounded text-sm">Add Document</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TasksTab({ propertyId }) {
+  const [tasks, setTasks] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showAddTask, setShowAddTask] = useState(false)
+  const [newTask, setNewTask] = useState({ title: '', assigned_to: '', due_date: '' })
+
+  useEffect(() => {
+    fetchTasks()
+  }, [propertyId])
+
+  const fetchTasks = async () => {
+    setLoading(true)
+    const { data } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('property_id', propertyId)
+      .order('created_at')
+    if (data && data.length > 0) {
+      setTasks(data)
+    } else {
+      await loadFromTemplates()
+    }
+    setLoading(false)
+  }
+
+  const loadFromTemplates = async () => {
+    const { data: tmpl } = await supabase
+      .from('task_templates')
+      .select('*')
+      .order('created_at')
+    if (tmpl && tmpl.length > 0) {
+      const tasks = tmpl.map(t => ({
+        property_id: propertyId,
+        title: t.title,
+        assigned_to: '',
+        due_date: null,
+        completed: false,
+        is_custom: false
+      }))
+      const { data: inserted } = await supabase
+        .from('tasks')
+        .insert(tasks)
+        .select()
+      if (inserted) setTasks(inserted)
+    }
+  }
+
+  const updateTask = async (id, updates) => {
+    await supabase.from('tasks').update(updates).eq('id', id)
+    setTasks(tasks => tasks.map(t => t.id === id ? { ...t, ...updates } : t))
+  }
+
+  const addTask = async (e) => {
+    if (e) e.preventDefault()
+    if (!newTask.title) return
+    const taskData = {
+      title: newTask.title,
+      assigned_to: newTask.assigned_to || null,
+      due_date: newTask.due_date || null,
+      property_id: propertyId,
+      completed: false,
+      is_custom: true
+    }
+    const { data } = await supabase
+      .from('tasks')
+      .insert([taskData])
+      .select()
+    if (data) {
+      if (newTask.addToTemplate) {
+        await supabase.from('task_templates').insert([{ title: newTask.title }])
+      }
+      setTasks([...tasks, ...data])
+      setNewTask({ title: '', assigned_to: '', due_date: '' })
+      setShowAddTask(false)
+    }
+  }
+
+  const completed = tasks.filter(t => t.completed).length
+  const total = tasks.length
+
+  if (loading) return <div className="bg-white rounded-lg shadow p-6 text-gray-500">Loading tasks...</div>
+
+  return (
+    <div className="space-y-4">
+      {/* Progress */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <div className="flex justify-between items-center mb-2">
+          <span className="text-sm font-medium text-gray-700">Progress: {completed} of {total} completed</span>
+          <button
+            onClick={() => setShowAddTask(true)}
+            className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+          >
+            + Add Task
+          </button>
+        </div>
+        <div className="w-full bg-gray-200 rounded-full h-2">
+          <div
+            className="bg-green-500 h-2 rounded-full transition-all"
+            style={{ width: total > 0 ? `${(completed / total) * 100}%` : '0%' }}
+          />
+        </div>
+      </div>
+
+      {/* Task List */}
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        {tasks.length === 0 ? (
+          <div className="p-6 text-center text-gray-500 text-sm">
+            No tasks yet. Click "+ Add Task" to get started.
+          </div>
+        ) : (
+          <div className="divide-y">
+            {tasks.map(task => (
+              <div key={task.id} className={`p-4 ${task.completed ? 'bg-gray-50' : ''}`}>
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={task.completed}
+                    onChange={(e) => updateTask(task.id, { completed: e.target.checked })}
+                    className="mt-1"
+                  />
+                  <div className="flex-1">
+                    <span className={`text-sm ${task.completed ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+                      {task.title}
+                      {task.is_custom && <span className="ml-2 text-xs bg-purple-100 text-purple-700 px-1 rounded">Custom</span>}
+                    </span>
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        placeholder="Assigned to"
+                        value={task.assigned_to || ''}
+                        onChange={(e) => updateTask(task.id, { assigned_to: e.target.value })}
+                        className="border border-gray-200 rounded px-2 py-1 text-xs"
+                      />
+                      <input
+                        type="date"
+                        value={task.due_date || ''}
+                        onChange={(e) => updateTask(task.id, { due_date: e.target.value })}
+                        className="border border-gray-200 rounded px-2 py-1 text-xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Add Task Modal */}
+      {showAddTask && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-bold mb-4">Add Task</h3>
+            <div className="space-y-3">
+              <input
+                type="text"
+                placeholder="Task title *"
+                value={newTask.title}
+                onChange={(e) => setNewTask({...newTask, title: e.target.value})}
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+              />
+              <input
+                type="text"
+                placeholder="Assigned to"
+                value={newTask.assigned_to}
+                onChange={(e) => setNewTask({...newTask, assigned_to: e.target.value})}
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+              />
+            <input
+                type="date"
+                value={newTask.due_date || ''}
+                onChange={(e) => setNewTask({...newTask, due_date: e.target.value || null})}
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+              />
+              <label className="flex items-center gap-2 text-sm text-gray-600">
+                <input
+                  type="checkbox"
+                  checked={newTask.addToTemplate || false}
+                  onChange={(e) => setNewTask({...newTask, addToTemplate: e.target.checked})}
+                />
+                Add to template (include on all future properties)
+              </label>
+            </div>
+            <div className="flex gap-3 justify-end mt-4">
+              <button onClick={() => setShowAddTask(false)} className="px-4 py-2 text-sm text-gray-600">Cancel</button>
+              <button onClick={addTask} className="bg-blue-600 text-white px-4 py-2 rounded text-sm">Add Task</button>
             </div>
           </div>
         </div>
@@ -449,10 +665,7 @@ export default function PropertyPage() {
         )}
 
         {activeTab === 'tasks' && (
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-lg font-bold text-gray-800 mb-4">Prep Tasks</h2>
-            <p className="text-gray-500 text-sm">Coming soon.</p>
-          </div>
+            <TasksTab propertyId={id} />
         )}
 
         {activeTab === 'meetings' && (
