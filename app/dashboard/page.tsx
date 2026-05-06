@@ -61,6 +61,43 @@ export default function Dashboard() {
     ? properties
     : properties.filter(p => p.company_id === filterCompany)
 
+  const getNextMorDate = (property) => {
+    if (!property.last_mor_date) return null
+
+    const lastMor = new Date(property.last_mor_date)
+    let monthsToAdd = 12 // default
+
+    if (property.contract_type === 'Option 3') {
+      monthsToAdd = 12
+    } else {
+      const risk = property.risk_classification
+      const rating = property.last_mor_rating
+
+      if (risk === 'Troubled' || risk === 'Potentially Troubled' || risk === 'Unknown') {
+        monthsToAdd = 12
+      } else if (risk === 'Not Troubled') {
+        if (rating === 'Unsatisfactory' || rating === 'Below Average' || rating === 'Satisfactory') {
+          monthsToAdd = 12
+        } else if (rating === 'Above Average' || rating === 'Superior') {
+          monthsToAdd = 36
+        }
+      }
+    }
+
+    const nextDate = new Date(lastMor)
+    nextDate.setMonth(nextDate.getMonth() + monthsToAdd)
+    return nextDate
+  }
+
+  const getMorUrgency = (nextDate) => {
+    if (!nextDate) return 'none'
+    const daysUntil = Math.ceil((nextDate - new Date()) / (1000 * 60 * 60 * 24))
+    if (daysUntil < 0) return 'overdue'
+    if (daysUntil <= 90) return 'urgent'
+    if (daysUntil <= 180) return 'warning'
+    return 'ok'
+  }
+
   return (
     <div className="min-h-screen bg-gray-100">
       <nav className="bg-white shadow-sm px-6 py-4 flex justify-between items-center">
@@ -115,19 +152,57 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filtered.map(property => (
               <div
-                key={property.id}
-                onClick={() => window.location.href = `/properties/${property.id}`}
-                className="bg-white rounded-lg shadow p-5 cursor-pointer hover:shadow-md transition"
-              >
-                <h3 className="font-bold text-gray-800">{property.name}</h3>
-                <p className="text-sm text-gray-500 mt-1">{property.companies?.name}</p>
-                <p className="text-sm text-gray-500">{property.address}</p>
-                <div className="mt-3 flex gap-2">
-                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
-                    {property.contract_type || 'No contract type'}
+              key={property.id}
+              onClick={() => window.location.href = `/properties/${property.id}`}
+              className="bg-white rounded-lg shadow p-5 cursor-pointer hover:shadow-md transition"
+            >
+              <h3 className="font-bold text-gray-800">{property.name}</h3>
+              <p className="text-sm text-gray-500 mt-1">{property.companies?.name}</p>
+              <p className="text-sm text-gray-500">{property.address}</p>
+              
+              <div className="mt-3 flex flex-wrap gap-2">
+                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                  {property.contract_type || 'No contract type'}
+                </span>
+                {property.risk_classification && (
+                  <span className={`text-xs px-2 py-1 rounded ${
+                    property.risk_classification === 'Troubled' ? 'bg-red-100 text-red-700' :
+                    property.risk_classification === 'Potentially Troubled' ? 'bg-yellow-100 text-yellow-700' :
+                    property.risk_classification === 'Unknown' ? 'bg-gray-100 text-gray-700' :
+                    'bg-green-100 text-green-700'
+                  }`}>
+                    {property.risk_classification}
                   </span>
-                </div>
+                )}
+                {property.last_mor_rating && (
+                  <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
+                    {property.last_mor_rating}
+                  </span>
+                )}
               </div>
+
+              {(() => {
+                const nextMor = getNextMorDate(property)
+                const urgency = getMorUrgency(nextMor)
+                if (!nextMor) return (
+                  <p className="text-xs text-gray-400 mt-3">No MOR date recorded</p>
+                )
+                const daysUntil = Math.ceil((nextMor - new Date()) / (1000 * 60 * 60 * 24))
+                return (
+                  <div className={`mt-3 text-xs px-2 py-1 rounded ${
+                    urgency === 'overdue' ? 'bg-red-100 text-red-700' :
+                    urgency === 'urgent' ? 'bg-orange-100 text-orange-700' :
+                    urgency === 'warning' ? 'bg-yellow-100 text-yellow-700' :
+                    'bg-green-100 text-green-700'
+                  }`}>
+                    {urgency === 'overdue'
+                      ? `⚠️ MOR overdue by ${Math.abs(daysUntil)} days`
+                      : `📅 Next MOR due: ${nextMor.toLocaleDateString()} (${daysUntil} days)`
+                    }
+                  </div>
+                )
+              })()}
+            </div>
             ))}
           </div>
         )}
