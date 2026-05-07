@@ -8,6 +8,7 @@ function DocumentsTab({ propertyId }) {
   const [documents, setDocuments] = useState([])
   const [loading, setLoading] = useState(true)
   const [showAddCustom, setShowAddCustom] = useState(false)
+  const [showPacket, setShowPacket] = useState(false)
   const [customDoc, setCustomDoc] = useState({ name: '', assigned_to: '', due_date: '', notes: '' })
 
   useEffect(() => {
@@ -113,12 +114,20 @@ const indexedDocs = documents.map((doc, index) => ({ ...doc, globalIndex: index 
       <div className="bg-white rounded-lg shadow p-4">
         <div className="flex justify-between items-center mb-2">
           <span className="text-sm font-medium text-gray-700">Progress: {completed} of {total} submitted</span>
-          <button
-            onClick={() => setShowAddCustom(true)}
-            className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
-          >
-            + Add Custom Document
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowPacket(true)}
+              className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700"
+            >
+              📦 Submission Packet
+            </button>
+            <button
+              onClick={() => setShowAddCustom(true)}
+              className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+            >
+              + Add Custom Document
+            </button>
+          </div>
         </div>
         <div className="w-full bg-gray-200 rounded-full h-2">
           <div
@@ -226,9 +235,50 @@ const indexedDocs = documents.map((doc, index) => ({ ...doc, globalIndex: index 
        ))}
         </div>
       </div>
+        {/* Submission Packet Modal */}
+      {showPacket && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto">
+            <h3 className="text-lg font-bold mb-2">Submission Packet</h3>
+            <p className="text-sm text-gray-500 mb-4">All uploaded documents for this property.</p>
+            
+            {documents.filter(d => d.file_url).length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-4">No files uploaded yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {documents.filter(d => d.file_url).map(doc => (
+                  <div key={doc.id} className="flex items-center justify-between p-3 border border-gray-200 rounded">
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-gray-800">{doc.name}</p>
+                      <p className="text-xs text-gray-500">{doc.status}</p>
+                    </div>
+                    <a
+                      href={doc.file_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-600 hover:underline ml-3"
+                    >
+                      📎 View
+                    </a>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="mt-4 p-3 bg-gray-50 rounded text-xs text-gray-500">
+              💡 To share this packet, right-click each file link and select "Save link as" to download, or open each file and print/save as PDF.
+            </div>
+
+            <div className="flex justify-end mt-4">
+              <button onClick={() => setShowPacket(false)} className="px-4 py-2 text-sm text-gray-600 border rounded hover:bg-gray-50">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add Custom Document Modal */}
       {showAddCustom && (
+      
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <h3 className="text-lg font-bold mb-4">Add Custom Document</h3>
