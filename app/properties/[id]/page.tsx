@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '../../../lib/supabase'
+import jsPDF from 'jspdf'
 
 function DocumentsTab({ propertyId }) {
   const [documents, setDocuments] = useState([])
@@ -521,6 +522,8 @@ function MeetingsTab({ propertyId }) {
 
   if (loading) return <div className="bg-white rounded-lg shadow p-6 text-gray-500">Loading meetings...</div>
 
+  
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -617,11 +620,14 @@ function MeetingsTab({ propertyId }) {
   )
 }
 
-function FindingsTab({ propertyId, reportDate }) {
+function FindingsTab({ propertyId, reportDate, property }) {
   const [findings, setFindings] = useState([])
   const [loading, setLoading] = useState(true)
   const [showAddFinding, setShowAddFinding] = useState(false)
   const [newFinding, setNewFinding] = useState({ finding: '', assigned_to: '', response: '', due_date: '' })
+  const [introText, setIntroText] = useState('Below is our response to the Management and Occupancy Review above:')
+  const [signatoryName, setSignatoryName] = useState('')
+  const [showReportSettings, setShowReportSettings] = useState(false)
 
   useEffect(() => {
     fetchFindings()
@@ -678,6 +684,127 @@ const daysLeft = deadline ? Math.ceil((deadline - new Date()) / (1000 * 60 * 60 
 
   if (loading) return <div className="bg-white rounded-lg shadow p-6 text-gray-500">Loading findings...</div>
 
+const generatePDF = () => {
+    const doc = new jsPDF()
+    let y = 20
+
+    // Property Name as header on every page
+    const addHeader = () => {
+      doc.setFontSize(14)
+      doc.setFont('helvetica', 'bold')
+      doc.text(property.name || 'Property Name', 105, 12, { align: 'center' })
+      doc.setDrawColor(200, 200, 200)
+      doc.line(15, 16, 195, 16)
+    }
+
+    addHeader()
+
+    // Report info block
+    doc.setFontSize(10)
+    doc.setFont('helvetica', 'normal')
+    doc.text(`Date Generated: ${new Date().toLocaleDateString()}`, 15, y)
+    y += 6
+    if (property.section8_number) {
+      doc.text(`Section 8 Project Number: ${property.section8_number}`, 15, y)
+      y += 6
+    }
+    if (property.mor_date) {
+      doc.text(`Date of MOR: ${new Date(property.mor_date).toLocaleDateString('en-US', { timeZone: 'UTC' })}`, 15, y)
+      y += 6
+    }
+   
+    y += 6
+
+    doc.setDrawColor(200, 200, 200)
+    doc.line(15, y, 195, y)
+    y += 10
+
+    // Intro text
+    doc.setFontSize(10)
+    doc.setFont('helvetica', 'normal')
+    const introLines = doc.splitTextToSize(introText, 175)
+    doc.text(introLines, 15, y)
+    y += introLines.length * 6 + 10
+
+    doc.setDrawColor(200, 200, 200)
+    doc.line(15, y, 195, y)
+    y += 10
+
+    // Findings
+    if (findings.length === 0) {
+      doc.text('No findings recorded.', 15, y)
+    } else {
+      findings.forEach((finding, index) => {
+        if (y > 240) {
+          doc.addPage()
+          y = 20
+          addHeader()
+          y += 10
+        }
+
+        doc.setFontSize(11)
+        doc.setFont('helvetica', 'bold')
+        doc.text(`Finding ${index + 1}:`, 15, y)
+        y += 7
+
+        doc.setFontSize(10)
+        doc.setFont('helvetica', 'normal')
+        const findingLines = doc.splitTextToSize(finding.finding || '', 175)
+        doc.text(findingLines, 15, y)
+        y += findingLines.length * 6 + 4
+
+        if (finding.assigned_to) {
+          doc.setFont('helvetica', 'italic')
+          doc.text(`Assigned to: ${finding.assigned_to}`, 15, y)
+          doc.setFont('helvetica', 'normal')
+          y += 6
+        }
+
+        if (finding.response) {
+          doc.setFont('helvetica', 'bold')
+          doc.text('Response:', 15, y)
+          y += 6
+          doc.setFont('helvetica', 'normal')
+          const responseLines = doc.splitTextToSize(finding.response, 175)
+          doc.text(responseLines, 15, y)
+          y += responseLines.length * 6 + 4
+        }
+
+        if (finding.document_url) {
+          doc.setTextColor(0, 0, 255)
+          doc.text('Supporting document attached', 15, y)
+          doc.setTextColor(0, 0, 0)
+          y += 6
+        }
+
+        doc.setDrawColor(220, 220, 220)
+        doc.line(15, y, 195, y)
+        y += 10
+      })
+    }
+
+    // Signature block
+    if (y > 220) {
+      doc.addPage()
+      y = 20
+      addHeader()
+      y += 10
+    }
+
+    y += 10
+    doc.setFontSize(10)
+    doc.setFont('helvetica', 'normal')
+    doc.text(signatoryName, 15, y)
+    y += 10
+    doc.line(15, y, 100, y)
+    y += 6
+    doc.text('Signature', 15, y)
+    y += 6
+    doc.text(`Date: ${new Date().toLocaleDateString()}`, 15, y)
+
+    doc.save('MOR-Response-Report.pdf')
+  }
+
   return (
     <div className="space-y-4">
       {/* Deadline Banner */}
@@ -700,12 +827,30 @@ const daysLeft = deadline ? Math.ceil((deadline - new Date()) / (1000 * 60 * 60 
           Findings & Response
           {total > 0 && <span className="ml-2 text-sm font-normal text-gray-500">({open} open of {total})</span>}
         </h2>
-        <button
-          onClick={() => setShowAddFinding(true)}
-          className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
-        >
-          + Add Finding
-        </button>
+        <div className="flex gap-2">
+          {findings.length > 0 && (
+            <>
+              <button
+                onClick={() => setShowReportSettings(true)}
+                className="bg-gray-600 text-white px-3 py-1 rounded text-sm hover:bg-gray-700"
+              >
+                ⚙️ Report Settings
+              </button>
+              <button
+                onClick={generatePDF}
+                className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700"
+              >
+                📄 Generate PDF Report
+              </button>
+            </>
+          )}
+          <button
+            onClick={() => setShowAddFinding(true)}
+            className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+          >
+            + Add Finding
+          </button>
+        </div>
       </div>
 
       {findings.length === 0 ? (
@@ -862,9 +1007,44 @@ const daysLeft = deadline ? Math.ceil((deadline - new Date()) / (1000 * 60 * 60 
           </div>
         </div>
       )}
+      
+      {/* Report Settings Modal */}
+      {showReportSettings && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-lg">
+            <h3 className="text-lg font-bold mb-4">Report Settings</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Intro Text</label>
+                <textarea
+                  value={introText}
+                  onChange={(e) => setIntroText(e.target.value)}
+                  rows={4}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Signatory Name & Title</label>
+                <input
+                  type="text"
+                  value={signatoryName}
+                  onChange={(e) => setSignatoryName(e.target.value)}
+                  placeholder="e.g. Ari Rubinfeld, Director of Compliance"
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end mt-4">
+              <button onClick={() => setShowReportSettings(false)} className="px-4 py-2 text-sm text-gray-600">Cancel</button>
+              <button onClick={() => setShowReportSettings(false)} className="bg-blue-600 text-white px-4 py-2 rounded text-sm">Save</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
+
 
 export default function PropertyPage() {
   const { id } = useParams()
@@ -1098,7 +1278,7 @@ export default function PropertyPage() {
 )}
 
         {activeTab === 'findings' && (
-  <FindingsTab propertyId={id} reportDate={property.report_received_date} />
+  <FindingsTab propertyId={id} reportDate={property.report_received_date} property={property} />
 )}
     
       </main>
