@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '../../../lib/supabase'
 import jsPDF from 'jspdf'
+import JSZip from 'jszip'
+import { saveAs } from 'file-saver'
 
 function DocumentsTab({ propertyId }) {
   const [documents, setDocuments] = useState([])
@@ -734,6 +736,116 @@ const daysLeft = deadline ? Math.ceil((deadline - new Date()) / (1000 * 60 * 60 
 
   if (loading) return <div className="bg-white rounded-lg shadow p-6 text-gray-500">Loading findings...</div>
 
+const downloadZip = async () => {
+    const zip = new JSZip()
+    
+    // Generate the PDF report and add it to zip
+    const doc = new jsPDF()
+    let y = 20
+
+    const addHeader = () => {
+      doc.setFontSize(14)
+      doc.setFont('helvetica', 'bold')
+      doc.text(property.name || 'Property Name', 105, 12, { align: 'center' })
+      doc.setDrawColor(200, 200, 200)
+      doc.line(15, 16, 195, 16)
+    }
+
+    addHeader()
+    doc.setFontSize(10)
+    doc.setFont('helvetica', 'normal')
+    doc.text(`Date Generated: ${new Date().toLocaleDateString()}`, 15, y)
+    y += 6
+    if (property.section8_number) {
+      doc.text(`Section 8 Project Number: ${property.section8_number}`, 15, y)
+      y += 6
+    }
+    if (property.mor_date) {
+      doc.text(`Date of MOR: ${new Date(property.mor_date).toLocaleDateString('en-US', { timeZone: 'UTC' })}`, 15, y)
+      y += 6
+    }
+    y += 6
+    doc.line(15, y, 195, y)
+    y += 10
+
+    const introLines = doc.splitTextToSize(introText, 175)
+    doc.text(introLines, 15, y)
+    y += introLines.length * 6 + 10
+    doc.line(15, y, 195, y)
+    y += 10
+
+    findings.forEach((finding, index) => {
+      if (y > 240) { doc.addPage(); y = 20; addHeader(); y += 10 }
+      doc.setFontSize(11)
+      doc.setFont('helvetica', 'bold')
+      doc.text(`Finding ${index + 1}:`, 15, y)
+      y += 7
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'normal')
+      const findingLines = doc.splitTextToSize(finding.finding || '', 175)
+      doc.text(findingLines, 15, y)
+      y += findingLines.length * 6 + 4
+      if (finding.response) {
+        doc.setFont('helvetica', 'bold')
+        doc.text('Response:', 15, y)
+        y += 6
+        doc.setFont('helvetica', 'normal')
+        const responseLines = doc.splitTextToSize(finding.response, 175)
+        doc.text(responseLines, 15, y)
+        y += responseLines.length * 6 + 4
+      }
+      if (finding.document_url) {
+        doc.setFont('helvetica', 'italic')
+        doc.text(`See attached: Finding_${index + 1}_attachment`, 15, y)
+        doc.setFont('helvetica', 'normal')
+        y += 6
+      }
+      doc.setDrawColor(220, 220, 220)
+      doc.line(15, y, 195, y)
+      y += 10
+    })
+
+    if (signatoryName) {
+      if (y > 220) { doc.addPage(); y = 20; addHeader(); y += 10 }
+      y += 10
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'normal')
+      doc.text(signatoryName, 15, y)
+      y += 10
+      doc.line(15, y, 100, y)
+      y += 6
+      doc.text('Signature', 15, y)
+      y += 6
+      doc.text(`Date: ${new Date().toLocaleDateString()}`, 15, y)
+    }
+
+    // Add PDF to zip
+    const pdfBlob = doc.output('blob')
+    zip.file('MOR_Response_Report.pdf', pdfBlob)
+
+    // Add each finding attachment to zip with renamed file
+    for (let i = 0; i < findings.length; i++) {
+      const finding = findings[i]
+      if (finding.document_url) {
+        try {
+          const response = await fetch(finding.document_url)
+          const blob = await response.blob()
+          const originalExt = finding.document_url.split('.').pop().split('?')[0]
+          const shortDesc = finding.finding
+            ? finding.finding.substring(0, 30).replace(/[^a-zA-Z0-9]/g, '_')
+            : 'attachment'
+          const fileName = `Finding_${i + 1}_${shortDesc}.${originalExt}`
+          zip.file(fileName, blob)
+        } catch (err) {
+          console.error(`Failed to fetch attachment for finding ${i + 1}`)
+        }
+      }
+    }
+
+    const zipBlob = await zip.generateAsync({ type: 'blob' })
+    saveAs(zipBlob, `MOR_Response_${property.name || 'Package'}.zip`)
+  }
+
 const generatePDF = () => {
     const doc = new jsPDF()
     let y = 20
@@ -821,8 +933,13 @@ const generatePDF = () => {
         }
 
         if (finding.document_url) {
+          doc.setFont('helvetica', 'bold')
+          doc.text('Supporting Document:', 15, y)
+          y += 6
+          doc.setFont('helvetica', 'normal')
           doc.setTextColor(0, 0, 255)
-          doc.text('Supporting document attached', 15, y)
+          const fileName = finding.document_url.split('/').pop()
+          doc.textWithLink(`📎 ${decodeURIComponent(fileName)}`, 15, y, { url: finding.document_url })
           doc.setTextColor(0, 0, 0)
           y += 6
         }
@@ -886,11 +1003,17 @@ const generatePDF = () => {
               >
                 ⚙️ Report Settings
               </button>
-              <button
+             <button
                 onClick={generatePDF}
                 className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700"
               >
                 📄 Generate PDF Report
+              </button>
+              <button
+                onClick={downloadZip}
+                className="bg-purple-600 text-white px-3 py-1 rounded text-sm hover:bg-purple-700"
+              >
+                📦 Download Full Package (ZIP)
               </button>
             </>
           )}
