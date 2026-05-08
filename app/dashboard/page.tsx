@@ -102,12 +102,20 @@ export default function Dashboard() {
     <div className="min-h-screen bg-gray-100">
       <nav className="bg-white shadow-sm px-6 py-4 flex justify-between items-center">
         <h1 className="text-xl font-bold text-gray-800">MOR Inspection Manager</h1>
-        <button
-          onClick={async () => { await supabase.auth.signOut(); window.location.href = '/' }}
-          className="text-sm text-gray-500 hover:text-gray-700"
-        >
-          Sign Out
-        </button>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => window.location.href = '/templates'}
+            className="text-sm text-gray-600 hover:text-gray-800"
+          >
+            Templates
+          </button>
+          <button
+            onClick={async () => { await supabase.auth.signOut(); window.location.href = '/' }}
+            className="text-sm text-gray-500 hover:text-gray-700"
+          >
+            Sign Out
+          </button>
+        </div>
       </nav>
 
       <main className="max-w-7xl mx-auto px-6 py-8">
