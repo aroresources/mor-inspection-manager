@@ -91,7 +91,7 @@ export default function Dashboard() {
 
   const getMorUrgency = (nextDate: any) => {
     if (!nextDate) return 'none'
-    const daysUntil = Math.ceil((nextDate - new Date()) / (1000 * 60 * 60 * 24))
+    const daysUntil = Math.ceil((nextDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
     if (daysUntil < 0) return 'overdue'
     if (daysUntil <= 90) return 'urgent'
     if (daysUntil <= 180) return 'warning'
@@ -201,7 +201,7 @@ export default function Dashboard() {
                 if (!nextMor) return (
                   <p className="text-xs text-gray-400 mt-3">No MOR date recorded</p>
                 )
-                const daysUntil = Math.ceil((nextMor - new Date()) / (1000 * 60 * 60 * 24))
+                const daysUntil = Math.ceil((nextMor.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
                 return (
                   <div className={`mt-3 text-xs px-2 py-1 rounded ${
                     urgency === 'overdue' ? 'bg-red-100 text-red-700' :
