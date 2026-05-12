@@ -61,7 +61,7 @@ export default function Dashboard() {
     ? properties
     : properties.filter(p => p.company_id === filterCompany)
 
-  const getNextMorDate = (property) => {
+  const getNextMorDate = (property: any) => {
     if (!property.last_mor_date) return null
 
     const lastMor = new Date(property.last_mor_date)
@@ -89,7 +89,7 @@ export default function Dashboard() {
     return nextDate
   }
 
-  const getMorUrgency = (nextDate) => {
+  const getMorUrgency = (nextDate: any) => {
     if (!nextDate) return 'none'
     const daysUntil = Math.ceil((nextDate - new Date()) / (1000 * 60 * 60 * 24))
     if (daysUntil < 0) return 'overdue'
