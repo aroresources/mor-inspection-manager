@@ -4,8 +4,8 @@ import { supabase } from '../../lib/supabase'
 
 export default function Dashboard() {
   const [user, setUser] = useState<any>(null)
-  const [properties, setProperties] = useState([])
-  const [companies, setCompanies] = useState([])
+  const [properties, setProperties] = useState<any[]>([])
+  const [companies, setCompanies] = useState<any[]>([])
   const [showAddProperty, setShowAddProperty] = useState(false)
   const [showAddCompany, setShowAddCompany] = useState(false)
   const [newProperty, setNewProperty] = useState({
