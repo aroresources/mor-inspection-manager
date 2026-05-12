@@ -1221,7 +1221,7 @@ const generatePDF = () => {
 
 export default function PropertyPage() {
   const { id } = useParams()
-  const [property, setProperty] = useState(null)
+  const [property, setProperty] = useState<any>(null)
   const [activeTab, setActiveTab] = useState('overview')
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState({})

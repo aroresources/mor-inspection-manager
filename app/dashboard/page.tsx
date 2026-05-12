@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 
 export default function Dashboard() {
-  const [user, setUser] = useState(null)
+  const [user, setUser] = useState<any>(null)
   const [properties, setProperties] = useState([])
   const [companies, setCompanies] = useState([])
   const [showAddProperty, setShowAddProperty] = useState(false)
