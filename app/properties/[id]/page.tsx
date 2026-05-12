@@ -6,7 +6,7 @@ import jsPDF from 'jspdf'
 import JSZip from 'jszip'
 import { saveAs } from 'file-saver'
 
-function DocumentsTab({ propertyId }) {
+function DocumentsTab({ propertyId }: any) {
   const [documents, setDocuments] = useState([])
   const [loading, setLoading] = useState(true)
   const [showAddCustom, setShowAddCustom] = useState(false)
@@ -332,7 +332,7 @@ const indexedDocs = documents.map((doc, index) => ({ ...doc, globalIndex: index 
   )
 }
 
-function TasksTab({ propertyId }) {
+function TasksTab({ propertyId }: any) {
   const [tasks, setTasks] = useState([])
   const [loading, setLoading] = useState(true)
   const [showAddTask, setShowAddTask] = useState(false)
@@ -526,7 +526,7 @@ function TasksTab({ propertyId }) {
   )
 }
 
-function MeetingsTab({ propertyId }) {
+function MeetingsTab({ propertyId }: any) {
   const [meetings, setMeetings] = useState([])
   const [loading, setLoading] = useState(true)
   const [showAddMeeting, setShowAddMeeting] = useState(false)
@@ -672,7 +672,7 @@ function MeetingsTab({ propertyId }) {
   )
 }
 
-function FindingsTab({ propertyId, reportDate, property }) {
+function FindingsTab({ propertyId, reportDate, property }: any) {
   const [findings, setFindings] = useState([])
   const [loading, setLoading] = useState(true)
   const [showAddFinding, setShowAddFinding] = useState(false)
