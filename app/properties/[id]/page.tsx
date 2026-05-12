@@ -7,7 +7,7 @@ import JSZip from 'jszip'
 import { saveAs } from 'file-saver'
 
 function DocumentsTab({ propertyId }: any) {
-  const [documents, setDocuments] = useState([])
+  const [documents, setDocuments] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddCustom, setShowAddCustom] = useState(false)
   const [showPacket, setShowPacket] = useState(false)
@@ -333,7 +333,7 @@ const indexedDocs = documents.map((doc, index) => ({ ...doc, globalIndex: index 
 }
 
 function TasksTab({ propertyId }: any) {
-  const [tasks, setTasks] = useState([])
+  const [tasks, setTasks] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddTask, setShowAddTask] = useState(false)
   const [newTask, setNewTask] = useState({ title: '', assigned_to: '', due_date: '' })
@@ -527,7 +527,7 @@ function TasksTab({ propertyId }: any) {
 }
 
 function MeetingsTab({ propertyId }: any) {
-  const [meetings, setMeetings] = useState([])
+  const [meetings, setMeetings] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddMeeting, setShowAddMeeting] = useState(false)
   const [newMeeting, setNewMeeting] = useState({ meeting_date: '', attendees: '', notes: '', action_items: '' })
@@ -673,7 +673,7 @@ function MeetingsTab({ propertyId }: any) {
 }
 
 function FindingsTab({ propertyId, reportDate, property }: any) {
-  const [findings, setFindings] = useState([])
+  const [findings, setFindings] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddFinding, setShowAddFinding] = useState(false)
   const [newFinding, setNewFinding] = useState({ finding: '', assigned_to: '', response: '', due_date: '' })

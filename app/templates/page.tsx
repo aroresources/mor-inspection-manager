@@ -3,8 +3,8 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 
 export default function TemplatesPage() {
-  const [docTemplates, setDocTemplates] = useState([])
-  const [taskTemplates, setTaskTemplates] = useState([])
+  const [docTemplates, setDocTemplates] = useState<any[]>([])
+const [taskTemplates, setTaskTemplates] = useState<any[]>([])
   const [activeTab, setActiveTab] = useState('documents')
   const [loading, setLoading] = useState(true)
   const [newDoc, setNewDoc] = useState({ name: '', category: '' })

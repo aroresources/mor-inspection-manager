@@ -3,14 +3,14 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 
 export default function UsersPage() {
-  const [users, setUsers] = useState([])
-  const [companies, setCompanies] = useState([])
-  const [properties, setProperties] = useState([])
+  const [users, setUsers] = useState<any[]>([])
+const [companies, setCompanies] = useState<any[]>([])
+const [properties, setProperties] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showInvite, setShowInvite] = useState(false)
   const [newUser, setNewUser] = useState({ email: '', full_name: '', role: 'property_manager', company_id: '' })
   const [selectedUser, setSelectedUser] = useState(null)
-  const [userProperties, setUserProperties] = useState([])
+  const [userProperties, setUserProperties] = useState<any[]>([])
   const [showPropertyAccess, setShowPropertyAccess] = useState(false)
 
   useEffect(() => {
