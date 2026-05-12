@@ -110,13 +110,19 @@ export default function Dashboard() {
             Templates
           </button>
           <button
+            onClick={() => window.location.href = '/users'}
+            className="text-sm text-gray-600 hover:text-gray-800"
+          >
+            Team Members
+          </button>
+          <button
             onClick={async () => { await supabase.auth.signOut(); window.location.href = '/' }}
             className="text-sm text-gray-500 hover:text-gray-700"
           >
             Sign Out
           </button>
-        </div>
-      </nav>
+          </div>
+        </nav>
 
       <main className="max-w-7xl mx-auto px-6 py-8">
         <div className="flex justify-between items-center mb-6">
