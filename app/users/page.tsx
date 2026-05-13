@@ -76,16 +76,16 @@ const [properties, setProperties] = useState<any[]>([])
       setNewUser({ email: '', full_name: '', role: 'property_manager', company_id: '' })
       setShowInvite(false)
       fetchData()
-    } catch (err) {
+    } catch (err: any) {
       alert('Error: ' + err.message)
     }
   }
-  const updateUserRole = async (userId, role) => {
+  const updateUserRole = async (userId: any, role: any) => {
     await supabase.from('profiles').update({ role }).eq('id', userId)
     setUsers(users.map(u => u.id === userId ? { ...u, role } : u))
   }
 
-  const updateUserCompany = async (userId, company_id) => {
+  const updateUserCompany = async (userId: any, company_id: any) => {
     await supabase.from('profiles').update({ company_id: company_id || null }).eq('id', userId)
     setUsers(users.map(u => u.id === userId ? { ...u, company_id } : u))
   }
@@ -100,8 +100,8 @@ const [properties, setProperties] = useState<any[]>([])
     setShowPropertyAccess(true)
   }
 
-  const togglePropertyAccess = async (propertyId) => {
-    if (userProperties.includes(propertyId)) {
+  const togglePropertyAccess = async (propertyId: any) => {
+    if (userProperties.includes(propertyId: any)) {
       await supabase.from('property_access')
         .delete()
         .eq('user_id', selectedUser.id)
