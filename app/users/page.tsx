@@ -90,7 +90,7 @@ const [properties, setProperties] = useState<any[]>([])
     setUsers(users.map(u => u.id === userId ? { ...u, company_id } : u))
   }
 
-  const openPropertyAccess = async (user) => {
+  const openPropertyAccess = async (user: any) => {
     setSelectedUser(user)
     const { data } = await supabase
       .from('property_access')
