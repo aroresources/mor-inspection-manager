@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase'
 
 export default function Dashboard() {
   const [user, setUser] = useState<any>(null)
+  const [userRole, setUserRole] = useState('')
   const [properties, setProperties] = useState<any[]>([])
   const [companies, setCompanies] = useState<any[]>([])
   const [showAddProperty, setShowAddProperty] = useState(false)
@@ -23,6 +24,8 @@ export default function Dashboard() {
         setUser(user)
         fetchProperties()
         fetchCompanies()
+        const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+        if (profile) setUserRole(profile.role)
       }
     }
     getUser()
@@ -155,7 +158,7 @@ export default function Dashboard() {
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
-          {filterCompany !== 'all' && (
+          {filterCompany !== 'all' && userRole === 'super_admin' && (
             <button
               onClick={() => {
                 if (confirm('Are you sure you want to delete this company? This will also delete all properties under it.')) {
@@ -185,6 +188,7 @@ export default function Dashboard() {
               key={property.id}
               className="bg-white rounded-lg shadow p-5 hover:shadow-md transition relative"
             >
+              {userRole === 'super_admin' && (
               <button
                 onClick={(e: any) => {
                   e.stopPropagation()
@@ -196,6 +200,7 @@ export default function Dashboard() {
               >
                 🗑️
               </button>
+              )}
               <div onClick={() => window.location.href = `/properties/${property.id}`} className="cursor-pointer">
               <h3 className="font-bold text-gray-800">{property.name}</h3>
               <p className="text-sm text-gray-500 mt-1">{property.companies?.name}</p>
@@ -243,7 +248,6 @@ export default function Dashboard() {
                   </div>
                 )
               })()}
-            </div>
             </div>
             </div>
             ))}
