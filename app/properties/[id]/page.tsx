@@ -566,7 +566,7 @@ function MeetingsTab({ propertyId }: any) {
     }
   }
 
-  const deleteMeeting = async (id) => {const deleteMeeting = async (id: any) => {  await supabase.from('meetings').delete().eq('id', id)
+  const deleteMeeting = async (id: any) => {const deleteMeeting = async (id: any) => {  await supabase.from('meetings').delete().eq('id', id)
     setMeetings(meetings.filter(m => m.id !== id))
   }
 
@@ -726,8 +726,8 @@ function FindingsTab({ propertyId, reportDate, property }: any) {
   }
 
   // Calculate 30-day deadline
-const deadline = reportDate ? new Date(new Date(reportDate).getTime() + 30 * 24 * 60 * 60 * 1000) : null
-const daysLeft = deadline ? Math.ceil((deadline - new Date()) / (1000 * 60 * 60 * 24)) : null
+    const deadline = reportDate ? new Date(new Date(reportDate).getTime() + 30 * 24 * 60 * 60 * 1000) : null
+    const daysLeft = deadline ? Math.ceil((deadline.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : null
 
   const open = findings.filter(f => f.status !== 'Submitted').length
   const total = findings.length
@@ -1449,8 +1449,8 @@ export default function PropertyPage() {
 )}
 
         {activeTab === 'findings' && (
-  <FindingsTab propertyId={id} reportDate={property.report_received_date} property={property} />
-)}
+          <FindingsTab propertyId={id} reportDate={property.report_received_date} property={property} />
+        )}
     
       </main>
     </div>
