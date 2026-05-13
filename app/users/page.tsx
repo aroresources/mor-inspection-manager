@@ -101,7 +101,7 @@ const [properties, setProperties] = useState<any[]>([])
   }
 
   const togglePropertyAccess = async (propertyId: any) => {
-    if (userProperties.includes(propertyId: any)) {
+    if (userProperties.includes(propertyId)) {
       await supabase.from('property_access')
         .delete()
         .eq('user_id', selectedUser.id)
