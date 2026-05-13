@@ -115,12 +115,12 @@ const [properties, setProperties] = useState<any[]>([])
   }
 
   const getRoleBadge = (role: any) => {
-    const styles = {
+    const styles: any = {
       super_admin: 'bg-red-100 text-red-700',
       asset_manager: 'bg-blue-100 text-blue-700',
       property_manager: 'bg-green-100 text-green-700'
     }
-    const labels = {
+    const labels: any = {
       super_admin: 'Super Admin',
       asset_manager: 'Asset Manager',
       property_manager: 'Property Manager'
