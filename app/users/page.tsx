@@ -9,7 +9,7 @@ const [properties, setProperties] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showInvite, setShowInvite] = useState(false)
   const [newUser, setNewUser] = useState({ email: '', full_name: '', role: 'property_manager', company_id: '' })
-  const [selectedUser, setSelectedUser] = useState(null)
+  const [selectedUser, setSelectedUser] = useState<any>(null)
   const [userProperties, setUserProperties] = useState<any[]>([])
   const [showPropertyAccess, setShowPropertyAccess] = useState(false)
 
