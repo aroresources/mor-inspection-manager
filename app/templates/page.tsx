@@ -36,7 +36,7 @@ const [taskTemplates, setTaskTemplates] = useState<any[]>([])
     setLoading(false)
   }
 
-  const addDocTemplate = async (e) => {
+  const addDocTemplate = async (e: any) => {
     if (e) e.preventDefault()
     if (!newDoc.name) return
     const { data } = await supabase
@@ -50,12 +50,12 @@ const [taskTemplates, setTaskTemplates] = useState<any[]>([])
     }
   }
 
-  const deleteDocTemplate = async (id) => {
+  const deleteDocTemplate = async (id: any) => {
     await supabase.from('document_templates').delete().eq('id', id)
-    setDocTemplates(docTemplates.filter(d => d.id !== id))
+    setDocTemplates(docTemplates.filter((d: any) => d.id !== id))
   }
 
-  const addTaskTemplate = async (e) => {
+  const addTaskTemplate = async (e: any) => {
     if (e) e.preventDefault()
     if (!newTask.title) return
     const { data } = await supabase
@@ -69,12 +69,12 @@ const [taskTemplates, setTaskTemplates] = useState<any[]>([])
     }
   }
 
-  const deleteTaskTemplate = async (id) => {
+  const deleteTaskTemplate = async (id: any) => {
     await supabase.from('task_templates').delete().eq('id', id)
     setTaskTemplates(taskTemplates.filter(t => t.id !== id))
   }
 
-  const moveDoc = async (index, direction) => {
+  const moveDoc = async (index: any, direction: any) => {
     const newDocs = [...docTemplates]
     const swapIndex = index + direction
     if (swapIndex < 0 || swapIndex >= newDocs.length) return
@@ -221,14 +221,14 @@ const [taskTemplates, setTaskTemplates] = useState<any[]>([])
                 type="text"
                 placeholder="Document name *"
                 value={newDoc.name}
-                onChange={(e) => setNewDoc({...newDoc, name: e.target.value})}
+                onChange={(e: any) => setNewDoc({...newDoc, name: e.target.value})}
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
               />
               <input
                 type="text"
                 placeholder="Category (optional)"
                 value={newDoc.category}
-                onChange={(e) => setNewDoc({...newDoc, category: e.target.value})}
+                onChange={(e: any) => setNewDoc({...newDoc, category: e.target.value})}
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
               />
             </div>
@@ -250,14 +250,14 @@ const [taskTemplates, setTaskTemplates] = useState<any[]>([])
                 type="text"
                 placeholder="Task title *"
                 value={newTask.title}
-                onChange={(e) => setNewTask({...newTask, title: e.target.value})}
+                onChange={(e: any) => setNewTask({...newTask, title: e.target.value})}
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
               />
               <input
                 type="text"
                 placeholder="Default assignee role (optional)"
                 value={newTask.default_assignee_role}
-                onChange={(e) => setNewTask({...newTask, default_assignee_role: e.target.value})}
+                onChange={(e: any) => setNewTask({...newTask, default_assignee_role: e.target.value})}
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
               />
             </div>
