@@ -9,8 +9,8 @@ export default function Dashboard() {
   const [companies, setCompanies] = useState<any[]>([])
   const [showAddProperty, setShowAddProperty] = useState(false)
   const [showAddCompany, setShowAddCompany] = useState(false)
-  const [newProperty, setNewProperty] = useState({
-    name: '', address: '', company_id: '', contract_type: '', mor_date: ''
+  const [newProperty, setNewProperty] = useState<any>({
+    name: '', address: '', company_id: '', contract_type: '', mor_date: null
   })
   const [newCompany, setNewCompany] = useState({ name: '' })
   const [filterCompany, setFilterCompany] = useState('all')
@@ -206,6 +206,10 @@ export default function Dashboard() {
               <p className="text-sm text-gray-500 mt-1">{property.companies?.name}</p>
               <p className="text-sm text-gray-500">{property.address}</p>
               
+
+              {property.mor_date && (
+                <p className="text-xs text-gray-600 mt-2">📋 MOR Scheduled: {new Date(property.mor_date).toLocaleDateString('en-US', { timeZone: 'UTC' })}</p>
+              )}
               <div className="mt-3 flex flex-wrap gap-2">
                 <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
                   {property.contract_type || 'No contract type'}
@@ -314,11 +318,11 @@ export default function Dashboard() {
                   <option value="Option 2">Option 2</option>
                   <option value="Option 3">Option 3</option>
                 </select>
-                <input
+               <input
                   type="date"
                   placeholder="MOR Date"
-                  value={newProperty.mor_date}
-                  onChange={(e) => setNewProperty({...newProperty, mor_date: e.target.value})}
+                  value={newProperty.mor_date || ''}
+                  onChange={(e: any) => setNewProperty({...newProperty, mor_date: e.target.value || null})}
                   className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
                 />
               </div>
