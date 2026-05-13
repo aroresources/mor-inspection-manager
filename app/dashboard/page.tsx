@@ -144,17 +144,33 @@ export default function Dashboard() {
         </div>
 
         {/* Company Filter */}
-        <div className="mb-4">
+        <div className="mb-4 flex items-center gap-3">
           <select
             value={filterCompany}
-            onChange={(e) => setFilterCompany(e.target.value)}
+            onChange={(e: any) => setFilterCompany(e.target.value)}
             className="border border-gray-300 rounded px-3 py-2 text-sm"
           >
             <option value="all">All Companies</option>
-            {companies.map(c => (
+            {companies.map((c: any) => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
+          {filterCompany !== 'all' && (
+            <button
+              onClick={() => {
+                if (confirm('Are you sure you want to delete this company? This will also delete all properties under it.')) {
+                  supabase.from('companies').delete().eq('id', filterCompany).then(() => {
+                    setFilterCompany('all')
+                    fetchCompanies()
+                    fetchProperties()
+                  })
+                }
+              }}
+              className="text-red-400 hover:text-red-600 text-sm"
+            >
+              🗑️ Delete Company
+            </button>
+          )}
         </div>
 
         {/* Properties List */}
@@ -167,9 +183,20 @@ export default function Dashboard() {
             {filtered.map(property => (
               <div
               key={property.id}
-              onClick={() => window.location.href = `/properties/${property.id}`}
-              className="bg-white rounded-lg shadow p-5 cursor-pointer hover:shadow-md transition"
+              className="bg-white rounded-lg shadow p-5 hover:shadow-md transition relative"
             >
+              <button
+                onClick={(e: any) => {
+                  e.stopPropagation()
+                  if (confirm('Are you sure you want to delete this property? This will delete all documents, tasks, meetings and findings associated with it.')) {
+                    supabase.from('properties').delete().eq('id', property.id).then(() => fetchProperties())
+                  }
+                }}
+                className="absolute top-3 right-3 text-red-400 hover:text-red-600 text-xs"
+              >
+                🗑️
+              </button>
+              <div onClick={() => window.location.href = `/properties/${property.id}`} className="cursor-pointer">
               <h3 className="font-bold text-gray-800">{property.name}</h3>
               <p className="text-sm text-gray-500 mt-1">{property.companies?.name}</p>
               <p className="text-sm text-gray-500">{property.address}</p>
@@ -216,6 +243,8 @@ export default function Dashboard() {
                   </div>
                 )
               })()}
+            </div>
+            </div>
             </div>
             ))}
           </div>
