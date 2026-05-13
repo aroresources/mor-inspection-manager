@@ -42,7 +42,7 @@ const [properties, setProperties] = useState<any[]>([])
     setLoading(false)
   }
 
-  const inviteUser = async (e) => {
+  const inviteUser = async (e: any) => {
     if (e) e.preventDefault()
     if (!newUser.email) return
     
@@ -186,7 +186,7 @@ const [properties, setProperties] = useState<any[]>([])
                       <label className="text-xs text-gray-500">Role</label>
                       <select
                         value={user.role}
-                        onChange={(e) => updateUserRole(user.id, e.target.value)}
+                        onChange={(e: any) => updateUserRole(user.id, e.target.value)}
                         className="w-full mt-1 border border-gray-200 rounded px-2 py-1 text-xs"
                       >
                         <option value="super_admin">Super Admin</option>
@@ -198,7 +198,7 @@ const [properties, setProperties] = useState<any[]>([])
                       <label className="text-xs text-gray-500">Company Access</label>
                       <select
                         value={user.company_id || ''}
-                        onChange={(e) => updateUserCompany(user.id, e.target.value)}
+                        onChange={(e: any) => updateUserCompany(user.id, e.target.value)}
                         className="w-full mt-1 border border-gray-200 rounded px-2 py-1 text-xs"
                       >
                         <option value="">All Companies</option>
@@ -233,19 +233,19 @@ const [properties, setProperties] = useState<any[]>([])
                 type="email"
                 placeholder="Email address *"
                 value={newUser.email}
-                onChange={(e) => setNewUser({...newUser, email: e.target.value})}
+                onChange={(e: any) => setNewUser({...newUser, email: e.target.value})}
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
               />
               <input
                 type="text"
                 placeholder="Full name"
                 value={newUser.full_name}
-                onChange={(e) => setNewUser({...newUser, full_name: e.target.value})}
+                onChange={(e: any) => setNewUser({...newUser, full_name: e.target.value})}
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
               />
               <select
                 value={newUser.role}
-                onChange={(e) => setNewUser({...newUser, role: e.target.value})}
+                onChange={(e: any) => setNewUser({...newUser, role: e.target.value})}
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
               >
                 <option value="property_manager">Property Manager</option>
@@ -254,7 +254,7 @@ const [properties, setProperties] = useState<any[]>([])
               </select>
               <select
                 value={newUser.company_id}
-                onChange={(e) => setNewUser({...newUser, company_id: e.target.value})}
+                onChange={(e: any) => setNewUser({...newUser, company_id: e.target.value})}
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
               >
                 <option value="">All Companies</option>
