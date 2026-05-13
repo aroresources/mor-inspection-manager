@@ -114,7 +114,7 @@ const [properties, setProperties] = useState<any[]>([])
     }
   }
 
-  const getRoleBadge = (role) => {
+  const getRoleBadge = (role: any) => {
     const styles = {
       super_admin: 'bg-red-100 text-red-700',
       asset_manager: 'bg-blue-100 text-blue-700',
