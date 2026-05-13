@@ -11,8 +11,7 @@ function DocumentsTab({ propertyId }: any) {
   const [loading, setLoading] = useState(true)
   const [showAddCustom, setShowAddCustom] = useState(false)
   const [showPacket, setShowPacket] = useState(false)
-  const [customDoc, setCustomDoc] = useState({ name: '', assigned_to: '', due_date: '', notes: '' })
-
+  const [customDoc, setCustomDoc] = useState<any>({ name: '', assigned_to: '', due_date: '', notes: '' })
   useEffect(() => {
     fetchDocuments()
   }, [propertyId])
@@ -76,7 +75,7 @@ function DocumentsTab({ propertyId }: any) {
     await supabase.from('documents').update({ sort_order: updated[swapIndex].sort_order }).eq('id', updated[swapIndex].id)
   }
 
-  const addCustomDoc = async (e) => {
+  const addCustomDoc = async (e: any) => {
     if (e) e.preventDefault()
     if (!customDoc.name) return
     const docData = {
@@ -161,7 +160,7 @@ const indexedDocs = documents.map((doc, index) => ({ ...doc, globalIndex: index 
                       <input
                         type="checkbox"
                         checked={doc.is_required}
-                        onChange={(e) => updateDoc(doc.id, { is_required: e.target.checked })}
+                        onChange={(e: any) => updateDoc(doc.id, { is_required: e.target.checked })}
                         className="mt-1"
                       />
                       <span className={`text-sm ${!doc.is_required ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
@@ -174,18 +173,18 @@ const indexedDocs = documents.map((doc, index) => ({ ...doc, globalIndex: index 
                         type="text"
                         placeholder="Assigned to"
                         value={doc.assigned_to || ''}
-                        onChange={(e) => updateDoc(doc.id, { assigned_to: e.target.value })}
+                        onChange={(e: any) => updateDoc(doc.id, { assigned_to: e.target.value })}
                         className="border border-gray-200 rounded px-2 py-1 text-xs"
                       />
                       <input
                         type="date"
                         value={doc.due_date || ''}
-                        onChange={(e) => updateDoc(doc.id, { due_date: e.target.value })}
+                        onChange={(e: any) => updateDoc(doc.id, { due_date: e.target.value })}
                         className="border border-gray-200 rounded px-2 py-1 text-xs"
                       />
                       <select
                         value={doc.status || 'Not Started'}
-                        onChange={(e) => updateDoc(doc.id, { status: e.target.value })}
+                        onChange={(e: any) => updateDoc(doc.id, { status: e.target.value })}
                         className="border border-gray-200 rounded px-2 py-1 text-xs"
                       >
                         <option value="Not Started">Not Started</option>
@@ -198,7 +197,7 @@ const indexedDocs = documents.map((doc, index) => ({ ...doc, globalIndex: index 
                       type="text"
                       placeholder="Notes"
                       value={doc.notes || ''}
-                      onChange={(e) => updateDoc(doc.id, { notes: e.target.value })}
+                      onChange={(e: any) => updateDoc(doc.id, { notes: e.target.value })}
                       className="mt-1 ml-6 w-full border border-gray-200 rounded px-2 py-1 text-xs"
                     />
                     <div className="mt-2 ml-6 flex items-center gap-2">
@@ -213,7 +212,7 @@ const indexedDocs = documents.map((doc, index) => ({ ...doc, globalIndex: index 
                           <input
                             type="file"
                             className="hidden"
-                            onChange={async (e) => {
+                            onChange={async (e: any) => {
                               const file = e.target.files[0]
                               if (!file) return
                               const filePath = `${propertyId}/${doc.id}/${file.name}`
@@ -289,34 +288,34 @@ const indexedDocs = documents.map((doc, index) => ({ ...doc, globalIndex: index 
                 type="text"
                 placeholder="Document name *"
                 value={customDoc.name}
-                onChange={(e) => setCustomDoc({...customDoc, name: e.target.value})}
+                onChange={(e: any) => setCustomDoc({...customDoc, name: e.target.value})}
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
               />
               <input
                 type="text"
                 placeholder="Assigned to"
                 value={customDoc.assigned_to}
-                onChange={(e) => setCustomDoc({...customDoc, assigned_to: e.target.value})}
+                onChange={(e: any) => setCustomDoc({...customDoc, assigned_to: e.target.value})}
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
               />
               <input
                 type="date"
                 value={customDoc.due_date}
-                onChange={(e) => setCustomDoc({...customDoc, due_date: e.target.value})}
+                onChange={(e: any) => setCustomDoc({...customDoc, due_date: e.target.value})}
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
               />
               <input
                 type="text"
                 placeholder="Notes"
                 value={customDoc.notes}
-                onChange={(e) => setCustomDoc({...customDoc, notes: e.target.value})}
+                onChange={(e: any) => setCustomDoc({...customDoc, notes: e.target.value})}
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
               />
               <label className="flex items-center gap-2 text-sm text-gray-600">
                 <input
                   type="checkbox"
                   checked={customDoc.addToTemplate || false}
-                  onChange={(e) => setCustomDoc({...customDoc, addToTemplate: e.target.checked})}
+                  onChange={(e: any) => setCustomDoc({...customDoc, addToTemplate: e.target.checked})}
                 />
                 Add to template (include on all future properties)
               </label>
@@ -336,7 +335,7 @@ function TasksTab({ propertyId }: any) {
   const [tasks, setTasks] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddTask, setShowAddTask] = useState(false)
-  const [newTask, setNewTask] = useState({ title: '', assigned_to: '', due_date: '' })
+ const [newTask, setNewTask] = useState<any>({ title: '', assigned_to: '', due_date: '' })
 
   useEffect(() => {
     fetchTasks()
@@ -384,7 +383,7 @@ function TasksTab({ propertyId }: any) {
     setTasks(tasks => tasks.map(t => t.id === id ? { ...t, ...updates } : t))
   }
 
-  const addTask = async (e) => {
+  const addTask = async (e: any) => {
     if (e) e.preventDefault()
     if (!newTask.title) return
     const taskData = {
@@ -449,7 +448,7 @@ function TasksTab({ propertyId }: any) {
                   <input
                     type="checkbox"
                     checked={task.completed}
-                    onChange={(e) => updateTask(task.id, { completed: e.target.checked })}
+                    onChange={(e: any) => updateTask(task.id, { completed: e.target.checked })}
                     className="mt-1"
                   />
                   <div className="flex-1">
@@ -462,13 +461,13 @@ function TasksTab({ propertyId }: any) {
                         type="text"
                         placeholder="Assigned to"
                         value={task.assigned_to || ''}
-                        onChange={(e) => updateTask(task.id, { assigned_to: e.target.value })}
+                        onChange={(e: any) => updateTask(task.id, { assigned_to: e.target.value })}
                         className="border border-gray-200 rounded px-2 py-1 text-xs"
                       />
                       <input
                         type="date"
                         value={task.due_date || ''}
-                        onChange={(e) => updateTask(task.id, { due_date: e.target.value })}
+                        onChange={(e: any) => updateTask(task.id, { due_date: e.target.value })}
                         className="border border-gray-200 rounded px-2 py-1 text-xs"
                       />
                     </div>
@@ -490,27 +489,27 @@ function TasksTab({ propertyId }: any) {
                 type="text"
                 placeholder="Task title *"
                 value={newTask.title}
-                onChange={(e) => setNewTask({...newTask, title: e.target.value})}
+                onChange={(e: any) => setNewTask({...newTask, title: e.target.value})}
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
               />
               <input
                 type="text"
                 placeholder="Assigned to"
                 value={newTask.assigned_to}
-                onChange={(e) => setNewTask({...newTask, assigned_to: e.target.value})}
+                onChange={(e: any) => setNewTask({...newTask, assigned_to: e.target.value})}
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
               />
             <input
                 type="date"
                 value={newTask.due_date || ''}
-                onChange={(e) => setNewTask({...newTask, due_date: e.target.value || null})}
+                onChange={(e: any) => setNewTask({...newTask, due_date: e.target.value || null})}
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
               />
               <label className="flex items-center gap-2 text-sm text-gray-600">
                 <input
                   type="checkbox"
                   checked={newTask.addToTemplate || false}
-                  onChange={(e) => setNewTask({...newTask, addToTemplate: e.target.checked})}
+                  onChange={(e: any) => setNewTask({...newTask, addToTemplate: e.target.checked})}
                 />
                 Add to template (include on all future properties)
               </label>
@@ -547,7 +546,7 @@ function MeetingsTab({ propertyId }: any) {
     setLoading(false)
   }
 
-  const addMeeting = async (e) => {
+  const addMeeting = async (e: any) => {
     if (e) e.preventDefault()
     if (!newMeeting.notes) return
     const { data } = await supabase
@@ -635,27 +634,27 @@ function MeetingsTab({ propertyId }: any) {
               <input
                 type="date"
                 value={newMeeting.meeting_date}
-                onChange={(e) => setNewMeeting({...newMeeting, meeting_date: e.target.value})}
+                onChange={(e: any) => setNewMeeting({...newMeeting, meeting_date: e.target.value})}
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
               />
               <input
                 type="text"
                 placeholder="Attendees (e.g. Ari, Property Manager, Asset Manager)"
                 value={newMeeting.attendees}
-                onChange={(e) => setNewMeeting({...newMeeting, attendees: e.target.value})}
+                onChange={(e: any) => setNewMeeting({...newMeeting, attendees: e.target.value})}
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
               />
               <textarea
                 placeholder="Meeting notes *"
                 value={newMeeting.notes}
-                onChange={(e) => setNewMeeting({...newMeeting, notes: e.target.value})}
+                onChange={(e: any) => setNewMeeting({...newMeeting, notes: e.target.value})}
                 rows={4}
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
               />
               <textarea
                 placeholder="Action items"
                 value={newMeeting.action_items}
-                onChange={(e) => setNewMeeting({...newMeeting, action_items: e.target.value})}
+                onChange={(e: any) => setNewMeeting({...newMeeting, action_items: e.target.value})}
                 rows={3}
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
               />
@@ -675,7 +674,7 @@ function FindingsTab({ propertyId, reportDate, property }: any) {
   const [findings, setFindings] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddFinding, setShowAddFinding] = useState(false)
-  const [newFinding, setNewFinding] = useState({ finding: '', assigned_to: '', response: '', due_date: '' })
+  const [newFinding, setNewFinding] = useState<any>({ finding: '', assigned_to: '', response: '', due_date: '' })
   const [introText, setIntroText] = useState('Below is our response to the Management and Occupancy Review above:')
   const [signatoryName, setSignatoryName] = useState('')
   const [showReportSettings, setShowReportSettings] = useState(false)
@@ -695,7 +694,7 @@ function FindingsTab({ propertyId, reportDate, property }: any) {
     setLoading(false)
   }
 
-  const addFinding = async (e) => {
+  const addFinding = async (e: any) => {
     if (e) e.preventDefault()
     if (!newFinding.finding) return
     const { data } = await supabase
@@ -1036,7 +1035,7 @@ const generatePDF = () => {
               <div className="flex justify-between items-start mb-3">
                 <select
                   value={finding.status}
-                  onChange={(e) => updateFinding(finding.id, { status: e.target.value })}
+                  onChange={(e: any) => updateFinding(finding.id, { status: e.target.value })}
                   className={`text-xs px-2 py-1 rounded border ${
                     finding.status === 'Submitted' ? 'bg-green-100 text-green-700 border-green-200' :
                     finding.status === 'Ready' ? 'bg-blue-100 text-blue-700 border-blue-200' :
@@ -1062,7 +1061,7 @@ const generatePDF = () => {
                   <label className="text-xs text-gray-500">Finding</label>
                   <textarea
                     value={finding.finding}
-                    onChange={(e) => updateFinding(finding.id, { finding: e.target.value })}
+                    onChange={(e: any) => updateFinding(finding.id, { finding: e.target.value })}
                     rows={2}
                     className="w-full mt-1 border border-gray-200 rounded px-3 py-2 text-sm"
                   />
@@ -1074,7 +1073,7 @@ const generatePDF = () => {
                     <input
                       type="text"
                       value={finding.assigned_to || ''}
-                      onChange={(e) => updateFinding(finding.id, { assigned_to: e.target.value })}
+                      onChange={(e: any) => updateFinding(finding.id, { assigned_to: e.target.value })}
                       className="w-full mt-1 border border-gray-200 rounded px-3 py-2 text-sm"
                     />
                   </div>
@@ -1083,7 +1082,7 @@ const generatePDF = () => {
                     <input
                       type="date"
                       value={finding.due_date || ''}
-                      onChange={(e) => updateFinding(finding.id, { due_date: e.target.value || null })}
+                      onChange={(e: any) => updateFinding(finding.id, { due_date: e.target.value || null })}
                       className="w-full mt-1 border border-gray-200 rounded px-3 py-2 text-sm"
                     />
                   </div>
@@ -1093,7 +1092,7 @@ const generatePDF = () => {
                   <label className="text-xs text-gray-500">Written Response</label>
                   <textarea
                     value={finding.response || ''}
-                    onChange={(e) => updateFinding(finding.id, { response: e.target.value })}
+                    onChange={(e: any) => updateFinding(finding.id, { response: e.target.value })}
                     rows={3}
                     placeholder="Type your response to this finding here..."
                     className="w-full mt-1 border border-gray-200 rounded px-3 py-2 text-sm"
@@ -1113,7 +1112,7 @@ const generatePDF = () => {
                         <input
                           type="file"
                           className="hidden"
-                          onChange={async (e) => {
+                          onChange={async (e: any) => {
                             const file = e.target.files[0]
                             if (!file) return
                             const filePath = `${propertyId}/findings/${finding.id}/${file.name}`
@@ -1147,7 +1146,7 @@ const generatePDF = () => {
               <textarea
                 placeholder="Finding description *"
                 value={newFinding.finding}
-                onChange={(e) => setNewFinding({...newFinding, finding: e.target.value})}
+                onChange={(e: any) => setNewFinding({...newFinding, finding: e.target.value})}
                 rows={3}
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
               />
@@ -1155,19 +1154,19 @@ const generatePDF = () => {
                 type="text"
                 placeholder="Assigned to"
                 value={newFinding.assigned_to}
-                onChange={(e) => setNewFinding({...newFinding, assigned_to: e.target.value})}
+                onChange={(e: any) => setNewFinding({...newFinding, assigned_to: e.target.value})}
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
               />
               <input
                 type="date"
                 value={newFinding.due_date}
-                onChange={(e) => setNewFinding({...newFinding, due_date: e.target.value})}
+                onChange={(e: any) => setNewFinding({...newFinding, due_date: e.target.value})}
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
               />
               <textarea
                 placeholder="Initial response (optional)"
                 value={newFinding.response}
-                onChange={(e) => setNewFinding({...newFinding, response: e.target.value})}
+                onChange={(e: any) => setNewFinding({...newFinding, response: e.target.value})}
                 rows={3}
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
               />
@@ -1190,7 +1189,7 @@ const generatePDF = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Intro Text</label>
                 <textarea
                   value={introText}
-                  onChange={(e) => setIntroText(e.target.value)}
+                  onChange={(e: any) => setIntroText(e.target.value)}
                   rows={4}
                   className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
                 />
@@ -1200,7 +1199,7 @@ const generatePDF = () => {
                 <input
                   type="text"
                   value={signatoryName}
-                  onChange={(e) => setSignatoryName(e.target.value)}
+                  onChange={(e: any) => setSignatoryName(e.target.value)}
                   placeholder="e.g. Ari Rubinfeld, Director of Compliance"
                   className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
                 />
@@ -1223,7 +1222,7 @@ export default function PropertyPage() {
   const [property, setProperty] = useState<any>(null)
   const [activeTab, setActiveTab] = useState('overview')
   const [editing, setEditing] = useState(false)
-  const [form, setForm] = useState({})
+  const [form, setForm] = useState<any>({})
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -1340,7 +1339,7 @@ export default function PropertyPage() {
                     <input
                       type={type}
                       value={form[field] || ''}
-                      onChange={(e) => setForm({...form, [field]: e.target.value})}
+                      onChange={(e: any) => setForm({...form, [field]: e.target.value})}
                       className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
                     />
                   ) : (
@@ -1354,7 +1353,7 @@ export default function PropertyPage() {
                 {editing ? (
                   <select
                     value={form.last_mor_rating || ''}
-                    onChange={(e) => setForm({...form, last_mor_rating: e.target.value})}
+                    onChange={(e: any) => setForm({...form, last_mor_rating: e.target.value})}
                     className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
                   >
                     <option value="">Select Rating</option>
@@ -1374,7 +1373,7 @@ export default function PropertyPage() {
                 {editing ? (
                   <select
                     value={form.contract_type || ''}
-                    onChange={(e) => setForm({...form, contract_type: e.target.value})}
+                    onChange={(e: any) => setForm({...form, contract_type: e.target.value})}
                     className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
                   >
                     <option value="">Select Type</option>
@@ -1392,7 +1391,7 @@ export default function PropertyPage() {
                 {editing ? (
                   <select
                     value={form.risk_classification || ''}
-                    onChange={(e) => setForm({...form, risk_classification: e.target.value})}
+                    onChange={(e: any) => setForm({...form, risk_classification: e.target.value})}
                     className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
                   >
                     <option value="">Select Classification</option>
@@ -1412,7 +1411,7 @@ export default function PropertyPage() {
               {editing ? (
                 <textarea
                   value={form.hud_notes || ''}
-                  onChange={(e) => setForm({...form, hud_notes: e.target.value})}
+                  onChange={(e: any) => setForm({...form, hud_notes: e.target.value})}
                   rows={3}
                   className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
                 />
@@ -1426,7 +1425,7 @@ export default function PropertyPage() {
               {editing ? (
                 <textarea
                   value={form.last_nspire_notes || ''}
-                  onChange={(e) => setForm({...form, last_nspire_notes: e.target.value})}
+                  onChange={(e: any) => setForm({...form, last_nspire_notes: e.target.value})}
                   rows={3}
                   className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
                 />
