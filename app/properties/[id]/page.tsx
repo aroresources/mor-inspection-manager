@@ -55,12 +55,12 @@ function DocumentsTab({ propertyId }: any) {
     }
   }
 
-  const updateDoc = async (id, updates) => {
+  const updateDoc = async (id: any, updates: any) => {
     await supabase.from('documents').update(updates).eq('id', id)
     setDocuments(docs => docs.map(d => d.id === id ? { ...d, ...updates } : d))
   }
 
-  const moveDoc = async (index, direction) => {
+  const moveDoc = async (index: any, direction: any) => {
     const newDocs = [...documents]
     const swapIndex = index + direction
     if (swapIndex < 0 || swapIndex >= newDocs.length) return
@@ -379,7 +379,7 @@ function TasksTab({ propertyId }: any) {
     }
   }
 
-  const updateTask = async (id, updates) => {
+  const updateTask = async (id: any, updates: any) => {
     await supabase.from('tasks').update(updates).eq('id', id)
     setTasks(tasks => tasks.map(t => t.id === id ? { ...t, ...updates } : t))
   }
@@ -567,8 +567,7 @@ function MeetingsTab({ propertyId }: any) {
     }
   }
 
-  const deleteMeeting = async (id) => {
-    await supabase.from('meetings').delete().eq('id', id)
+  const deleteMeeting = async (id) => {const deleteMeeting = async (id: any) => {  await supabase.from('meetings').delete().eq('id', id)
     setMeetings(meetings.filter(m => m.id !== id))
   }
 
@@ -717,12 +716,12 @@ function FindingsTab({ propertyId, reportDate, property }: any) {
     }
   }
 
-  const updateFinding = async (id, updates) => {
+  const updateFinding = async (id: any, updates: any) => {
     await supabase.from('findings').update(updates).eq('id', id)
     setFindings(findings => findings.map(f => f.id === id ? { ...f, ...updates } : f))
   }
 
-  const deleteFinding = async (id) => {
+  const deleteFinding = async (id: any) => {
     await supabase.from('findings').delete().eq('id', id)
     setFindings(findings.filter(f => f.id !== id))
   }
