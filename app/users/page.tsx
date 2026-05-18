@@ -42,42 +42,31 @@ const [properties, setProperties] = useState<any[]>([])
     setLoading(false)
   }
 
-  const inviteUser = async (e: any) => {
+const inviteUser = async (e: any) => {
     if (e) e.preventDefault()
     if (!newUser.email) return
     
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email: newUser.email,
-        password: Math.random().toString(36).slice(-10),
-        options: {
-          data: {
-            full_name: newUser.full_name
-          }
-        }
-      })
-      
-      if (error) {
-        alert('Error creating user: ' + error.message)
-        return
-      }
-
-      if (data?.user) {
-        await supabase.from('profiles').insert([{
-          id: data.user.id,
+      const response = await fetch('/api/invite-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           email: newUser.email,
           full_name: newUser.full_name,
           role: newUser.role,
           company_id: newUser.company_id || null
-        }])
-      }
+        })
+      })
 
-      alert(`User ${newUser.email} created! They will need to reset their password via the login page.`)
+      const data = await response.json()
+      if (data.error) throw new Error(data.error)
+
+      alert(`Invitation sent to ${newUser.email}!`)
       setNewUser({ email: '', full_name: '', role: 'property_manager', company_id: '' })
       setShowInvite(false)
       fetchData()
     } catch (err: any) {
-      alert('Error: ' + err.message)
+      alert('Error sending invite: ' + err.message)
     }
   }
   const updateUserRole = async (userId: any, role: any) => {
