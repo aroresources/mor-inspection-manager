@@ -467,6 +467,9 @@ function FindingsTab({ propertyId, reportDate, property }: any) {
   const [introText, setIntroText] = useState('Below is our response to the Management and Occupancy Review above:')
   const [signatoryName, setSignatoryName] = useState('')
   const [showReportSettings, setShowReportSettings] = useState(false)
+  const [extracting, setExtracting] = useState(false)
+  const [extractedFindings, setExtractedFindings] = useState<any[]>([])
+  const [showExtracted, setShowExtracted] = useState(false)
 
   useEffect(() => {
     fetchFindings()
@@ -511,6 +514,69 @@ function FindingsTab({ propertyId, reportDate, property }: any) {
   const daysLeft = deadline ? Math.ceil((deadline.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : null
   const open = findings.filter((f: any) => f.status !== 'Submitted').length
   const total = findings.length
+
+
+  const extractFindingsFromPDF = async (e: any) => {
+    const file = e.target.files[0]
+    if (!file) return
+    setExtracting(true)
+
+    try {
+      // Convert PDF to base64
+      const base64 = await new Promise<string>((resolve) => {
+        const reader = new FileReader()
+        reader.onload = () => {
+          const result = reader.result as string
+          resolve(result.split(',')[1])
+        }
+        reader.readAsDataURL(file)
+      })
+
+      // Send to our API route
+      const response = await fetch('/api/extract-findings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ base64PDF: base64 })
+      })
+
+      const data = await response.json()
+      if (data.error) throw new Error(data.error)
+      setExtractedFindings(data.findings)
+      setShowExtracted(true)
+    } catch (err: any) {
+      alert('Error extracting findings. Please try again.')
+      console.error(err)
+    }
+    setExtracting(false)
+  }
+        
+
+  const importFindings = async () => {
+    for (const f of extractedFindings) {
+      const findingText = `${f.item}
+
+Condition: ${f.condition || ''}
+
+Criteria: ${f.criteria || ''}
+
+Cause: ${f.cause || ''}
+
+Effect: ${f.effect || ''}
+
+CORRECTIVE ACTION:
+${f.corrective_action || ''}`
+
+      await supabase.from('findings').insert([{
+        property_id: propertyId,
+        finding: findingText,
+        due_date: f.due_date || null,
+        status: 'Open'
+      }])
+    }
+    setShowExtracted(false)
+    setExtractedFindings([])
+    fetchFindings()
+  }
 
   const generatePDF = () => {
     const doc = new jsPDF()
@@ -723,6 +789,11 @@ function FindingsTab({ propertyId, reportDate, property }: any) {
           {total > 0 && <span className="ml-2 text-sm font-normal text-gray-500">({open} open of {total})</span>}
         </h2>
         <div className="flex gap-2">
+          <label className="bg-yellow-500 text-white px-3 py-1 rounded text-sm hover:bg-yellow-600 cursor-pointer">
+            🤖 Extract Findings from PDF
+            <input type="file" accept=".pdf" className="hidden" onChange={extractFindingsFromPDF} />
+          </label>
+
           {findings.length > 0 && (
             <>
               <button onClick={() => setShowReportSettings(true)} className="bg-gray-600 text-white px-3 py-1 rounded text-sm hover:bg-gray-700">⚙️ Report Settings</button>
@@ -834,6 +905,48 @@ function FindingsTab({ propertyId, reportDate, property }: any) {
             <div className="flex gap-3 justify-end mt-4">
               <button onClick={() => setShowReportSettings(false)} className="px-4 py-2 text-sm text-gray-600">Cancel</button>
               <button onClick={() => setShowReportSettings(false)} className="bg-blue-600 text-white px-4 py-2 rounded text-sm">Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Extracting indicator */}
+      {extracting && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 text-center">
+            <p className="text-lg font-medium">🤖 Extracting findings...</p>
+            <p className="text-sm text-gray-500 mt-2">Claude is reading your MOR report</p>
+          </div>
+        </div>
+      )}
+
+      {/* Extracted Findings Preview */}
+      {showExtracted && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+            <h3 className="text-lg font-bold mb-2">Extracted Findings</h3>
+            <p className="text-sm text-gray-500 mb-4">{extractedFindings.length} findings found. Review before importing.</p>
+            <div className="space-y-3">
+              {extractedFindings.map((f: any, i: number) => (
+                <div key={i} className="p-3 border border-gray-200 rounded">
+                  <p className="text-xs font-bold text-blue-600">{f.item}</p>
+                  {f.condition && <p className="text-sm text-gray-800 mt-1"><span className="font-bold">Condition:</span> {f.condition}</p>}
+                  {f.criteria && <p className="text-sm text-gray-800 mt-1"><span className="font-bold">Criteria:</span> {f.criteria}</p>}
+                  {f.cause && <p className="text-sm text-gray-800 mt-1"><span className="font-bold">Cause:</span> {f.cause}</p>}
+                  {f.effect && <p className="text-sm text-gray-800 mt-1"><span className="font-bold">Effect:</span> {f.effect}</p>}
+                  {f.corrective_action && (
+                    <div className="mt-2">
+                      <p className="text-xs font-bold text-gray-700">Corrective Action:</p>
+                      <p className="text-sm text-gray-800">{f.corrective_action}</p>
+                    </div>
+                  )}
+                  {f.due_date && <p className="text-xs text-gray-500 mt-1">Due: {f.due_date}</p>}
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-3 justify-end mt-4">
+              <button onClick={() => setShowExtracted(false)} className="px-4 py-2 text-sm text-gray-600 border rounded">Cancel</button>
+              <button onClick={importFindings} className="bg-blue-600 text-white px-4 py-2 rounded text-sm">Import All Findings</button>
             </div>
           </div>
         </div>
