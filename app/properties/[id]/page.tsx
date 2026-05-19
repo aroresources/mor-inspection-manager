@@ -12,6 +12,8 @@ function DocumentsTab({ propertyId }: any) {
   const [showAddCustom, setShowAddCustom] = useState(false)
   const [showPacket, setShowPacket] = useState(false)
   const [customDoc, setCustomDoc] = useState<any>({ name: '', assigned_to: '', due_date: '', notes: '' })
+  const [filterStatus, setFilterStatus] = useState('all')
+  const [filterAssignee, setFilterAssignee] = useState('all')
 
   useEffect(() => {
     fetchDocuments()
@@ -96,8 +98,15 @@ function DocumentsTab({ propertyId }: any) {
 
   const completed = documents.filter((d: any) => d.status === 'Submitted').length
   const total = documents.length
-  const indexedDocs = documents.map((doc: any, index: number) => ({ ...doc, globalIndex: index }))
-
+  const assignees = ['all', ...Array.from(new Set(documents.map((d: any) => d.assigned_to).filter(Boolean)))]
+  
+  const filteredDocs = documents.filter((d: any) => {
+    const statusMatch = filterStatus === 'all' ? true : filterStatus === 'required' ? d.is_required : d.status === filterStatus
+    const assigneeMatch = filterAssignee === 'all' ? true : d.assigned_to === filterAssignee
+    return statusMatch && assigneeMatch
+  })
+  
+  const indexedDocs = filteredDocs.map((doc: any, index: number) => ({ ...doc, globalIndex: index }))
   if (loading) return <div className="bg-white rounded-lg shadow p-6 text-gray-500">Loading documents...</div>
 
   return (
@@ -116,6 +125,42 @@ function DocumentsTab({ propertyId }: any) {
         </div>
         <div className="w-full bg-gray-200 rounded-full h-2">
           <div className="bg-blue-600 h-2 rounded-full transition-all" style={{ width: total > 0 ? `${(completed / total) * 100}%` : '0%' }} />
+        </div>
+      </div>
+
+      {/* Filter Bar */}
+      <div className="bg-white rounded-lg shadow p-3 space-y-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-gray-500 font-medium w-16">Status:</span>
+          {['all', 'Not Started', 'In Progress', 'Uploaded', 'Submitted', 'required'].map(status => (
+            <button
+              key={status}
+              onClick={() => setFilterStatus(status)}
+              className={`text-xs px-3 py-1 rounded-full border transition ${
+                filterStatus === status
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
+              }`}
+            >
+              {status === 'all' ? 'All' : status === 'required' ? 'Required Only' : status}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-gray-500 font-medium w-16">Assigned:</span>
+          {assignees.map((assignee: any) => (
+            <button
+              key={assignee}
+              onClick={() => setFilterAssignee(assignee)}
+              className={`text-xs px-3 py-1 rounded-full border transition ${
+                filterAssignee === assignee
+                  ? 'bg-green-600 text-white border-green-600'
+                  : 'bg-white text-gray-600 border-gray-300 hover:border-green-400'
+              }`}
+            >
+              {assignee === 'all' ? 'All' : assignee}
+            </button>
+          ))}
         </div>
       </div>
 
