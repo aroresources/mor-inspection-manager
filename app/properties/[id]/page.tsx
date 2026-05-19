@@ -160,7 +160,7 @@ function DocumentsTab({ propertyId }: any) {
             >
               {assignee === 'all' ? 'All' : assignee}
             </button>
-          ))}
+          ))}npm run dev
         </div>
       </div>
 
@@ -1173,6 +1173,50 @@ export default function PropertyPage() {
               ) : (
                 <p className="text-sm text-gray-800">{property.last_nspire_notes || '—'}</p>
               )}
+            </div>
+
+            {/* Overview File Uploads */}
+            <div className="mt-6 border-t pt-4">
+              <h3 className="text-sm font-medium text-gray-700 mb-3">MOR Related Documents</h3>
+              <div className="space-y-2">
+                {(property.overview_files || []).map((file: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between p-2 border border-gray-200 rounded">
+                    <a href={file.url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline">
+                      📎 {file.name}
+                    </a>
+                    <button
+                      onClick={async () => {
+                        const updated = (property.overview_files || []).filter((_: any, idx: number) => idx !== i)
+                        await supabase.from('properties').update({ overview_files: updated }).eq('id', id)
+                        fetchProperty()
+                      }}
+                      className="text-xs text-red-400 hover:text-red-600"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+                <label className="cursor-pointer inline-flex items-center gap-2 text-sm text-blue-600 hover:underline">
+                  📎 Upload Document
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={async (e: any) => {
+                      const file = e.target.files[0]
+                      if (!file) return
+                      const filePath = `${id}/overview/${file.name}`
+                      const { error } = await supabase.storage.from('mor-documents').upload(filePath, file, { upsert: true })
+                      if (!error) {
+                        const { data: urlData } = supabase.storage.from('mor-documents').getPublicUrl(filePath)
+                        const currentFiles = property.overview_files || []
+                        const updated = [...currentFiles, { name: file.name, url: urlData.publicUrl }]
+                        await supabase.from('properties').update({ overview_files: updated }).eq('id', id)
+                        fetchProperty()
+                      }
+                    }}
+                  />
+                </label>
+              </div>
             </div>
           </div>
         )}
