@@ -146,7 +146,7 @@ function DocumentsTab({ propertyId }: any) {
                       <option value="Submitted">Submitted</option>
                     </select>
                   </div>
-                  <input type="text" placeholder="Notes" value={doc.notes || ''} onChange={(e: any) => updateDoc(doc.id, { notes: e.target.value })} className="mt-1 ml-6 w-full border border-gray-200 rounded px-2 py-1 text-xs" />
+                  <input type="text" placeholder="Notes" value={doc.notes || ''} onChange={(e: any) => updateDoc(doc.id, { notes: e.target.value })} className="mt-1 ml-6 w-[calc(100%-1.5rem)] border border-gray-200 rounded px-2 py-1 text-xs" />
                   <div className="mt-2 ml-6 flex items-center gap-2">
                     {doc.file_url ? (
                       <div className="flex items-center gap-2">
