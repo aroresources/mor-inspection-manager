@@ -6,7 +6,7 @@ import jsPDF from 'jspdf'
 import JSZip from 'jszip'
 import { saveAs } from 'file-saver'
 
-function DocumentsTab({ propertyId }: any) {
+function DocumentsTab({ propertyId, morId }: any) {
   const [documents, setDocuments] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddCustom, setShowAddCustom] = useState(false)
@@ -17,18 +17,31 @@ function DocumentsTab({ propertyId }: any) {
 
   useEffect(() => {
     fetchDocuments()
-  }, [propertyId])
+  }, [propertyId, morId])
 
-  const fetchDocuments = async () => {
+ const fetchDocuments = async () => {
     setLoading(true)
+    if (!morId) { setLoading(false); return }
+    
     const { data } = await supabase
       .from('documents')
       .select('*')
-      .eq('property_id', propertyId)
+      .eq('mor_id', morId)
       .order('sort_order')
+    
     if (data && data.length > 0) {
       setDocuments(data)
-    } else {
+      setLoading(false)
+      return
+    }
+
+    // Only load from templates if truly no documents exist
+    const { count } = await supabase
+      .from('documents')
+      .select('*', { count: 'exact', head: true })
+      .eq('mor_id', morId)
+    
+    if (count === 0) {
       await loadFromTemplates()
     }
     setLoading(false)
@@ -42,6 +55,7 @@ function DocumentsTab({ propertyId }: any) {
     if (tmpl) {
       const docs = tmpl.map((t: any, i: number) => ({
         property_id: propertyId,
+        mor_id: morId,
         name: t.name,
         category: t.category,
         is_required: true,
@@ -81,6 +95,7 @@ function DocumentsTab({ propertyId }: any) {
       due_date: customDoc.due_date || null,
       notes: customDoc.notes || null,
       property_id: propertyId,
+      mor_id: morId,
       status: 'Not Started',
       is_custom: true,
       sort_order: documents.length
@@ -160,7 +175,7 @@ function DocumentsTab({ propertyId }: any) {
             >
               {assignee === 'all' ? 'All' : assignee}
             </button>
-          ))}npm run dev
+          ))}
         </div>
       </div>
 
@@ -275,7 +290,7 @@ function DocumentsTab({ propertyId }: any) {
     </div>
   )
 }
-function TasksTab({ propertyId }: any) {
+function TasksTab({ propertyId, morId }: any) {
   const [tasks, setTasks] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddTask, setShowAddTask] = useState(false)
@@ -283,11 +298,12 @@ function TasksTab({ propertyId }: any) {
 
   useEffect(() => {
     fetchTasks()
-  }, [propertyId])
+  }, [propertyId, morId])
 
   const fetchTasks = async () => {
     setLoading(true)
-    const { data } = await supabase.from('tasks').select('*').eq('property_id', propertyId).order('created_at')
+    if (!morId) { setLoading(false); return }
+    const { data } = await supabase.from('tasks').select('*').eq('property_id', propertyId).eq('mor_id', morId).order('created_at')
     if (data && data.length > 0) {
       setTasks(data)
     } else {
@@ -301,6 +317,7 @@ function TasksTab({ propertyId }: any) {
     if (tmpl && tmpl.length > 0) {
       const tasks = tmpl.map((t: any) => ({
         property_id: propertyId,
+        mor_id: morId,
         title: t.title,
         assigned_to: '',
         due_date: null,
@@ -325,6 +342,7 @@ function TasksTab({ propertyId }: any) {
       assigned_to: newTask.assigned_to || null,
       due_date: newTask.due_date || null,
       property_id: propertyId,
+      mor_id: morId,
       completed: false,
       is_custom: true
     }
@@ -406,7 +424,7 @@ function TasksTab({ propertyId }: any) {
   )
 }
 
-function MeetingsTab({ propertyId }: any) {
+function MeetingsTab({ propertyId, morId }: any) {
   const [meetings, setMeetings] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddMeeting, setShowAddMeeting] = useState(false)
@@ -414,11 +432,12 @@ function MeetingsTab({ propertyId }: any) {
 
   useEffect(() => {
     fetchMeetings()
-  }, [propertyId])
+  }, [propertyId, morId])
 
-  const fetchMeetings = async () => {
+ const fetchMeetings = async () => {
     setLoading(true)
-    const { data } = await supabase.from('meetings').select('*').eq('property_id', propertyId).order('meeting_date', { ascending: false })
+    if (!morId) { setLoading(false); return }
+    const { data } = await supabase.from('meetings').select('*').eq('property_id', propertyId).eq('mor_id', morId).order('meeting_date', { ascending: false })
     if (data) setMeetings(data)
     setLoading(false)
   }
@@ -428,6 +447,7 @@ function MeetingsTab({ propertyId }: any) {
     if (!newMeeting.notes) return
     const { data } = await supabase.from('meetings').insert([{
       property_id: propertyId,
+      mor_id: morId,
       meeting_date: newMeeting.meeting_date || null,
       attendees: newMeeting.attendees || null,
       notes: newMeeting.notes,
@@ -504,7 +524,7 @@ function MeetingsTab({ propertyId }: any) {
     </div>
   )
 }
-function FindingsTab({ propertyId, reportDate, property }: any) {
+function FindingsTab({ propertyId, morId, reportDate, property }: any) {
   const [findings, setFindings] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddFinding, setShowAddFinding] = useState(false)
@@ -518,11 +538,12 @@ function FindingsTab({ propertyId, reportDate, property }: any) {
 
   useEffect(() => {
     fetchFindings()
-  }, [propertyId])
+  }, [propertyId, morId])
 
   const fetchFindings = async () => {
     setLoading(true)
-    const { data } = await supabase.from('findings').select('*').eq('property_id', propertyId).order('created_at')
+    if (!morId) { setLoading(false); return }
+    const { data } = await supabase.from('findings').select('*').eq('property_id', propertyId).eq('mor_id', morId).order('created_at')
     if (data) setFindings(data)
     setLoading(false)
   }
@@ -532,6 +553,7 @@ function FindingsTab({ propertyId, reportDate, property }: any) {
     if (!newFinding.finding) return
     const { data } = await supabase.from('findings').insert([{
       property_id: propertyId,
+      mor_id: morId,
       finding: newFinding.finding,
       assigned_to: newFinding.assigned_to || null,
       response: newFinding.response || null,
@@ -613,6 +635,7 @@ ${f.corrective_action || ''}`
 
       await supabase.from('findings').insert([{
         property_id: propertyId,
+        mor_id: morId,
         finding: findingText,
         due_date: f.due_date || null,
         status: 'Open'
@@ -1006,6 +1029,10 @@ export default function PropertyPage() {
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState<any>({})
   const [saving, setSaving] = useState(false)
+  const [mors, setMors] = useState<any[]>([])
+  const [currentMorId, setCurrentMorId] = useState<any>(null)
+  const [showNewMor, setShowNewMor] = useState(false)
+  const [newMorDate, setNewMorDate] = useState('')
 
   useEffect(() => {
     const getUser = async () => {
@@ -1014,6 +1041,7 @@ export default function PropertyPage() {
     }
     getUser()
     fetchProperty()
+    fetchMors()
   }, [id])
 
   const fetchProperty = async () => {
@@ -1025,6 +1053,18 @@ export default function PropertyPage() {
     if (data) {
       setProperty(data)
       setForm(data)
+    }
+  }
+
+const fetchMors = async () => {
+    const { data } = await supabase
+      .from('mors')
+      .select('*')
+      .eq('property_id', id)
+      .order('created_at', { ascending: false })
+    if (data && data.length > 0) {
+      setMors(data)
+      if (!currentMorId) setCurrentMorId(data[0].id)
     }
   }
 
@@ -1061,6 +1101,30 @@ export default function PropertyPage() {
       </nav>
 
       <div className="bg-white border-b px-6">
+        {/* MOR Selector */}
+        <div className="flex items-center justify-between py-3 border-b">
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium text-gray-600">MOR:</span>
+            <select
+              value={currentMorId || ''}
+              onChange={(e: any) => setCurrentMorId(e.target.value)}
+              className="border border-gray-300 rounded px-3 py-1 text-sm"
+            >
+              {mors.map((mor: any) => (
+                <option key={mor.id} value={mor.id}>
+                  {mor.mor_date ? new Date(mor.mor_date).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'long', year: 'numeric' }) : 'No date'} — {mor.status}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            onClick={() => setShowNewMor(true)}
+            className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+          >
+            + New MOR
+          </button>
+        </div>
+
         <div className="flex gap-6">
           {tabs.map(tab => (
             <button
@@ -1222,20 +1286,88 @@ export default function PropertyPage() {
         )}
 
         {activeTab === 'documents' && (
-          <DocumentsTab propertyId={id} />
+          <DocumentsTab propertyId={id} morId={currentMorId} />
         )}
 
         {activeTab === 'tasks' && (
-          <TasksTab propertyId={id} />
+          <TasksTab propertyId={id} morId={currentMorId} />
         )}
 
         {activeTab === 'meetings' && (
-          <MeetingsTab propertyId={id} />
+          <MeetingsTab propertyId={id} morId={currentMorId} />
         )}
 
         {activeTab === 'findings' && (
-          <FindingsTab propertyId={id} reportDate={property.report_received_date} property={property} />
+          <FindingsTab propertyId={id} morId={currentMorId} reportDate={property.report_received_date} property={property} />
         )}
+      {/* New MOR Modal */}
+        {showNewMor && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md">
+              <h3 className="text-lg font-bold mb-4">Create New MOR</h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">MOR Date</label>
+                  <input
+                    type="date"
+                    value={newMorDate}
+                    onChange={(e: any) => setNewMorDate(e.target.value)}
+                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 justify-end mt-4">
+                <button onClick={() => setShowNewMor(false)} className="px-4 py-2 text-sm text-gray-600">Cancel</button>
+                <button
+                  onClick={async () => {
+                    // First create the new MOR
+                    const { data } = await supabase.from('mors').insert([{
+                      property_id: id,
+                      mor_date: newMorDate || null,
+                      status: 'Active'
+                    }]).select()
+                    
+                    if (data && data[0]) {
+                      const newMorId = data[0].id
+
+                      // Copy documents from previous MOR BEFORE switching
+                      if (currentMorId) {
+                        const { data: prevDocs } = await supabase
+                          .from('documents')
+                          .select('*')
+                          .eq('mor_id', currentMorId)
+                          .order('sort_order')
+                        
+                        if (prevDocs && prevDocs.length > 0) {
+                          const newDocs = prevDocs.map(({ id: _id, created_at, ...doc }: any) => ({
+                            ...doc,
+                            mor_id: newMorId,
+                            status: 'Not Started',
+                            file_url: null,
+                            assigned_to: null,
+                            due_date: null,
+                            notes: null
+                          }))
+                          const { error } = await supabase.from('documents').insert(newDocs)
+                          if (error) console.error('Copy error:', error)
+                        }
+                      }
+
+                      // Only switch AFTER copy is complete
+                      await fetchMors()
+                      setCurrentMorId(newMorId)
+                    }
+                    setNewMorDate('')
+                    setShowNewMor(false)
+                  }}
+                  className="bg-blue-600 text-white px-4 py-2 rounded text-sm"
+                >
+                  Create MOR
+                </button>
+              </div>
+            </div>
+          </div>
+        )}  
       </main>
     </div>
   )
