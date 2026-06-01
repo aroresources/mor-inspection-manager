@@ -11,43 +11,54 @@ function DocumentsTab({ propertyId, morId }: any) {
   const [loading, setLoading] = useState(true)
   const [showAddCustom, setShowAddCustom] = useState(false)
   const [showPacket, setShowPacket] = useState(false)
+  const [initializing, setInitializing] = useState(false)
   const [customDoc, setCustomDoc] = useState<any>({ name: '', assigned_to: '', due_date: '', notes: '' })
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterAssignee, setFilterAssignee] = useState('all')
 
   useEffect(() => {
-    fetchDocuments()
-  }, [propertyId, morId])
+    if (morId) fetchDocuments()
+  }, [morId])
 
- const fetchDocuments = async () => {
+   const fetchDocuments = async () => {
     setLoading(true)
     if (!morId) { setLoading(false); return }
-    
+
+    // Use server-side function to initialize documents (prevents duplicates)
+    await supabase.rpc('initialize_mor_documents', {
+      p_mor_id: morId,
+      p_property_id: propertyId
+    })
+
+    // Now fetch the documents
     const { data } = await supabase
       .from('documents')
       .select('*')
       .eq('mor_id', morId)
       .order('sort_order')
     
-    if (data && data.length > 0) {
-      setDocuments(data)
-      setLoading(false)
-      return
-    }
-
-    // Only load from templates if truly no documents exist
-    const { count } = await supabase
-      .from('documents')
-      .select('*', { count: 'exact', head: true })
-      .eq('mor_id', morId)
-    
-    if (count === 0) {
-      await loadFromTemplates()
-    }
+    if (data) setDocuments(data)
     setLoading(false)
   }
 
-  const loadFromTemplates = async () => {
+  const loadFromTemplates = async (activeMorId: string) => {
+    // Double-check no documents exist before inserting
+    const { count } = await supabase
+      .from('documents')
+      .select('*', { count: 'exact', head: true })
+      .eq('mor_id', activeMorId)
+    
+    if (count && count > 0) {
+      // Documents already exist, just fetch them
+      const { data } = await supabase
+        .from('documents')
+        .select('*')
+        .eq('mor_id', activeMorId)
+        .order('sort_order')
+      if (data) setDocuments(data)
+      return
+    }
+
     const { data: tmpl } = await supabase
       .from('document_templates')
       .select('*')
@@ -55,7 +66,7 @@ function DocumentsTab({ propertyId, morId }: any) {
     if (tmpl) {
       const docs = tmpl.map((t: any, i: number) => ({
         property_id: propertyId,
-        mor_id: morId,
+        mor_id: activeMorId,
         name: t.name,
         category: t.category,
         is_required: true,
@@ -1065,6 +1076,16 @@ const fetchMors = async () => {
     if (data && data.length > 0) {
       setMors(data)
       if (!currentMorId) setCurrentMorId(data[0].id)
+    } else {
+      // Auto-create a MOR if none exists
+      const { data: newMor } = await supabase
+        .from('mors')
+        .insert([{ property_id: id, status: 'Active', documents_initialized: false }])
+        .select()
+      if (newMor && newMor[0]) {
+        setMors(newMor)
+        setCurrentMorId(newMor[0].id)
+      }
     }
   }
 
@@ -1320,45 +1341,29 @@ const fetchMors = async () => {
                 <button onClick={() => setShowNewMor(false)} className="px-4 py-2 text-sm text-gray-600">Cancel</button>
                 <button
                   onClick={async () => {
-                    // First create the new MOR
                     const { data } = await supabase.from('mors').insert([{
                       property_id: id,
                       mor_date: newMorDate || null,
-                      status: 'Active'
+                      status: 'Active',
+                      documents_initialized: true
                     }]).select()
                     
                     if (data && data[0]) {
                       const newMorId = data[0].id
 
-                      // Copy documents from previous MOR BEFORE switching
                       if (currentMorId) {
-                        const { data: prevDocs } = await supabase
-                          .from('documents')
-                          .select('*')
-                          .eq('mor_id', currentMorId)
-                          .order('sort_order')
-                        
-                        if (prevDocs && prevDocs.length > 0) {
-                          const newDocs = prevDocs.map(({ id: _id, created_at, ...doc }: any) => ({
-                            ...doc,
-                            mor_id: newMorId,
-                            status: 'Not Started',
-                            file_url: null,
-                            assigned_to: null,
-                            due_date: null,
-                            notes: null
-                          }))
-                          const { error } = await supabase.from('documents').insert(newDocs)
-                          if (error) console.error('Copy error:', error)
-                        }
+                        await supabase.rpc('copy_mor_documents', {
+                          p_source_mor_id: currentMorId,
+                          p_target_mor_id: newMorId,
+                          p_property_id: id
+                        })
                       }
 
-                      // Only switch AFTER copy is complete
+                      setNewMorDate('')
+                      setShowNewMor(false)
                       await fetchMors()
                       setCurrentMorId(newMorId)
                     }
-                    setNewMorDate('')
-                    setShowNewMor(false)
                   }}
                   className="bg-blue-600 text-white px-4 py-2 rounded text-sm"
                 >
