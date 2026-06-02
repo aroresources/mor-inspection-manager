@@ -959,7 +959,7 @@ Corrective Action: ${f.corrective_action || ''}`
               <div className="space-y-3">
                 <div>
                   <label className="text-xs text-gray-500">Finding</label>
-                  <textarea value={finding.finding} onChange={(e: any) => updateFinding(finding.id, { finding: e.target.value })} rows={6} className="w-full mt-1 border border-gray-200 rounded px-3 py-2 text-sm resize-y" />
+                  <textarea value={finding.finding} onChange={(e: any) => updateFinding(finding.id, { finding: e.target.value })} rows={8} className="w-full mt-1 border border-gray-200 rounded px-3 py-2 text-sm resize-y min-h-[120px]" />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
