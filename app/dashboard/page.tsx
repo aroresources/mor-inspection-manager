@@ -36,7 +36,7 @@ export default function Dashboard() {
   const fetchProperties = async () => {
     const { data } = await supabase
       .from('properties')
-      .select('*, companies(name)')
+      .select('*, companies(name), mors(response_due_date, status, created_at)')
       .order('name')
     if (data) setProperties(data)
   }
@@ -62,11 +62,22 @@ export default function Dashboard() {
     fetchProperties()
   }
 
-  const getResponseDueBy = (property: any) => {
-    if (!property.report_received_date) return null
-    const date = new Date(property.report_received_date)
-    date.setDate(date.getDate() + 30)
-    return date
+  const getResponseDueDate = (property: any) => {
+    const activeMors = (property.mors || [])
+      .filter((m: any) => m.status === 'Active')
+      .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    const activeMor = activeMors[0]
+    if (!activeMor || !activeMor.response_due_date) return null
+    return new Date(activeMor.response_due_date)
+  }
+
+  const getResponseUrgency = (dueDate: any) => {
+    if (!dueDate) return 'none'
+    const daysUntil = Math.ceil((dueDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+    if (daysUntil < 0) return 'overdue'
+    if (daysUntil <= 7) return 'urgent'
+    if (daysUntil <= 14) return 'warning'
+    return 'ok'
   }
 
   const ratingRank: Record<string, number> = {
@@ -119,8 +130,8 @@ export default function Dashboard() {
       bVal = getNextMorDate(b)?.getTime() ?? Infinity
     }
     else if (sortBy === 'response_due') {
-      aVal = getResponseDueBy(a)?.getTime() ?? Infinity
-      bVal = getResponseDueBy(b)?.getTime() ?? Infinity
+      aVal = getResponseDueDate(a)?.getTime() ?? Infinity
+      bVal = getResponseDueDate(b)?.getTime() ?? Infinity
     }
     else if (sortBy === 'rating') {
       aVal = ratingRank[a.last_mor_rating] ?? 0
@@ -302,6 +313,30 @@ export default function Dashboard() {
                     {urgency === 'overdue'
                       ? `⚠️ MOR overdue by ${Math.abs(daysUntil)} days`
                       : `📅 Next MOR due: ${nextMor.toLocaleDateString()} (${daysUntil} days)`
+                    }
+                  </div>
+                )
+              })()}
+
+              {(() => {
+                const responseDue = getResponseDueDate(property)
+                const urgency = getResponseUrgency(responseDue)
+                if (!responseDue) return (
+                  <div className="mt-2 text-xs px-2 py-1 rounded bg-gray-100 text-gray-500">
+                    No response due date set
+                  </div>
+                )
+                const daysUntil = Math.ceil((responseDue.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+                return (
+                  <div className={`mt-2 text-xs px-2 py-1 rounded ${
+                    urgency === 'overdue' ? 'bg-red-100 text-red-700' :
+                    urgency === 'urgent' ? 'bg-orange-100 text-orange-700' :
+                    urgency === 'warning' ? 'bg-yellow-100 text-yellow-700' :
+                    'bg-green-100 text-green-700'
+                  }`}>
+                    {urgency === 'overdue'
+                      ? `⚠️ Response overdue by ${Math.abs(daysUntil)} days`
+                      : `📝 Response Due: ${responseDue.toLocaleDateString('en-US', { timeZone: 'UTC' })} (${daysUntil} days)`
                     }
                   </div>
                 )
