@@ -535,7 +535,7 @@ function MeetingsTab({ propertyId, morId }: any) {
     </div>
   )
 }
-function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, onUpdateProperty }: any) {
+function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, onUpdateMor }: any) {
   const [findings, setFindings] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddFinding, setShowAddFinding] = useState(false)
@@ -547,12 +547,16 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
   const [extractedFindings, setExtractedFindings] = useState<any[]>([])
   const [showExtracted, setShowExtracted] = useState(false)
   const [morRating, setMorRating] = useState('')
-  const [reportReceivedDate, setReportReceivedDate] = useState(property?.report_received_date || '')
+  const [responseDueDate, setResponseDueDate] = useState(currentMor?.response_due_date || '')
   const [completing, setCompleting] = useState(false)
 
   useEffect(() => {
     fetchFindings()
   }, [propertyId, morId])
+
+  useEffect(() => {
+    setResponseDueDate(currentMor?.response_due_date || '')
+  }, [currentMor])
 
   const fetchFindings = async () => {
     setLoading(true)
@@ -591,7 +595,7 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
     setFindings(findings.filter((f: any) => f.id !== id))
   }
 
-  const deadline = reportReceivedDate ? new Date(new Date(reportReceivedDate).getTime() + 30 * 24 * 60 * 60 * 1000) : null
+  const deadline = responseDueDate ? new Date(responseDueDate) : null
   const daysLeft = deadline ? Math.ceil((deadline.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : null
   const open = findings.filter((f: any) => f.status !== 'Submitted').length
   const total = findings.length
@@ -600,9 +604,6 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
     if (!morRating) { alert('Please select an MOR rating before completing.'); return }
     if (!confirm('Mark this MOR as Completed? This will update the Last MOR Date and Rating on the property.')) return
     setCompleting(true)
-    if (reportReceivedDate !== (property.report_received_date || '')) {
-      await supabase.from('properties').update({ report_received_date: reportReceivedDate || null }).eq('id', property.id)
-    }
     await supabase.from('properties').update({
       last_mor_date: currentMor?.mor_date || null,
       last_mor_rating: morRating
@@ -877,14 +878,15 @@ ${f.corrective_action || ''}`
       <div className="bg-white rounded-lg shadow p-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Report Received Date</label>
+            <label className="block text-xs text-gray-500 mb-1">Response Due Date</label>
             <input
               type="date"
-              value={reportReceivedDate}
-              onChange={(e: any) => setReportReceivedDate(e.target.value)}
+              value={responseDueDate}
+              onChange={(e: any) => setResponseDueDate(e.target.value)}
               onBlur={async (e: any) => {
-                await supabase.from('properties').update({ report_received_date: e.target.value || null }).eq('id', property.id)
-                if (onUpdateProperty) onUpdateProperty()
+                if (!morId) return
+                await supabase.from('mors').update({ response_due_date: e.target.value || null }).eq('id', morId)
+                if (onUpdateMor) onUpdateMor()
               }}
               className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
             />
@@ -919,7 +921,7 @@ ${f.corrective_action || ''}`
       {deadline && (
         <div className={`rounded-lg p-4 ${daysLeft !== null && daysLeft < 0 ? 'bg-red-50 border border-red-200' : daysLeft !== null && daysLeft <= 7 ? 'bg-yellow-50 border border-yellow-200' : 'bg-blue-50 border border-blue-200'}`}>
           <p className={`text-sm font-medium ${daysLeft !== null && daysLeft < 0 ? 'text-red-700' : daysLeft !== null && daysLeft <= 7 ? 'text-yellow-700' : 'text-blue-700'}`}>
-            {daysLeft !== null && daysLeft < 0 ? `⚠️ Response deadline was ${Math.abs(daysLeft)} days ago!` : daysLeft === 0 ? '⚠️ Response due today!' : `📅 Response deadline: ${deadline.toLocaleDateString()} (${daysLeft} days remaining)`}
+            {daysLeft !== null && daysLeft < 0 ? `⚠️ Response deadline was ${Math.abs(daysLeft)} days ago!` : daysLeft === 0 ? '⚠️ Response due today!' : `📅 Response deadline: ${deadline.toLocaleDateString('en-US', { timeZone: 'UTC' })} (${daysLeft} days remaining)`}
           </p>
         </div>
       )}
@@ -1147,6 +1149,30 @@ const fetchMors = async () => {
     }
   }
 
+  const deleteMor = async (morIdToDelete: string) => {
+    if (!morIdToDelete) return
+    if (!confirm('Delete this MOR? This will permanently delete all documents, tasks, meetings, and findings associated with it. This cannot be undone.')) return
+
+    await supabase.from('documents').delete().eq('mor_id', morIdToDelete)
+    await supabase.from('tasks').delete().eq('mor_id', morIdToDelete)
+    await supabase.from('meetings').delete().eq('mor_id', morIdToDelete)
+    await supabase.from('findings').delete().eq('mor_id', morIdToDelete)
+    await supabase.from('mors').delete().eq('id', morIdToDelete)
+
+    const { data } = await supabase
+      .from('mors')
+      .select('*')
+      .eq('property_id', id)
+      .order('created_at', { ascending: false })
+    const list = data || []
+    setMors(list)
+    if (currentMorId === morIdToDelete) {
+      const next = list[0] || null
+      setCurrentMorId(next?.id || null)
+      setCurrentMor(next)
+    }
+  }
+
   const saveProperty = async () => {
     setSaving(true)
     const { companies, created_at, ...updateData } = form
@@ -1198,6 +1224,15 @@ const fetchMors = async () => {
                 </option>
               ))}
             </select>
+            {currentMorId && (
+              <button
+                onClick={() => deleteMor(currentMorId)}
+                title="Delete this MOR and all its documents, tasks, meetings, and findings"
+                className="text-red-400 hover:text-red-600 text-sm"
+              >
+                🗑️ Delete MOR
+              </button>
+            )}
           </div>
           <button
             onClick={() => setShowNewMor(true)}
@@ -1307,10 +1342,10 @@ const fetchMors = async () => {
               </div>
 
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Response Due By</label>
+                <label className="block text-xs text-gray-500 mb-1">Response Due Date</label>
                 <p className="text-sm font-medium text-gray-800">
-                  {property.report_received_date
-                    ? new Date(new Date(property.report_received_date).getTime() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { timeZone: 'UTC' })
+                  {currentMor?.response_due_date
+                    ? new Date(currentMor.response_due_date).toLocaleDateString('en-US', { timeZone: 'UTC' })
                     : '—'}
                 </p>
               </div>
@@ -1404,7 +1439,7 @@ const fetchMors = async () => {
             currentMor={currentMor}
             property={property}
             onCompleteMor={async () => { await fetchProperty(); await fetchMors() }}
-            onUpdateProperty={fetchProperty}
+            onUpdateMor={fetchMors}
           />
         )}
       {/* New MOR Modal */}

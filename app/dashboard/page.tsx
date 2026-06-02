@@ -73,27 +73,6 @@ export default function Dashboard() {
     'Unsatisfactory': 1, 'Below Average': 2, 'Satisfactory': 3, 'Above Average': 4, 'Superior': 5
   }
 
-  const filtered = [...(filterCompany === 'all' ? properties : properties.filter((p: any) => p.company_id === filterCompany))].sort((a: any, b: any) => {
-    let aVal: any, bVal: any
-    if (sortBy === 'name') { aVal = (a.name || '').toLowerCase(); bVal = (b.name || '').toLowerCase() }
-    else if (sortBy === 'company') { aVal = (a.companies?.name || '').toLowerCase(); bVal = (b.companies?.name || '').toLowerCase() }
-    else if (sortBy === 'next_mor') {
-      aVal = getNextMorDate(a)?.getTime() ?? Infinity
-      bVal = getNextMorDate(b)?.getTime() ?? Infinity
-    }
-    else if (sortBy === 'response_due') {
-      aVal = getResponseDueBy(a)?.getTime() ?? Infinity
-      bVal = getResponseDueBy(b)?.getTime() ?? Infinity
-    }
-    else if (sortBy === 'rating') {
-      aVal = ratingRank[a.last_mor_rating] ?? 0
-      bVal = ratingRank[b.last_mor_rating] ?? 0
-    }
-    if (aVal < bVal) return sortAsc ? -1 : 1
-    if (aVal > bVal) return sortAsc ? 1 : -1
-    return 0
-  })
-
   const getNextMorDate = (property: any) => {
     if (!property.last_mor_date) return null
 
@@ -130,6 +109,27 @@ export default function Dashboard() {
     if (daysUntil <= 180) return 'warning'
     return 'ok'
   }
+
+  const filtered = [...(filterCompany === 'all' ? properties : properties.filter((p: any) => p.company_id === filterCompany))].sort((a: any, b: any) => {
+    let aVal: any, bVal: any
+    if (sortBy === 'name') { aVal = (a.name || '').toLowerCase(); bVal = (b.name || '').toLowerCase() }
+    else if (sortBy === 'company') { aVal = (a.companies?.name || '').toLowerCase(); bVal = (b.companies?.name || '').toLowerCase() }
+    else if (sortBy === 'next_mor') {
+      aVal = getNextMorDate(a)?.getTime() ?? Infinity
+      bVal = getNextMorDate(b)?.getTime() ?? Infinity
+    }
+    else if (sortBy === 'response_due') {
+      aVal = getResponseDueBy(a)?.getTime() ?? Infinity
+      bVal = getResponseDueBy(b)?.getTime() ?? Infinity
+    }
+    else if (sortBy === 'rating') {
+      aVal = ratingRank[a.last_mor_rating] ?? 0
+      bVal = ratingRank[b.last_mor_rating] ?? 0
+    }
+    if (aVal < bVal) return sortAsc ? -1 : 1
+    if (aVal > bVal) return sortAsc ? 1 : -1
+    return 0
+  })
 
   return (
     <div className="min-h-screen bg-gray-100">
