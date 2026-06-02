@@ -10,10 +10,12 @@ export default function Dashboard() {
   const [showAddProperty, setShowAddProperty] = useState(false)
   const [showAddCompany, setShowAddCompany] = useState(false)
   const [newProperty, setNewProperty] = useState<any>({
-    name: '', address: '', company_id: '', contract_type: '', mor_date: null
+    name: '', address: '', company_id: '', contract_type: ''
   })
   const [newCompany, setNewCompany] = useState({ name: '' })
   const [filterCompany, setFilterCompany] = useState('all')
+  const [sortBy, setSortBy] = useState('name')
+  const [sortAsc, setSortAsc] = useState(true)
 
   useEffect(() => {
     const getUser = async () => {
@@ -55,14 +57,42 @@ export default function Dashboard() {
   const addProperty = async () => {
     if (!newProperty.name) return
     await supabase.from('properties').insert([newProperty])
-    setNewProperty({ name: '', address: '', company_id: '', contract_type: '', mor_date: '' })
+    setNewProperty({ name: '', address: '', company_id: '', contract_type: '' })
     setShowAddProperty(false)
     fetchProperties()
   }
 
-  const filtered = filterCompany === 'all'
-    ? properties
-    : properties.filter(p => p.company_id === filterCompany)
+  const getResponseDueBy = (property: any) => {
+    if (!property.report_received_date) return null
+    const date = new Date(property.report_received_date)
+    date.setDate(date.getDate() + 30)
+    return date
+  }
+
+  const ratingRank: Record<string, number> = {
+    'Unsatisfactory': 1, 'Below Average': 2, 'Satisfactory': 3, 'Above Average': 4, 'Superior': 5
+  }
+
+  const filtered = [...(filterCompany === 'all' ? properties : properties.filter((p: any) => p.company_id === filterCompany))].sort((a: any, b: any) => {
+    let aVal: any, bVal: any
+    if (sortBy === 'name') { aVal = (a.name || '').toLowerCase(); bVal = (b.name || '').toLowerCase() }
+    else if (sortBy === 'company') { aVal = (a.companies?.name || '').toLowerCase(); bVal = (b.companies?.name || '').toLowerCase() }
+    else if (sortBy === 'next_mor') {
+      aVal = getNextMorDate(a)?.getTime() ?? Infinity
+      bVal = getNextMorDate(b)?.getTime() ?? Infinity
+    }
+    else if (sortBy === 'response_due') {
+      aVal = getResponseDueBy(a)?.getTime() ?? Infinity
+      bVal = getResponseDueBy(b)?.getTime() ?? Infinity
+    }
+    else if (sortBy === 'rating') {
+      aVal = ratingRank[a.last_mor_rating] ?? 0
+      bVal = ratingRank[b.last_mor_rating] ?? 0
+    }
+    if (aVal < bVal) return sortAsc ? -1 : 1
+    if (aVal > bVal) return sortAsc ? 1 : -1
+    return 0
+  })
 
   const getNextMorDate = (property: any) => {
     if (!property.last_mor_date) return null
@@ -174,6 +204,30 @@ export default function Dashboard() {
               🗑️ Delete Company
             </button>
           )}
+        </div>
+
+        {/* Sort Controls */}
+        <div className="mb-4 flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-gray-500 font-medium">Sort by:</span>
+          {[
+            { key: 'name', label: 'Property Name' },
+            { key: 'company', label: 'Company' },
+            { key: 'next_mor', label: 'Next MOR Date' },
+            { key: 'response_due', label: 'Response Due By' },
+            { key: 'rating', label: 'Last MOR Rating' },
+          ].map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => { if (sortBy === key) setSortAsc(!sortAsc); else { setSortBy(key); setSortAsc(true) } }}
+              className={`text-xs px-3 py-1 rounded border transition ${
+                sortBy === key
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
+              }`}
+            >
+              {label}{sortBy === key ? (sortAsc ? ' ↑' : ' ↓') : ''}
+            </button>
+          ))}
         </div>
 
         {/* Properties List */}
@@ -318,13 +372,6 @@ export default function Dashboard() {
                   <option value="Option 2">Option 2</option>
                   <option value="Option 3">Option 3</option>
                 </select>
-               <input
-                  type="date"
-                  placeholder="MOR Date"
-                  value={newProperty.mor_date || ''}
-                  onChange={(e: any) => setNewProperty({...newProperty, mor_date: e.target.value || null})}
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
-                />
               </div>
               <div className="flex gap-3 justify-end mt-4">
                 <button onClick={() => setShowAddProperty(false)} className="px-4 py-2 text-sm text-gray-600">Cancel</button>

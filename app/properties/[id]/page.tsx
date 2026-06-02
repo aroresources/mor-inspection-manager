@@ -535,7 +535,7 @@ function MeetingsTab({ propertyId, morId }: any) {
     </div>
   )
 }
-function FindingsTab({ propertyId, morId, reportDate, property }: any) {
+function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, onUpdateProperty }: any) {
   const [findings, setFindings] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddFinding, setShowAddFinding] = useState(false)
@@ -546,6 +546,9 @@ function FindingsTab({ propertyId, morId, reportDate, property }: any) {
   const [extracting, setExtracting] = useState(false)
   const [extractedFindings, setExtractedFindings] = useState<any[]>([])
   const [showExtracted, setShowExtracted] = useState(false)
+  const [morRating, setMorRating] = useState('')
+  const [reportReceivedDate, setReportReceivedDate] = useState(property?.report_received_date || '')
+  const [completing, setCompleting] = useState(false)
 
   useEffect(() => {
     fetchFindings()
@@ -588,10 +591,26 @@ function FindingsTab({ propertyId, morId, reportDate, property }: any) {
     setFindings(findings.filter((f: any) => f.id !== id))
   }
 
-  const deadline = reportDate ? new Date(new Date(reportDate).getTime() + 30 * 24 * 60 * 60 * 1000) : null
+  const deadline = reportReceivedDate ? new Date(new Date(reportReceivedDate).getTime() + 30 * 24 * 60 * 60 * 1000) : null
   const daysLeft = deadline ? Math.ceil((deadline.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : null
   const open = findings.filter((f: any) => f.status !== 'Submitted').length
   const total = findings.length
+
+  const completeMor = async () => {
+    if (!morRating) { alert('Please select an MOR rating before completing.'); return }
+    if (!confirm('Mark this MOR as Completed? This will update the Last MOR Date and Rating on the property.')) return
+    setCompleting(true)
+    if (reportReceivedDate !== (property.report_received_date || '')) {
+      await supabase.from('properties').update({ report_received_date: reportReceivedDate || null }).eq('id', property.id)
+    }
+    await supabase.from('properties').update({
+      last_mor_date: currentMor?.mor_date || null,
+      last_mor_rating: morRating
+    }).eq('id', property.id)
+    await supabase.from('mors').update({ status: 'Completed', mor_date: null }).eq('id', morId)
+    setCompleting(false)
+    if (onCompleteMor) onCompleteMor()
+  }
 
 
   const extractFindingsFromPDF = async (e: any) => {
@@ -854,6 +873,49 @@ ${f.corrective_action || ''}`
 
   return (
     <div className="space-y-4">
+      {/* MOR Info */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Report Received Date</label>
+            <input
+              type="date"
+              value={reportReceivedDate}
+              onChange={(e: any) => setReportReceivedDate(e.target.value)}
+              onBlur={async (e: any) => {
+                await supabase.from('properties').update({ report_received_date: e.target.value || null }).eq('id', property.id)
+                if (onUpdateProperty) onUpdateProperty()
+              }}
+              className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">MOR Rating</label>
+            <select
+              value={morRating}
+              onChange={(e: any) => setMorRating(e.target.value)}
+              className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+            >
+              <option value="">Select Rating</option>
+              <option value="Unsatisfactory">Unsatisfactory</option>
+              <option value="Below Average">Below Average</option>
+              <option value="Satisfactory">Satisfactory</option>
+              <option value="Above Average">Above Average</option>
+              <option value="Superior">Superior</option>
+            </select>
+          </div>
+        </div>
+        <div className="flex justify-end mt-3">
+          <button
+            onClick={completeMor}
+            disabled={completing}
+            className="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700 disabled:opacity-50"
+          >
+            {completing ? 'Completing...' : '✓ Complete MOR'}
+          </button>
+        </div>
+      </div>
+
       {deadline && (
         <div className={`rounded-lg p-4 ${daysLeft !== null && daysLeft < 0 ? 'bg-red-50 border border-red-200' : daysLeft !== null && daysLeft <= 7 ? 'bg-yellow-50 border border-yellow-200' : 'bg-blue-50 border border-blue-200'}`}>
           <p className={`text-sm font-medium ${daysLeft !== null && daysLeft < 0 ? 'text-red-700' : daysLeft !== null && daysLeft <= 7 ? 'text-yellow-700' : 'text-blue-700'}`}>
@@ -1042,6 +1104,7 @@ export default function PropertyPage() {
   const [saving, setSaving] = useState(false)
   const [mors, setMors] = useState<any[]>([])
   const [currentMorId, setCurrentMorId] = useState<any>(null)
+  const [currentMor, setCurrentMor] = useState<any>(null)
   const [showNewMor, setShowNewMor] = useState(false)
   const [newMorDate, setNewMorDate] = useState('')
 
@@ -1073,29 +1136,13 @@ const fetchMors = async () => {
       .select('*')
       .eq('property_id', id)
       .order('created_at', { ascending: false })
-    if (data && data.length > 0) {
+    if (data) {
       setMors(data)
-      if (!currentMorId) setCurrentMorId(data[0].id)
-    } else {
-      // Auto-create a MOR if none exists, using property's MOR date if available
-      const { data: propData } = await supabase
-        .from('properties')
-        .select('mor_date')
-        .eq('id', id)
-        .single()
-      
-      const { data: newMor } = await supabase
-        .from('mors')
-        .insert([{ 
-          property_id: id, 
-          status: 'Active', 
-          documents_initialized: false,
-          mor_date: propData?.mor_date || null
-        }])
-        .select()
-      if (newMor && newMor[0]) {
-        setMors(newMor)
-        setCurrentMorId(newMor[0].id)
+      if (data.length > 0) {
+        const found = currentMorId ? data.find((m: any) => m.id === currentMorId) : null
+        const selected = found || data[0]
+        if (!currentMorId) setCurrentMorId(selected.id)
+        setCurrentMor(selected)
       }
     }
   }
@@ -1115,7 +1162,7 @@ const fetchMors = async () => {
     </div>
   )
 
-  const tabs = ['Overview', 'Documents', 'Tasks', 'Meetings', 'Findings']
+  const tabs = ['Overview', ...(mors.length > 0 ? ['Documents', 'Tasks', 'Meetings', 'Findings'] : [])]
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -1139,7 +1186,10 @@ const fetchMors = async () => {
             <span className="text-sm font-medium text-gray-600">MOR:</span>
             <select
               value={currentMorId || ''}
-              onChange={(e: any) => setCurrentMorId(e.target.value)}
+              onChange={(e: any) => {
+                setCurrentMorId(e.target.value)
+                setCurrentMor(mors.find((m: any) => m.id === e.target.value) || null)
+              }}
               className="border border-gray-300 rounded px-3 py-1 text-sm"
             >
               {mors.map((mor: any) => (
@@ -1192,10 +1242,7 @@ const fetchMors = async () => {
                 { label: 'FHA Number', field: 'fha_number', type: 'text' },
                 { label: 'Section 8 / PAC / PRAC #', field: 'section8_number', type: 'text' },
                 { label: 'Contract Administrator', field: 'contract_administrator', type: 'text' },
-                { label: 'MOR Date', field: 'mor_date', type: 'date' },
-                { label: 'Report Received Date', field: 'report_received_date', type: 'date' },
                 { label: 'Last MOR Date', field: 'last_mor_date', type: 'date' },
-                { label: 'Last MOR Score', field: 'last_mor_score', type: 'text' },
               ].map(({ label, field, type }) => (
                 <div key={field}>
                   <label className="block text-xs text-gray-500 mb-1">{label}</label>
@@ -1251,6 +1298,22 @@ const fetchMors = async () => {
                   <p className="text-sm font-medium text-gray-800">{property.risk_classification || '—'}</p>
                 )}
               </div>
+
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Scheduled MOR Date</label>
+                <p className="text-sm font-medium text-gray-800">
+                  {currentMor?.mor_date ? new Date(currentMor.mor_date).toLocaleDateString('en-US', { timeZone: 'UTC' }) : '—'}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Response Due By</label>
+                <p className="text-sm font-medium text-gray-800">
+                  {property.report_received_date
+                    ? new Date(new Date(property.report_received_date).getTime() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { timeZone: 'UTC' })
+                    : '—'}
+                </p>
+              </div>
             </div>
 
             <div className="mt-4">
@@ -1261,18 +1324,30 @@ const fetchMors = async () => {
                 <p className="text-sm text-gray-800">{property.hud_notes || '—'}</p>
               )}
             </div>
+          </div>
+        )}
 
-            <div className="mt-4">
-              <label className="block text-xs text-gray-500 mb-1">Last NSPIRE Notes</label>
-              {editing ? (
-                <textarea value={form.last_nspire_notes || ''} onChange={(e: any) => setForm({...form, last_nspire_notes: e.target.value})} rows={3} className="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
-              ) : (
-                <p className="text-sm text-gray-800">{property.last_nspire_notes || '—'}</p>
-              )}
+        {activeTab === 'documents' && (
+          <DocumentsTab propertyId={id} morId={currentMorId} />
+        )}
+
+        {activeTab === 'tasks' && (
+          <div className="space-y-4">
+            <div className="bg-white rounded-lg shadow p-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Last NSPIRE Notes</label>
+              <textarea
+                key={property.id}
+                defaultValue={property.last_nspire_notes || ''}
+                onBlur={async (e: any) => {
+                  await supabase.from('properties').update({ last_nspire_notes: e.target.value }).eq('id', id)
+                  fetchProperty()
+                }}
+                rows={4}
+                className="w-full border border-gray-200 rounded px-3 py-2 text-sm"
+                placeholder="Enter NSPIRE notes..."
+              />
             </div>
-
-            {/* Overview File Uploads */}
-            <div className="mt-6 border-t pt-4">
+            <div className="bg-white rounded-lg shadow p-4">
               <h3 className="text-sm font-medium text-gray-700 mb-3">MOR Related Documents</h3>
               <div className="space-y-2">
                 {(property.overview_files || []).map((file: any, i: number) => (
@@ -1314,15 +1389,8 @@ const fetchMors = async () => {
                 </label>
               </div>
             </div>
+            <TasksTab propertyId={id} morId={currentMorId} />
           </div>
-        )}
-
-        {activeTab === 'documents' && (
-          <DocumentsTab propertyId={id} morId={currentMorId} />
-        )}
-
-        {activeTab === 'tasks' && (
-          <TasksTab propertyId={id} morId={currentMorId} />
         )}
 
         {activeTab === 'meetings' && (
@@ -1330,7 +1398,14 @@ const fetchMors = async () => {
         )}
 
         {activeTab === 'findings' && (
-          <FindingsTab propertyId={id} morId={currentMorId} reportDate={property.report_received_date} property={property} />
+          <FindingsTab
+            propertyId={id}
+            morId={currentMorId}
+            currentMor={currentMor}
+            property={property}
+            onCompleteMor={async () => { await fetchProperty(); await fetchMors() }}
+            onUpdateProperty={fetchProperty}
+          />
         )}
       {/* New MOR Modal */}
         {showNewMor && (
@@ -1339,7 +1414,7 @@ const fetchMors = async () => {
               <h3 className="text-lg font-bold mb-4">Create New MOR</h3>
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">MOR Date</label>
+                  <label className="block text-xs text-gray-500 mb-1">Scheduled MOR Date</label>
                   <input
                     type="date"
                     value={newMorDate}
@@ -1358,14 +1433,14 @@ const fetchMors = async () => {
                       status: 'Active',
                       documents_initialized: true
                     }]).select()
-                    
+
                     if (data && data[0]) {
-                      const newMorId = data[0].id
+                      const newMorData = data[0]
 
                       if (currentMorId) {
                         await supabase.rpc('copy_mor_documents', {
                           p_source_mor_id: currentMorId,
-                          p_target_mor_id: newMorId,
+                          p_target_mor_id: newMorData.id,
                           p_property_id: id
                         })
                       }
@@ -1373,7 +1448,8 @@ const fetchMors = async () => {
                       setNewMorDate('')
                       setShowNewMor(false)
                       await fetchMors()
-                      setCurrentMorId(newMorId)
+                      setCurrentMorId(newMorData.id)
+                      setCurrentMor(newMorData)
                     }
                   }}
                   className="bg-blue-600 text-white px-4 py-2 rounded text-sm"
