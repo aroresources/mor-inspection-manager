@@ -1077,10 +1077,21 @@ const fetchMors = async () => {
       setMors(data)
       if (!currentMorId) setCurrentMorId(data[0].id)
     } else {
-      // Auto-create a MOR if none exists
+      // Auto-create a MOR if none exists, using property's MOR date if available
+      const { data: propData } = await supabase
+        .from('properties')
+        .select('mor_date')
+        .eq('id', id)
+        .single()
+      
       const { data: newMor } = await supabase
         .from('mors')
-        .insert([{ property_id: id, status: 'Active', documents_initialized: false }])
+        .insert([{ 
+          property_id: id, 
+          status: 'Active', 
+          documents_initialized: false,
+          mor_date: propData?.mor_date || null
+        }])
         .select()
       if (newMor && newMor[0]) {
         setMors(newMor)
