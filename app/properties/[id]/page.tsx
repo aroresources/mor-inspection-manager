@@ -651,18 +651,11 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
 
   const importFindings = async () => {
     for (const f of extractedFindings) {
-      const findingText = `${f.item}
+      const findingText = `${f.item}: ${f.title || ''}
 
 Condition: ${f.condition || ''}
 
-Criteria: ${f.criteria || ''}
-
-Cause: ${f.cause || ''}
-
-Effect: ${f.effect || ''}
-
-CORRECTIVE ACTION:
-${f.corrective_action || ''}`
+Corrective Action: ${f.corrective_action || ''}`
 
       await supabase.from('findings').insert([{
         property_id: propertyId,
@@ -1072,11 +1065,8 @@ ${f.corrective_action || ''}`
             <div className="space-y-3">
               {extractedFindings.map((f: any, i: number) => (
                 <div key={i} className="p-3 border border-gray-200 rounded">
-                  <p className="text-xs font-bold text-blue-600">{f.item}</p>
+                  <p className="text-xs font-bold text-blue-600">{f.item}{f.title ? `: ${f.title}` : ''}</p>
                   {f.condition && <p className="text-sm text-gray-800 mt-1"><span className="font-bold">Condition:</span> {f.condition}</p>}
-                  {f.criteria && <p className="text-sm text-gray-800 mt-1"><span className="font-bold">Criteria:</span> {f.criteria}</p>}
-                  {f.cause && <p className="text-sm text-gray-800 mt-1"><span className="font-bold">Cause:</span> {f.cause}</p>}
-                  {f.effect && <p className="text-sm text-gray-800 mt-1"><span className="font-bold">Effect:</span> {f.effect}</p>}
                   {f.corrective_action && (
                     <div className="mt-2">
                       <p className="text-xs font-bold text-gray-700">Corrective Action:</p>
