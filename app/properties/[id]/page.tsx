@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '../../../lib/supabase'
 import jsPDF from 'jspdf'
@@ -549,6 +549,13 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
   const [morRating, setMorRating] = useState('')
   const [responseDueDate, setResponseDueDate] = useState(currentMor?.response_due_date || '')
   const [completing, setCompleting] = useState(false)
+  const findingRefs = useRef<Record<string, HTMLTextAreaElement | null>>({})
+
+  const autoResize = (el: HTMLTextAreaElement | null) => {
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = el.scrollHeight + 'px'
+  }
 
   useEffect(() => {
     fetchFindings()
@@ -557,6 +564,10 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
   useEffect(() => {
     setResponseDueDate(currentMor?.response_due_date || '')
   }, [currentMor])
+
+  useEffect(() => {
+    Object.values(findingRefs.current).forEach((el) => autoResize(el))
+  }, [findings, loading])
 
   const fetchFindings = async () => {
     setLoading(true)
@@ -960,10 +971,10 @@ Corrective Action: ${f.corrective_action || ''}`
                 <div>
                   <label className="text-xs text-gray-500">Finding</label>
                   <textarea
+                    ref={(el) => { findingRefs.current[finding.id] = el; autoResize(el) }}
                     value={finding.finding}
                     onChange={(e: any) => {
-                      e.target.style.height = 'auto';
-                      e.target.style.height = e.target.scrollHeight + 'px';
+                      autoResize(e.target)
                       updateFinding(finding.id, { finding: e.target.value })
                     }}
                     style={{ overflow: 'hidden', minHeight: '120px' }}
