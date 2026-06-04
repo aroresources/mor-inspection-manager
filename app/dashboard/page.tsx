@@ -210,6 +210,15 @@ export default function Dashboard() {
     'Unsatisfactory': 1, 'Below Average': 2, 'Satisfactory': 3, 'Above Average': 4, 'Superior': 5
   }
 
+  const riskRank: Record<string, number> = {
+    'Not Troubled': 1, 'Unknown': 2, 'Potentially Troubled': 3, 'Troubled': 4
+  }
+
+  const toggleSort = (key: string) => {
+    if (sortBy === key) setSortAsc(!sortAsc)
+    else { setSortBy(key); setSortAsc(true) }
+  }
+
   const getNextMorDate = (property: any) => {
     if (!property.last_mor_date) return null
 
@@ -293,6 +302,8 @@ export default function Dashboard() {
     }
   }
 
+  const getEffectiveMorDate = (property: any) => getActiveMorDate(property) || getNextMorDate(property)
+
   const filtered =[...(filterCompany === 'all' ? properties : properties.filter((p: any) => p.company_id === filterCompany))].sort((a: any, b: any) => {
     let aVal: any, bVal: any
     if (sortBy === 'name') { aVal = (a.name || '').toLowerCase(); bVal = (b.name || '').toLowerCase() }
@@ -309,10 +320,41 @@ export default function Dashboard() {
       aVal = ratingRank[a.last_mor_rating] ?? 0
       bVal = ratingRank[b.last_mor_rating] ?? 0
     }
+    else if (sortBy === 'contract') { aVal = (a.contract_type || '').toLowerCase(); bVal = (b.contract_type || '').toLowerCase() }
+    else if (sortBy === 'risk') {
+      aVal = riskRank[a.risk_classification] ?? 0
+      bVal = riskRank[b.risk_classification] ?? 0
+    }
+    else if (sortBy === 'mor_date') {
+      aVal = getEffectiveMorDate(a)?.getTime() ?? Infinity
+      bVal = getEffectiveMorDate(b)?.getTime() ?? Infinity
+    }
     if (aVal < bVal) return sortAsc ? -1 : 1
     if (aVal > bVal) return sortAsc ? 1 : -1
     return 0
   })
+
+  const exportToExcel = () => {
+    if (filtered.length === 0) { alert('No properties to export.'); return }
+    const fmt = (d: Date | null, utc = false) =>
+      d ? d.toLocaleDateString('en-US', utc ? { timeZone: 'UTC' } : undefined) : ''
+    const headers = ['Property Name', 'Company', 'Address', 'Contract Type', 'Risk Classification', 'Last MOR Rating', 'Scheduled MOR Date', 'Next MOR Due', 'Response Due By']
+    const rows = filtered.map((p: any) => ({
+      'Property Name': p.name || '',
+      'Company': p.companies?.name || '',
+      'Address': p.address || '',
+      'Contract Type': p.contract_type || '',
+      'Risk Classification': p.risk_classification || '',
+      'Last MOR Rating': p.last_mor_rating || '',
+      'Scheduled MOR Date': fmt(getActiveMorDate(p), true),
+      'Next MOR Due': fmt(getNextMorDate(p)),
+      'Response Due By': fmt(getResponseDueDate(p), true),
+    }))
+    const ws = XLSX.utils.json_to_sheet(rows, { header: headers })
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Properties')
+    XLSX.writeFile(wb, `properties-export-${new Date().toISOString().slice(0, 10)}.xlsx`)
+  }
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -362,6 +404,12 @@ export default function Dashboard() {
               className="bg-green-600 text-white px-4 py-2 rounded font-medium hover:bg-green-700 text-sm"
             >
               ⬆ Import Properties
+            </button>
+            <button
+              onClick={exportToExcel}
+              className="bg-indigo-600 text-white px-4 py-2 rounded font-medium hover:bg-indigo-700 text-sm"
+            >
+              ⬇ Export
             </button>
             <button
               onClick={() => setShowAddProperty(true)}
@@ -453,13 +501,23 @@ export default function Dashboard() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b">
                 <tr className="text-left text-xs text-gray-500">
-                  <th className="px-4 py-3 font-medium">Property Name</th>
-                  <th className="px-4 py-3 font-medium">Company</th>
-                  <th className="px-4 py-3 font-medium">Contract Type</th>
-                  <th className="px-4 py-3 font-medium">Risk Classification</th>
-                  <th className="px-4 py-3 font-medium">Last MOR Rating</th>
-                  <th className="px-4 py-3 font-medium">MOR Date</th>
-                  <th className="px-4 py-3 font-medium">Response Due By</th>
+                  {[
+                    { key: 'name', label: 'Property Name' },
+                    { key: 'company', label: 'Company' },
+                    { key: 'contract', label: 'Contract Type' },
+                    { key: 'risk', label: 'Risk Classification' },
+                    { key: 'rating', label: 'Last MOR Rating' },
+                    { key: 'mor_date', label: 'MOR Date' },
+                    { key: 'response_due', label: 'Response Due By' },
+                  ].map(({ key, label }) => (
+                    <th
+                      key={key}
+                      onClick={() => toggleSort(key)}
+                      className="px-4 py-3 font-medium cursor-pointer select-none hover:text-gray-700 whitespace-nowrap"
+                    >
+                      {label}{sortBy === key ? (sortAsc ? ' ▲' : ' ▼') : ''}
+                    </th>
+                  ))}
                   {userRole === 'super_admin' && <th className="px-4 py-3 font-medium"></th>}
                 </tr>
               </thead>
