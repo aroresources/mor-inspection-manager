@@ -118,6 +118,8 @@ export default function Dashboard() {
         return valid.find((opt) => opt.toLowerCase() === v) ?? null
       }
 
+      const parseBool = (value: any) => ['yes', 'true', '1', 'y'].includes(String(value ?? '').trim().toLowerCase())
+
       const rows = json
         .map((r: any) => ({
           name: String(getField(r, ['Property Name']) ?? '').trim(),
@@ -127,6 +129,8 @@ export default function Dashboard() {
           last_mor_date: formatImportDate(getField(r, ['Last MOR Date'])),
           last_mor_rating: matchValid(getField(r, ['Last MOR Rating']), ['Unsatisfactory', 'Below Average', 'Satisfactory', 'Above Average', 'Superior']),
           risk_classification: matchValid(getField(r, ['Risk Classification']), ['Troubled', 'Potentially Troubled', 'Not Troubled', 'Unknown']),
+          management_change: parseBool(getField(r, ['Management Change'])),
+          management_change_date: formatImportDate(getField(r, ['Change Date'])),
         }))
         .filter((r: any) => r.name)
 
@@ -182,6 +186,8 @@ export default function Dashboard() {
         last_mor_date: r.last_mor_date || null,
         last_mor_rating: r.last_mor_rating || null,
         risk_classification: r.risk_classification || null,
+        management_change: r.management_change,
+        management_change_date: r.management_change_date || null,
       })
     }
 
@@ -246,6 +252,14 @@ export default function Dashboard() {
   }
 
   const getNextMorDate = (property: any) => {
+    // Management/ownership change: when set and no MOR is actively scheduled,
+    // the next MOR is due 6 months from the change date
+    if (property.management_change && property.management_change_date && !getActiveMorDate(property)) {
+      const changeDate = new Date(property.management_change_date)
+      changeDate.setMonth(changeDate.getMonth() + 6)
+      return changeDate
+    }
+
     if (!property.last_mor_date) return null
 
     const lastMor = new Date(property.last_mor_date)
@@ -303,8 +317,11 @@ export default function Dashboard() {
     }
     const nextMor = getNextMorDate(property)
     if (!nextMor) return { label: 'No MOR date recorded', classes: 'bg-gray-100 text-gray-400' }
-    const urgency = getMorUrgency(nextMor)
     const daysUntil = Math.ceil((nextMor.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+    if (property.management_change && property.management_change_date) {
+      return { label: `📅 Mgmt Change - MOR Due: ${nextMor.toLocaleDateString()} (${daysUntil} days)`, classes: 'bg-orange-100 text-orange-700' }
+    }
+    const urgency = getMorUrgency(nextMor)
     const label = urgency === 'overdue'
       ? `⚠️ MOR overdue by ${Math.abs(daysUntil)} days`
       : `📅 Next MOR due: ${nextMor.toLocaleDateString()} (${daysUntil} days)`
@@ -648,11 +665,16 @@ export default function Dashboard() {
                   </div>
                 )
                 const nextMor = getNextMorDate(property)
-                const urgency = getMorUrgency(nextMor)
                 if (!nextMor) return (
                   <p className="text-xs text-gray-400 mt-3">No MOR date recorded</p>
                 )
                 const daysUntil = Math.ceil((nextMor.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+                if (property.management_change && property.management_change_date) return (
+                  <div className="mt-3 text-xs px-2 py-1 rounded bg-orange-100 text-orange-700">
+                    📅 Mgmt Change - MOR Due: {nextMor.toLocaleDateString()} ({daysUntil} days)
+                  </div>
+                )
+                const urgency = getMorUrgency(nextMor)
                 return (
                   <div className={`mt-3 text-xs px-2 py-1 rounded ${
                     urgency === 'overdue' ? 'bg-red-100 text-red-700' :
@@ -714,6 +736,8 @@ export default function Dashboard() {
                       <th className="px-3 py-2 font-medium">Last MOR Date</th>
                       <th className="px-3 py-2 font-medium">Last MOR Rating</th>
                       <th className="px-3 py-2 font-medium">Risk Classification</th>
+                      <th className="px-3 py-2 font-medium">Mgmt Change</th>
+                      <th className="px-3 py-2 font-medium">Change Date</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -726,6 +750,8 @@ export default function Dashboard() {
                         <td className="px-3 py-2">{r.last_mor_date || '—'}</td>
                         <td className="px-3 py-2">{r.last_mor_rating || '—'}</td>
                         <td className="px-3 py-2">{r.risk_classification || '—'}</td>
+                        <td className="px-3 py-2">{r.management_change ? 'Yes' : 'No'}</td>
+                        <td className="px-3 py-2">{r.management_change_date || '—'}</td>
                       </tr>
                     ))}
                   </tbody>

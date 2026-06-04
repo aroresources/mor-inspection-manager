@@ -1339,6 +1339,40 @@ const fetchMors = async () => {
                     : '—'}
                 </p>
               </div>
+
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Management/Ownership Change</label>
+                {editing ? (
+                  <label className="flex items-center gap-2 text-sm text-gray-800 mt-1">
+                    <input
+                      type="checkbox"
+                      checked={!!form.management_change}
+                      onChange={(e: any) => setForm({ ...form, management_change: e.target.checked, management_change_date: e.target.checked ? form.management_change_date : null })}
+                    />
+                    Yes
+                  </label>
+                ) : (
+                  <p className="text-sm font-medium text-gray-800">{property.management_change ? 'Yes' : 'No'}</p>
+                )}
+              </div>
+
+              {(editing ? form.management_change : property.management_change) && (
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Change Date</label>
+                  {editing ? (
+                    <input
+                      type="date"
+                      value={form.management_change_date || ''}
+                      onChange={(e: any) => setForm({ ...form, management_change_date: e.target.value || null })}
+                      className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                    />
+                  ) : (
+                    <p className="text-sm font-medium text-gray-800">
+                      {property.management_change_date ? new Date(property.management_change_date).toLocaleDateString('en-US', { timeZone: 'UTC' }) : '—'}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="mt-4">
