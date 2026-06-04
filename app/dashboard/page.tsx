@@ -36,7 +36,7 @@ export default function Dashboard() {
   const fetchProperties = async () => {
     const { data } = await supabase
       .from('properties')
-      .select('*, companies(name), mors(response_due_date, status, created_at)')
+      .select('*, companies(name), mors(mor_date, response_due_date, status, created_at)')
       .order('name')
     if (data) setProperties(data)
   }
@@ -62,11 +62,21 @@ export default function Dashboard() {
     fetchProperties()
   }
 
-  const getResponseDueDate = (property: any) => {
+  const getActiveMor = (property: any) => {
     const activeMors = (property.mors || [])
       .filter((m: any) => m.status === 'Active')
       .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    const activeMor = activeMors[0]
+    return activeMors[0] || null
+  }
+
+  const getActiveMorDate = (property: any) => {
+    const activeMor = getActiveMor(property)
+    if (!activeMor || !activeMor.mor_date) return null
+    return new Date(activeMor.mor_date)
+  }
+
+  const getResponseDueDate = (property: any) => {
+    const activeMor = getActiveMor(property)
     if (!activeMor || !activeMor.response_due_date) return null
     return new Date(activeMor.response_due_date)
   }
@@ -270,11 +280,8 @@ export default function Dashboard() {
               <h3 className="font-bold text-gray-800">{property.name}</h3>
               <p className="text-sm text-gray-500 mt-1">{property.companies?.name}</p>
               <p className="text-sm text-gray-500">{property.address}</p>
-              
 
-              {property.mor_date && (
-                <p className="text-xs text-gray-600 mt-2">📋 MOR Scheduled: {new Date(property.mor_date).toLocaleDateString('en-US', { timeZone: 'UTC' })}</p>
-              )}
+
               <div className="mt-3 flex flex-wrap gap-2">
                 <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
                   {property.contract_type || 'No contract type'}
@@ -297,6 +304,12 @@ export default function Dashboard() {
               </div>
 
               {(() => {
+                const activeMorDate = getActiveMorDate(property)
+                if (activeMorDate) return (
+                  <div className="mt-3 text-xs px-2 py-1 rounded bg-blue-100 text-blue-700">
+                    📋 MOR Scheduled: {activeMorDate.toLocaleDateString('en-US', { timeZone: 'UTC' })}
+                  </div>
+                )
                 const nextMor = getNextMorDate(property)
                 const urgency = getMorUrgency(nextMor)
                 if (!nextMor) return (
