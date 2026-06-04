@@ -112,15 +112,21 @@ export default function Dashboard() {
         return ''
       }
 
+      // Return the canonical value if it matches one of the valid options (case-insensitive), else null
+      const matchValid = (value: any, valid: string[]) => {
+        const v = String(value ?? '').trim().toLowerCase()
+        return valid.find((opt) => opt.toLowerCase() === v) ?? null
+      }
+
       const rows = json
         .map((r: any) => ({
           name: String(getField(r, ['Property Name']) ?? '').trim(),
           address: String(getField(r, ['Address']) ?? '').trim(),
           company: String(getField(r, ['Management Company']) ?? '').trim(),
-          contractType: String(getField(r, ['Contract Type']) ?? '').trim(),
+          contractType: matchValid(getField(r, ['Contract Type']), ['Option 1', 'Option 2', 'Option 3']),
           last_mor_date: formatImportDate(getField(r, ['Last MOR Date'])),
-          last_mor_rating: String(getField(r, ['Last MOR Rating']) ?? '').trim(),
-          risk_classification: String(getField(r, ['Risk Classification']) ?? '').trim(),
+          last_mor_rating: matchValid(getField(r, ['Last MOR Rating']), ['Unsatisfactory', 'Below Average', 'Satisfactory', 'Above Average', 'Superior']),
+          risk_classification: matchValid(getField(r, ['Risk Classification']), ['Troubled', 'Potentially Troubled', 'Not Troubled', 'Unknown']),
         }))
         .filter((r: any) => r.name)
 
