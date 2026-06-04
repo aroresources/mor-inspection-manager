@@ -21,6 +21,17 @@ export default function Dashboard() {
   const [importRows, setImportRows] = useState<any[]>([])
   const [importing, setImporting] = useState(false)
   const importInputRef = useRef<HTMLInputElement>(null)
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('list')
+
+  useEffect(() => {
+    const saved = localStorage.getItem('dashboardViewMode')
+    if (saved === 'grid' || saved === 'list') setViewMode(saved)
+  }, [])
+
+  const changeViewMode = (mode: 'grid' | 'list') => {
+    setViewMode(mode)
+    localStorage.setItem('dashboardViewMode', mode)
+  }
 
   useEffect(() => {
     const getUser = async () => {
@@ -238,7 +249,51 @@ export default function Dashboard() {
     return 'ok'
   }
 
-  const filtered = [...(filterCompany === 'all' ? properties : properties.filter((p: any) => p.company_id === filterCompany))].sort((a: any, b: any) => {
+  const urgencyClasses = (urgency: string) =>
+    urgency === 'overdue' ? 'bg-red-100 text-red-700' :
+    urgency === 'urgent' ? 'bg-orange-100 text-orange-700' :
+    urgency === 'warning' ? 'bg-yellow-100 text-yellow-700' :
+    'bg-green-100 text-green-700'
+
+  const riskBadgeClasses = (risk: string) =>
+    risk === 'Troubled' ? 'bg-red-100 text-red-700' :
+    risk === 'Potentially Troubled' ? 'bg-yellow-100 text-yellow-700' :
+    risk === 'Unknown' ? 'bg-gray-100 text-gray-700' :
+    'bg-green-100 text-green-700'
+
+  const getMorCell = (property: any) => {
+    const activeMorDate = getActiveMorDate(property)
+    if (activeMorDate) {
+      return { label: `📋 MOR Scheduled: ${activeMorDate.toLocaleDateString('en-US', { timeZone: 'UTC' })}`, classes: 'bg-blue-100 text-blue-700' }
+    }
+    const nextMor = getNextMorDate(property)
+    if (!nextMor) return { label: 'No MOR date recorded', classes: 'bg-gray-100 text-gray-400' }
+    const urgency = getMorUrgency(nextMor)
+    const daysUntil = Math.ceil((nextMor.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+    const label = urgency === 'overdue'
+      ? `⚠️ MOR overdue by ${Math.abs(daysUntil)} days`
+      : `📅 Next MOR due: ${nextMor.toLocaleDateString()} (${daysUntil} days)`
+    return { label, classes: urgencyClasses(urgency) }
+  }
+
+  const getResponseCell = (property: any) => {
+    const responseDue = getResponseDueDate(property)
+    if (!responseDue) return { label: 'No response due date set', classes: 'bg-gray-100 text-gray-500' }
+    const urgency = getResponseUrgency(responseDue)
+    const daysUntil = Math.ceil((responseDue.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+    const label = urgency === 'overdue'
+      ? `⚠️ Response overdue by ${Math.abs(daysUntil)} days`
+      : `📝 Response Due: ${responseDue.toLocaleDateString('en-US', { timeZone: 'UTC' })} (${daysUntil} days)`
+    return { label, classes: urgencyClasses(urgency) }
+  }
+
+  const deleteProperty = (property: any) => {
+    if (confirm('Are you sure you want to delete this property? This will delete all documents, tasks, meetings and findings associated with it.')) {
+      supabase.from('properties').delete().eq('id', property.id).then(() => fetchProperties())
+    }
+  }
+
+  const filtered =[...(filterCompany === 'all' ? properties : properties.filter((p: any) => p.company_id === filterCompany))].sort((a: any, b: any) => {
     let aVal: any, bVal: any
     if (sortBy === 'name') { aVal = (a.name || '').toLowerCase(); bVal = (b.name || '').toLowerCase() }
     else if (sortBy === 'company') { aVal = (a.companies?.name || '').toLowerCase(); bVal = (b.companies?.name || '').toLowerCase() }
@@ -369,12 +424,90 @@ export default function Dashboard() {
               {label}{sortBy === key ? (sortAsc ? ' ↑' : ' ↓') : ''}
             </button>
           ))}
+
+          <div className="ml-auto flex items-center border border-gray-300 rounded overflow-hidden">
+            <button
+              onClick={() => changeViewMode('list')}
+              title="List view"
+              className={`px-2 py-1 ${viewMode === 'list' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="2" width="14" height="2" rx="1" /><rect x="1" y="7" width="14" height="2" rx="1" /><rect x="1" y="12" width="14" height="2" rx="1" /></svg>
+            </button>
+            <button
+              onClick={() => changeViewMode('grid')}
+              title="Grid view"
+              className={`px-2 py-1 ${viewMode === 'grid' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1" /><rect x="9" y="1" width="6" height="6" rx="1" /><rect x="1" y="9" width="6" height="6" rx="1" /><rect x="9" y="9" width="6" height="6" rx="1" /></svg>
+            </button>
+          </div>
         </div>
 
         {/* Properties List */}
         {filtered.length === 0 ? (
           <div className="bg-white rounded-lg shadow p-6 text-center text-gray-500">
             No properties yet. Click "+ Add Property" to get started.
+          </div>
+        ) : viewMode === 'list' ? (
+          <div className="bg-white rounded-lg shadow overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b">
+                <tr className="text-left text-xs text-gray-500">
+                  <th className="px-4 py-3 font-medium">Property Name</th>
+                  <th className="px-4 py-3 font-medium">Company</th>
+                  <th className="px-4 py-3 font-medium">Contract Type</th>
+                  <th className="px-4 py-3 font-medium">Risk Classification</th>
+                  <th className="px-4 py-3 font-medium">Last MOR Rating</th>
+                  <th className="px-4 py-3 font-medium">MOR Date</th>
+                  <th className="px-4 py-3 font-medium">Response Due By</th>
+                  {userRole === 'super_admin' && <th className="px-4 py-3 font-medium"></th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {filtered.map(property => {
+                  const mor = getMorCell(property)
+                  const resp = getResponseCell(property)
+                  return (
+                    <tr key={property.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 align-top">
+                        <button
+                          onClick={() => window.location.href = `/properties/${property.id}`}
+                          className="font-medium text-blue-600 hover:underline text-left"
+                        >
+                          {property.name}
+                        </button>
+                        {property.address && <p className="text-xs text-gray-400">{property.address}</p>}
+                      </td>
+                      <td className="px-4 py-3 align-top text-gray-600">{property.companies?.name || '—'}</td>
+                      <td className="px-4 py-3 align-top">
+                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded whitespace-nowrap">{property.contract_type || '—'}</span>
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        {property.risk_classification
+                          ? <span className={`text-xs px-2 py-1 rounded whitespace-nowrap ${riskBadgeClasses(property.risk_classification)}`}>{property.risk_classification}</span>
+                          : <span className="text-gray-400">—</span>}
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        {property.last_mor_rating
+                          ? <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded whitespace-nowrap">{property.last_mor_rating}</span>
+                          : <span className="text-gray-400">—</span>}
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        <span className={`text-xs px-2 py-1 rounded whitespace-nowrap ${mor.classes}`}>{mor.label}</span>
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        <span className={`text-xs px-2 py-1 rounded whitespace-nowrap ${resp.classes}`}>{resp.label}</span>
+                      </td>
+                      {userRole === 'super_admin' && (
+                        <td className="px-4 py-3 align-top text-right">
+                          <button onClick={() => deleteProperty(property)} className="text-red-400 hover:text-red-600 text-xs" title="Delete property">🗑️</button>
+                        </td>
+                      )}
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
