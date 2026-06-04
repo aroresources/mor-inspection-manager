@@ -1178,7 +1178,7 @@ const fetchMors = async () => {
     </div>
   )
 
-  const tabs = ['Overview', ...(mors.length > 0 ? ['Documents', 'Tasks', 'Meetings', 'Findings'] : [])]
+  const tabs = ['Overview', ...(mors.length > 0 ? ['MOR Binder', 'Tasks', 'Meetings', 'Findings'] : [])]
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -1352,7 +1352,7 @@ const fetchMors = async () => {
           </div>
         )}
 
-        {activeTab === 'documents' && (
+        {activeTab === 'mor binder' && (
           <DocumentsTab propertyId={id} morId={currentMorId} />
         )}
 
