@@ -631,9 +631,13 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
       })
 
       // Send to our API route
+      const { data: { session } } = await supabase.auth.getSession()
       const response = await fetch('/api/extract-findings', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token || ''}`
+        },
         body: JSON.stringify({ base64PDF: base64 })
       })
 

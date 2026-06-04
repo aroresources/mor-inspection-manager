@@ -9,9 +9,39 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+const VALID_ROLES = ['super_admin', 'asset_manager', 'property_manager']
+
 export async function POST(request: NextRequest) {
   try {
+    // --- Authenticate caller and require super_admin ---
+    const authHeader = request.headers.get('authorization') || ''
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
+    if (!token) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
+    const { data: { user: caller }, error: authError } = await supabaseAdmin.auth.getUser(token)
+    if (authError || !caller) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
+    const { data: callerProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('role')
+      .eq('id', caller.id)
+      .single()
+
+    if (!callerProfile || callerProfile.role !== 'super_admin') {
+      return NextResponse.json({ error: 'Not authorized' }, { status: 401 })
+    }
+
     const { email, full_name, role, company_id } = await request.json()
+
+    // Validate requested role
+    const safeRole = role || 'property_manager'
+    if (!VALID_ROLES.includes(safeRole)) {
+      return NextResponse.json({ error: 'Invalid role' }, { status: 400 })
+    }
 
     // Create user in Supabase
     const { data: userData, error: userError } = await supabaseAdmin.auth.admin.createUser({
@@ -27,7 +57,7 @@ export async function POST(request: NextRequest) {
       id: userData.user.id,
       email,
       full_name,
-      role: role || 'property_manager',
+      role: safeRole,
       company_id: company_id || null
     }])
 

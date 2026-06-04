@@ -47,9 +47,13 @@ const inviteUser = async (e: any) => {
     if (!newUser.email) return
     
     try {
+      const { data: { session } } = await supabase.auth.getSession()
       const response = await fetch('/api/invite-user', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token || ''}`
+        },
         body: JSON.stringify({
           email: newUser.email,
           full_name: newUser.full_name,

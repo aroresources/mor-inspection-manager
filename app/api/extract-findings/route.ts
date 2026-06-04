@@ -1,12 +1,54 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { createClient } from '@supabase/supabase-js'
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY
 })
 
+const supabaseAuth = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
+
+// Basic in-memory rate limiter: max 10 requests/hour/user.
+// Note: this is per-server-instance and resets on cold start. For robust,
+// shared limiting use a persistent store (e.g. a Supabase table or Redis).
+const RATE_LIMIT = 10
+const WINDOW_MS = 60 * 60 * 1000
+const requestLog = new Map<string, number[]>()
+
+function isRateLimited(userId: string) {
+  const now = Date.now()
+  const recent = (requestLog.get(userId) || []).filter((t) => now - t < WINDOW_MS)
+  if (recent.length >= RATE_LIMIT) {
+    requestLog.set(userId, recent)
+    return true
+  }
+  recent.push(now)
+  requestLog.set(userId, recent)
+  return false
+}
+
 export async function POST(request: NextRequest) {
   try {
+    // --- Authenticate caller ---
+    const authHeader = request.headers.get('authorization') || ''
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
+    if (!token) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
+    const { data: { user }, error: authError } = await supabaseAuth.auth.getUser(token)
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
+    // --- Rate limit: 10 per hour per user ---
+    if (isRateLimited(user.id)) {
+      return NextResponse.json({ error: 'Rate limit exceeded. Maximum 10 requests per hour.' }, { status: 429 })
+    }
+
     const { base64PDF } = await request.json()
 
     const response = await client.messages.create({
