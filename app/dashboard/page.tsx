@@ -109,8 +109,10 @@ export default function Dashboard() {
       if (risk === 'Troubled' || risk === 'Potentially Troubled' || risk === 'Unknown') {
         monthsToAdd = 12
       } else if (risk === 'Not Troubled') {
-        if (rating === 'Unsatisfactory' || rating === 'Below Average' || rating === 'Satisfactory') {
+        if (rating === 'Unsatisfactory' || rating === 'Below Average') {
           monthsToAdd = 12
+        } else if (rating === 'Satisfactory') {
+          monthsToAdd = 24
         } else if (rating === 'Above Average' || rating === 'Superior') {
           monthsToAdd = 36
         }
