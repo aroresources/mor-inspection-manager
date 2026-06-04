@@ -153,29 +153,47 @@ export default function Dashboard() {
       }
     }
 
-    // Build property rows
-    const propsToInsert = importRows.map((r) => ({
-      name: r.name,
-      address: r.address || null,
-      company_id: r.company ? (companyMap[r.company.trim().toLowerCase()] || null) : null,
-      last_mor_date: r.last_mor_date || null,
-      last_mor_rating: r.last_mor_rating || null,
-      risk_classification: r.risk_classification || null,
-    }))
+    // Existing properties for duplicate detection (same name + company, case-insensitive)
+    const { data: existing } = await supabase.from('properties').select('name, company_id')
+    const dupKey = (companyId: any, name: string) => `${companyId ?? 'null'}|${(name || '').trim().toLowerCase()}`
+    const seen = new Set<string>()
+    ;(existing || []).forEach((p: any) => seen.add(dupKey(p.company_id, p.name)))
 
-    const { data: inserted, error } = await supabase.from('properties').insert(propsToInsert).select()
-    setImporting(false)
-
-    if (error) {
-      alert('Import failed: ' + error.message)
-      return
+    // Build property rows, skipping duplicates
+    let skipped = 0
+    const propsToInsert: any[] = []
+    for (const r of importRows) {
+      const company_id = r.company ? (companyMap[r.company.trim().toLowerCase()] || null) : null
+      const key = dupKey(company_id, r.name)
+      if (seen.has(key)) { skipped++; continue }
+      seen.add(key)
+      propsToInsert.push({
+        name: r.name,
+        address: r.address || null,
+        company_id,
+        last_mor_date: r.last_mor_date || null,
+        last_mor_rating: r.last_mor_rating || null,
+        risk_classification: r.risk_classification || null,
+      })
     }
+
+    let importedCount = 0
+    if (propsToInsert.length > 0) {
+      const { data: inserted, error } = await supabase.from('properties').insert(propsToInsert).select()
+      if (error) {
+        setImporting(false)
+        alert('Import failed: ' + error.message)
+        return
+      }
+      importedCount = inserted?.length ?? 0
+    }
+    setImporting(false)
 
     setShowImportPreview(false)
     setImportRows([])
     await fetchCompanies()
     await fetchProperties()
-    alert(`Successfully imported ${inserted?.length ?? 0} properties.`)
+    alert(`Imported ${importedCount} ${importedCount === 1 ? 'property' : 'properties'}, skipped ${skipped} ${skipped === 1 ? 'duplicate' : 'duplicates'}.`)
   }
 
   const getActiveMor = (property: any) => {
