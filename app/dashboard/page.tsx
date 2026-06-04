@@ -1,5 +1,6 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import * as XLSX from 'xlsx'
 import { supabase } from '../../lib/supabase'
 
 export default function Dashboard() {
@@ -16,6 +17,10 @@ export default function Dashboard() {
   const [filterCompany, setFilterCompany] = useState('all')
   const [sortBy, setSortBy] = useState('name')
   const [sortAsc, setSortAsc] = useState(true)
+  const [showImportPreview, setShowImportPreview] = useState(false)
+  const [importRows, setImportRows] = useState<any[]>([])
+  const [importing, setImporting] = useState(false)
+  const importInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const getUser = async () => {
@@ -60,6 +65,106 @@ export default function Dashboard() {
     setNewProperty({ name: '', address: '', company_id: '', contract_type: '' })
     setShowAddProperty(false)
     fetchProperties()
+  }
+
+  const pad = (n: number) => String(n).padStart(2, '0')
+
+  const formatImportDate = (v: any) => {
+    if (v === null || v === undefined || v === '') return ''
+    if (v instanceof Date && !isNaN(v.getTime())) {
+      return `${v.getFullYear()}-${pad(v.getMonth() + 1)}-${pad(v.getDate())}`
+    }
+    if (typeof v === 'number') {
+      const parsed = XLSX.SSF?.parse_date_code(v)
+      if (parsed) return `${parsed.y}-${pad(parsed.m)}-${pad(parsed.d)}`
+    }
+    const d = new Date(v)
+    if (!isNaN(d.getTime())) return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+    return String(v)
+  }
+
+  const handleImportFile = async (e: any) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      const buffer = await file.arrayBuffer()
+      const wb = XLSX.read(buffer, { type: 'array', cellDates: true })
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const json: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' })
+
+      const getField = (row: any, names: string[]) => {
+        const keys = Object.keys(row)
+        for (const name of names) {
+          const k = keys.find((key) => key.trim().toLowerCase() === name.toLowerCase())
+          if (k !== undefined) return row[k]
+        }
+        return ''
+      }
+
+      const rows = json
+        .map((r: any) => ({
+          name: String(getField(r, ['Property Name']) ?? '').trim(),
+          address: String(getField(r, ['Address']) ?? '').trim(),
+          company: String(getField(r, ['Management Company']) ?? '').trim(),
+          last_mor_date: formatImportDate(getField(r, ['Last MOR Date'])),
+          last_mor_rating: String(getField(r, ['Last MOR Rating']) ?? '').trim(),
+          risk_classification: String(getField(r, ['Risk Classification']) ?? '').trim(),
+        }))
+        .filter((r: any) => r.name)
+
+      if (rows.length === 0) {
+        alert('No valid rows found. Make sure the spreadsheet has a "Property Name" column with values.')
+      } else {
+        setImportRows(rows)
+        setShowImportPreview(true)
+      }
+    } catch (err: any) {
+      console.error(err)
+      alert('Could not read the file. Please make sure it is a valid .xlsx or .xls spreadsheet.')
+    }
+    e.target.value = ''
+  }
+
+  const confirmImport = async () => {
+    setImporting(true)
+
+    // Map existing company names (case-insensitive) to ids
+    const companyMap: Record<string, string> = {}
+    companies.forEach((c: any) => { companyMap[(c.name || '').trim().toLowerCase()] = c.id })
+
+    // Create any companies that don't exist yet
+    const uniqueCompanies = Array.from(new Set(importRows.map((r) => r.company).filter(Boolean)))
+    for (const cname of uniqueCompanies) {
+      const key = cname.trim().toLowerCase()
+      if (!companyMap[key]) {
+        const { data } = await supabase.from('companies').insert([{ name: cname }]).select()
+        if (data && data[0]) companyMap[key] = data[0].id
+      }
+    }
+
+    // Build property rows
+    const propsToInsert = importRows.map((r) => ({
+      name: r.name,
+      address: r.address || null,
+      company_id: r.company ? (companyMap[r.company.trim().toLowerCase()] || null) : null,
+      last_mor_date: r.last_mor_date || null,
+      last_mor_rating: r.last_mor_rating || null,
+      risk_classification: r.risk_classification || null,
+    }))
+
+    const { data: inserted, error } = await supabase.from('properties').insert(propsToInsert).select()
+    setImporting(false)
+
+    if (error) {
+      alert('Import failed: ' + error.message)
+      return
+    }
+
+    setShowImportPreview(false)
+    setImportRows([])
+    await fetchCompanies()
+    await fetchProperties()
+    alert(`Successfully imported ${inserted?.length ?? 0} properties.`)
   }
 
   const getActiveMor = (property: any) => {
@@ -189,6 +294,19 @@ export default function Dashboard() {
               className="bg-gray-600 text-white px-4 py-2 rounded font-medium hover:bg-gray-700 text-sm"
             >
               + Add Company
+            </button>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              className="hidden"
+              onChange={handleImportFile}
+            />
+            <button
+              onClick={() => importInputRef.current?.click()}
+              className="bg-green-600 text-white px-4 py-2 rounded font-medium hover:bg-green-700 text-sm"
+            >
+              ⬆ Import Properties
             </button>
             <button
               onClick={() => setShowAddProperty(true)}
@@ -359,6 +477,58 @@ export default function Dashboard() {
             </div>
             </div>
             ))}
+          </div>
+        )}
+
+        {/* Import Preview Modal */}
+        {showImportPreview && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-5xl max-h-[85vh] flex flex-col">
+              <h3 className="text-lg font-bold mb-1">Import Properties</h3>
+              <p className="text-sm text-gray-500 mb-4">{importRows.length} {importRows.length === 1 ? 'property' : 'properties'} ready to import. Review before confirming.</p>
+              <div className="overflow-auto border border-gray-200 rounded">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 sticky top-0">
+                    <tr className="text-left text-xs text-gray-500">
+                      <th className="px-3 py-2 font-medium">Property Name</th>
+                      <th className="px-3 py-2 font-medium">Address</th>
+                      <th className="px-3 py-2 font-medium">Management Company</th>
+                      <th className="px-3 py-2 font-medium">Last MOR Date</th>
+                      <th className="px-3 py-2 font-medium">Last MOR Rating</th>
+                      <th className="px-3 py-2 font-medium">Risk Classification</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {importRows.map((r: any, i: number) => (
+                      <tr key={i} className="text-gray-800">
+                        <td className="px-3 py-2">{r.name || '—'}</td>
+                        <td className="px-3 py-2">{r.address || '—'}</td>
+                        <td className="px-3 py-2">{r.company || '—'}</td>
+                        <td className="px-3 py-2">{r.last_mor_date || '—'}</td>
+                        <td className="px-3 py-2">{r.last_mor_rating || '—'}</td>
+                        <td className="px-3 py-2">{r.risk_classification || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex gap-3 justify-end mt-4">
+                <button
+                  onClick={() => { setShowImportPreview(false); setImportRows([]) }}
+                  disabled={importing}
+                  className="px-4 py-2 text-sm text-gray-600 border rounded hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmImport}
+                  disabled={importing}
+                  className="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700 disabled:opacity-50"
+                >
+                  {importing ? 'Importing...' : `Import ${importRows.length} ${importRows.length === 1 ? 'Property' : 'Properties'}`}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
