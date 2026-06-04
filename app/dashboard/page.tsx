@@ -117,6 +117,7 @@ export default function Dashboard() {
           name: String(getField(r, ['Property Name']) ?? '').trim(),
           address: String(getField(r, ['Address']) ?? '').trim(),
           company: String(getField(r, ['Management Company']) ?? '').trim(),
+          contractType: String(getField(r, ['Contract Type']) ?? '').trim(),
           last_mor_date: formatImportDate(getField(r, ['Last MOR Date'])),
           last_mor_rating: String(getField(r, ['Last MOR Rating']) ?? '').trim(),
           risk_classification: String(getField(r, ['Risk Classification']) ?? '').trim(),
@@ -171,6 +172,7 @@ export default function Dashboard() {
         name: r.name,
         address: r.address || null,
         company_id,
+        contract_type: r.contractType || null,
         last_mor_date: r.last_mor_date || null,
         last_mor_rating: r.last_mor_rating || null,
         risk_classification: r.risk_classification || null,
@@ -702,6 +704,7 @@ export default function Dashboard() {
                       <th className="px-3 py-2 font-medium">Property Name</th>
                       <th className="px-3 py-2 font-medium">Address</th>
                       <th className="px-3 py-2 font-medium">Management Company</th>
+                      <th className="px-3 py-2 font-medium">Contract Type</th>
                       <th className="px-3 py-2 font-medium">Last MOR Date</th>
                       <th className="px-3 py-2 font-medium">Last MOR Rating</th>
                       <th className="px-3 py-2 font-medium">Risk Classification</th>
@@ -713,6 +716,7 @@ export default function Dashboard() {
                         <td className="px-3 py-2">{r.name || '—'}</td>
                         <td className="px-3 py-2">{r.address || '—'}</td>
                         <td className="px-3 py-2">{r.company || '—'}</td>
+                        <td className="px-3 py-2">{r.contractType || '—'}</td>
                         <td className="px-3 py-2">{r.last_mor_date || '—'}</td>
                         <td className="px-3 py-2">{r.last_mor_rating || '—'}</td>
                         <td className="px-3 py-2">{r.risk_classification || '—'}</td>
