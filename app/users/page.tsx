@@ -79,8 +79,12 @@ const inviteUser = async (e: any) => {
   }
 
   const updateUserCompany = async (userId: any, company_id: any) => {
-    await supabase.from('profiles').update({ company_id: company_id || null }).eq('id', userId)
-    setUsers(users.map(u => u.id === userId ? { ...u, company_id } : u))
+    const newCompanyId = company_id || null
+    await supabase.from('profiles').update({ company_id: newCompanyId }).eq('id', userId)
+    const companyName = newCompanyId ? companies.find((c: any) => c.id === newCompanyId)?.name : null
+    setUsers(users.map(u => u.id === userId
+      ? { ...u, company_id: newCompanyId, companies: newCompanyId ? { name: companyName } : null }
+      : u))
   }
 
   const openPropertyAccess = async (user: any) => {
@@ -171,6 +175,11 @@ const inviteUser = async (e: any) => {
                       <p className="text-xs text-gray-500">{user.email}</p>
                     </div>
                     <div className="flex items-center gap-3">
+                      {user.companies?.name ? (
+                        <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700">{user.companies.name}</span>
+                      ) : (
+                        <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-500">No Company</span>
+                      )}
                       {getRoleBadge(user.role)}
                     </div>
                   </div>
@@ -194,7 +203,7 @@ const inviteUser = async (e: any) => {
                         onChange={(e: any) => updateUserCompany(user.id, e.target.value)}
                         className="w-full mt-1 border border-gray-200 rounded px-2 py-1 text-xs"
                       >
-                        <option value="">All Companies</option>
+                        <option value="">No Company</option>
                         {companies.map(c => (
                           <option key={c.id} value={c.id}>{c.name}</option>
                         ))}

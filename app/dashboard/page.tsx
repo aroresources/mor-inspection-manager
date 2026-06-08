@@ -7,6 +7,7 @@ export default function Dashboard() {
   const [user, setUser] = useState<any>(null)
   const [userRole, setUserRole] = useState('')
   const [userCompanyId, setUserCompanyId] = useState<any>(null)
+  const [noAccessMessage, setNoAccessMessage] = useState<string | null>(null)
   const [properties, setProperties] = useState<any[]>([])
   const [companies, setCompanies] = useState<any[]>([])
   const [showAddProperty, setShowAddProperty] = useState(false)
@@ -69,9 +70,24 @@ export default function Dashboard() {
     // An asset_manager with no company assigned should see no properties
     if (profile?.role === 'asset_manager' && !profile.company_id) {
       setProperties([])
+      setNoAccessMessage('No company assigned - contact your administrator')
       return
     }
 
+    // A property_manager with no property_access entries should see no properties
+    if (profile?.role === 'property_manager') {
+      const { count } = await supabase
+        .from('property_access')
+        .select('property_id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+      if (!count) {
+        setProperties([])
+        setNoAccessMessage('No properties assigned - contact your administrator')
+        return
+      }
+    }
+
+    setNoAccessMessage(null)
     const { data } = await supabase
       .from('properties')
       .select('*, companies(name), mors(mor_date, response_due_date, status, created_at)')
@@ -544,9 +560,9 @@ export default function Dashboard() {
 
         {/* Company Filter */}
         <div className="mb-4 flex items-center gap-3">
-          {userRole === 'asset_manager' && !userCompanyId ? (
+          {noAccessMessage ? (
             <p className="text-sm text-yellow-700 bg-yellow-50 border border-yellow-200 rounded px-3 py-2">
-              No company assigned - contact your administrator
+              {noAccessMessage}
             </p>
           ) : (
           <>
