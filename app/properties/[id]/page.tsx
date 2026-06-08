@@ -6,6 +6,7 @@ import jsPDF from 'jspdf'
 import JSZip from 'jszip'
 import { saveAs } from 'file-saver'
 import { useToast } from '../../components/ToastProvider'
+import { parseDate, formatDate } from '../../../lib/dateUtils'
 
 function DocumentsTab({ propertyId, morId }: any) {
   const { toast } = useToast()
@@ -511,7 +512,7 @@ function MeetingsTab({ propertyId, morId }: any) {
               <div className="flex justify-between items-start">
                 <div>
                   <p className="text-sm font-medium text-gray-800">
-                    {meeting.meeting_date ? new Date(meeting.meeting_date).toLocaleDateString('en-US', { timeZone: 'UTC' }) : 'No date'}
+                    {meeting.meeting_date ? formatDate(meeting.meeting_date) : 'No date'}
                   </p>
                   {meeting.attendees && <p className="text-xs text-gray-500 mt-1">Attendees: {meeting.attendees}</p>}
                 </div>
@@ -658,7 +659,7 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
     toast('Finding deleted.', 'success')
   }
 
-  const deadline = responseDueDate ? new Date(responseDueDate) : null
+  const deadline = parseDate(responseDueDate)
   const daysLeft = deadline ? Math.ceil((deadline.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : null
   const open = findings.filter((f: any) => f.status !== 'Submitted').length
   const total = findings.length
@@ -766,7 +767,7 @@ Corrective Action: ${f.corrective_action || ''}`
       y += 6
     }
     if (property.mor_date) {
-      doc.text(`Date of MOR: ${new Date(property.mor_date).toLocaleDateString('en-US', { timeZone: 'UTC' })}`, 15, y)
+      doc.text(`Date of MOR: ${formatDate(property.mor_date)}`, 15, y)
       y += 6
     }
     y += 6
@@ -856,7 +857,7 @@ Corrective Action: ${f.corrective_action || ''}`
       y += 6
     }
     if (property.mor_date) {
-      doc.text(`Date of MOR: ${new Date(property.mor_date).toLocaleDateString('en-US', { timeZone: 'UTC' })}`, 15, y)
+      doc.text(`Date of MOR: ${formatDate(property.mor_date)}`, 15, y)
       y += 6
     }
     y += 6
@@ -1312,7 +1313,7 @@ const fetchMors = async () => {
             >
               {mors.map((mor: any) => (
                 <option key={mor.id} value={mor.id}>
-                  {mor.mor_date ? new Date(mor.mor_date).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'long', year: 'numeric' }) : 'No date'} — {mor.status}
+                  {mor.mor_date ? parseDate(mor.mor_date)!.toLocaleDateString('en-US', { timeZone: 'UTC', month: 'long', year: 'numeric' }) : 'No date'} — {mor.status}
                 </option>
               ))}
             </select>
@@ -1443,7 +1444,7 @@ const fetchMors = async () => {
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Scheduled MOR Date</label>
                 <p className="text-sm font-medium text-gray-800">
-                  {currentMor?.mor_date ? new Date(currentMor.mor_date).toLocaleDateString('en-US', { timeZone: 'UTC' }) : '—'}
+                  {currentMor?.mor_date ? formatDate(currentMor.mor_date) : '—'}
                 </p>
               </div>
 
@@ -1451,7 +1452,7 @@ const fetchMors = async () => {
                 <label className="block text-xs text-gray-500 mb-1">Response Due Date</label>
                 <p className="text-sm font-medium text-gray-800">
                   {currentMor?.response_due_date
-                    ? new Date(currentMor.response_due_date).toLocaleDateString('en-US', { timeZone: 'UTC' })
+                    ? formatDate(currentMor.response_due_date)
                     : '—'}
                 </p>
               </div>
@@ -1484,7 +1485,7 @@ const fetchMors = async () => {
                     />
                   ) : (
                     <p className="text-sm font-medium text-gray-800">
-                      {property.management_change_date ? new Date(property.management_change_date).toLocaleDateString('en-US', { timeZone: 'UTC' }) : '—'}
+                      {property.management_change_date ? formatDate(property.management_change_date) : '—'}
                     </p>
                   )}
                 </div>

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '../../lib/supabase'
 import { useToast } from '../components/ToastProvider'
+import { parseDate } from '../../lib/dateUtils'
 
 export default function Dashboard() {
   const { toast, confirm } = useToast()
@@ -264,13 +265,13 @@ export default function Dashboard() {
   const getActiveMorDate = (property: any) => {
     const activeMor = getActiveMor(property)
     if (!activeMor || !activeMor.mor_date) return null
-    return new Date(activeMor.mor_date)
+    return parseDate(activeMor.mor_date)
   }
 
   const getResponseDueDate = (property: any) => {
     const activeMor = getActiveMor(property)
     if (!activeMor || !activeMor.response_due_date) return null
-    return new Date(activeMor.response_due_date)
+    return parseDate(activeMor.response_due_date)
   }
 
   const getResponseUrgency = (dueDate: any) => {
@@ -299,14 +300,14 @@ export default function Dashboard() {
     // Management/ownership change: when set and no MOR is actively scheduled,
     // the next MOR is due 6 months from the change date
     if (property.management_change && property.management_change_date && !getActiveMorDate(property)) {
-      const changeDate = new Date(property.management_change_date)
-      changeDate.setMonth(changeDate.getMonth() + 6)
+      const changeDate = parseDate(property.management_change_date)!
+      changeDate.setUTCMonth(changeDate.getUTCMonth() + 6)
       return changeDate
     }
 
     if (!property.last_mor_date) return null
 
-    const lastMor = new Date(property.last_mor_date)
+    const lastMor = parseDate(property.last_mor_date)!
     let monthsToAdd = 12 // default
 
     if (property.contract_type === 'Option 3') {
@@ -329,7 +330,7 @@ export default function Dashboard() {
     }
 
     const nextDate = new Date(lastMor)
-    nextDate.setMonth(nextDate.getMonth() + monthsToAdd)
+    nextDate.setUTCMonth(nextDate.getUTCMonth() + monthsToAdd)
     return nextDate
   }
 
@@ -363,12 +364,12 @@ export default function Dashboard() {
     if (!nextMor) return { label: 'No MOR date recorded', classes: 'bg-gray-100 text-gray-400' }
     const daysUntil = Math.ceil((nextMor.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
     if (property.management_change && property.management_change_date) {
-      return { label: `📅 Mgmt Change - MOR Due: ${nextMor.toLocaleDateString()} (${daysUntil} days)`, classes: 'bg-orange-100 text-orange-700' }
+      return { label: `📅 Mgmt Change - MOR Due: ${nextMor.toLocaleDateString('en-US', { timeZone: 'UTC' })} (${daysUntil} days)`, classes: 'bg-orange-100 text-orange-700' }
     }
     const urgency = getMorUrgency(nextMor)
     const label = urgency === 'overdue'
       ? `⚠️ MOR overdue by ${Math.abs(daysUntil)} days`
-      : `📅 Next MOR due: ${nextMor.toLocaleDateString()} (${daysUntil} days)`
+      : `📅 Next MOR due: ${nextMor.toLocaleDateString('en-US', { timeZone: 'UTC' })} (${daysUntil} days)`
     return { label, classes: urgencyClasses(urgency) }
   }
 
@@ -482,8 +483,8 @@ export default function Dashboard() {
   // Management change where the 6-month MOR window falls within 90 days
   const isMgmtChangeDue = (p: any) => {
     if (!p.management_change || !p.management_change_date) return false
-    const window = new Date(p.management_change_date)
-    window.setMonth(window.getMonth() + 6)
+    const window = parseDate(p.management_change_date)!
+    window.setUTCMonth(window.getUTCMonth() + 6)
     return (daysUntil(window) as number) <= 90
   }
 
@@ -545,8 +546,8 @@ export default function Dashboard() {
 
   const exportToExcel = () => {
     if (filtered.length === 0) { toast('No properties to export.', 'warning'); return }
-    const fmt = (d: Date | null, utc = false) =>
-      d ? d.toLocaleDateString('en-US', utc ? { timeZone: 'UTC' } : undefined) : ''
+    const fmt = (d: Date | null) =>
+      d ? d.toLocaleDateString('en-US', { timeZone: 'UTC' }) : ''
     const headers = ['Property Name', 'Company', 'Address', 'Contract Type', 'Risk Classification', 'Last MOR Rating', 'Scheduled MOR Date', 'Next MOR Due', 'Response Due By']
     const rows = filtered.map((p: any) => ({
       'Property Name': p.name || '',
@@ -555,9 +556,9 @@ export default function Dashboard() {
       'Contract Type': p.contract_type || '',
       'Risk Classification': p.risk_classification || '',
       'Last MOR Rating': p.last_mor_rating || '',
-      'Scheduled MOR Date': fmt(getActiveMorDate(p), true),
+      'Scheduled MOR Date': fmt(getActiveMorDate(p)),
       'Next MOR Due': fmt(getNextMorDate(p)),
-      'Response Due By': fmt(getResponseDueDate(p), true),
+      'Response Due By': fmt(getResponseDueDate(p)),
     }))
     const ws = XLSX.utils.json_to_sheet(rows, { header: headers })
     const wb = XLSX.utils.book_new()
@@ -899,7 +900,7 @@ export default function Dashboard() {
                 const daysUntil = Math.ceil((nextMor.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
                 if (property.management_change && property.management_change_date) return (
                   <div className="mt-3 text-xs px-2 py-1 rounded bg-orange-100 text-orange-700">
-                    📅 Mgmt Change - MOR Due: {nextMor.toLocaleDateString()} ({daysUntil} days)
+                    📅 Mgmt Change - MOR Due: {nextMor.toLocaleDateString('en-US', { timeZone: 'UTC' })} ({daysUntil} days)
                   </div>
                 )
                 const urgency = getMorUrgency(nextMor)
@@ -912,7 +913,7 @@ export default function Dashboard() {
                   }`}>
                     {urgency === 'overdue'
                       ? `⚠️ MOR overdue by ${Math.abs(daysUntil)} days`
-                      : `📅 Next MOR due: ${nextMor.toLocaleDateString()} (${daysUntil} days)`
+                      : `📅 Next MOR due: ${nextMor.toLocaleDateString('en-US', { timeZone: 'UTC' })} (${daysUntil} days)`
                     }
                   </div>
                 )
