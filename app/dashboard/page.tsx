@@ -477,14 +477,32 @@ export default function Dashboard() {
           </select>
           {filterCompany !== 'all' && userRole === 'super_admin' && (
             <button
-              onClick={() => {
-                if (confirm('Are you sure you want to delete this company? This will also delete all properties under it.')) {
-                  supabase.from('companies').delete().eq('id', filterCompany).then(() => {
-                    setFilterCompany('all')
-                    fetchCompanies()
-                    fetchProperties()
-                  })
+              onClick={async () => {
+                if (!confirm('Are you sure you want to delete this company? This will also delete all properties under it.')) return
+
+                // First detach any profiles linked to this company
+                const { error: profileError } = await supabase
+                  .from('profiles')
+                  .update({ company_id: null })
+                  .eq('company_id', filterCompany)
+                if (profileError) {
+                  alert('Error updating team members for this company: ' + profileError.message)
+                  return
                 }
+
+                // Then delete the company
+                const { error: deleteError } = await supabase
+                  .from('companies')
+                  .delete()
+                  .eq('id', filterCompany)
+                if (deleteError) {
+                  alert('Error deleting company: ' + deleteError.message)
+                  return
+                }
+
+                setFilterCompany('all')
+                fetchCompanies()
+                fetchProperties()
               }}
               className="text-red-400 hover:text-red-600 text-sm"
             >
