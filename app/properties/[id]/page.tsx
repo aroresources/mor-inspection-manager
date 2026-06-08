@@ -1103,6 +1103,7 @@ export default function PropertyPage() {
   const [currentMor, setCurrentMor] = useState<any>(null)
   const [showNewMor, setShowNewMor] = useState(false)
   const [newMorDate, setNewMorDate] = useState('')
+  const [companies, setCompanies] = useState<any[]>([])
 
   useEffect(() => {
     const getUser = async () => {
@@ -1112,6 +1113,7 @@ export default function PropertyPage() {
     getUser()
     fetchProperty()
     fetchMors()
+    fetchCompanies()
   }, [id])
 
   const fetchProperty = async () => {
@@ -1124,6 +1126,11 @@ export default function PropertyPage() {
       setProperty(data)
       setForm(data)
     }
+  }
+
+  const fetchCompanies = async () => {
+    const { data } = await supabase.from('companies').select('*').order('name')
+    if (data) setCompanies(data)
   }
 
 const fetchMors = async () => {
@@ -1282,6 +1289,20 @@ const fetchMors = async () => {
                   )}
                 </div>
               ))}
+
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Management Company</label>
+                {editing ? (
+                  <select value={form.company_id || ''} onChange={(e: any) => setForm({...form, company_id: e.target.value || null})} className="w-full border border-gray-300 rounded px-3 py-2 text-sm">
+                    <option value="">Select Company</option>
+                    {companies.map((c: any) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <p className="text-sm font-medium text-gray-800">{property.companies?.name || '—'}</p>
+                )}
+              </div>
 
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Last MOR Rating</label>

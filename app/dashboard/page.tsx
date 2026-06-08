@@ -22,6 +22,9 @@ export default function Dashboard() {
   const [importing, setImporting] = useState(false)
   const importInputRef = useRef<HTMLInputElement>(null)
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list')
+  const [editingCompany, setEditingCompany] = useState(false)
+  const [editCompanyName, setEditCompanyName] = useState('')
+  const [deleteCompanyModal, setDeleteCompanyModal] = useState<any>(null)
 
   useEffect(() => {
     const saved = localStorage.getItem('dashboardViewMode')
@@ -345,6 +348,63 @@ export default function Dashboard() {
     }
   }
 
+  const saveCompanyName = async () => {
+    if (!editCompanyName.trim()) return
+    const { error } = await supabase.from('companies').update({ name: editCompanyName.trim() }).eq('id', filterCompany)
+    if (error) {
+      alert('Error renaming company: ' + error.message)
+      return
+    }
+    setEditingCompany(false)
+    fetchCompanies()
+    fetchProperties()
+  }
+
+  const openDeleteCompany = async () => {
+    const company = companies.find((c: any) => c.id === filterCompany)
+    if (!company) return
+    const companyProperties = properties.filter((p: any) => p.company_id === filterCompany)
+    const { count } = await supabase
+      .from('profiles')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', filterCompany)
+    setDeleteCompanyModal({
+      id: company.id,
+      name: company.name,
+      properties: companyProperties,
+      userCount: count ?? 0,
+    })
+  }
+
+  const confirmDeleteCompany = async () => {
+    if (!deleteCompanyModal) return
+    const { id, properties: companyProperties, userCount } = deleteCompanyModal
+
+    // First detach any profiles linked to this company
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .update({ company_id: null })
+      .eq('company_id', id)
+    if (profileError) {
+      alert('Error updating team members for this company: ' + profileError.message)
+      return
+    }
+
+    // Then delete the company (cascade deletes its properties via the foreign key)
+    const { error: deleteError } = await supabase.from('companies').delete().eq('id', id)
+    if (deleteError) {
+      alert('Error deleting company: ' + deleteError.message)
+      return
+    }
+
+    setDeleteCompanyModal(null)
+    setEditingCompany(false)
+    setFilterCompany('all')
+    await fetchCompanies()
+    await fetchProperties()
+    alert(`Company deleted. ${companyProperties.length} properties removed. ${userCount} users will need to be reassigned.`)
+  }
+
   const getEffectiveMorDate = (property: any) => getActiveMorDate(property) || getNextMorDate(property)
 
   const filtered =[...(filterCompany === 'all' ? properties : properties.filter((p: any) => p.company_id === filterCompany))].sort((a: any, b: any) => {
@@ -467,7 +527,7 @@ export default function Dashboard() {
         <div className="mb-4 flex items-center gap-3">
           <select
             value={filterCompany}
-            onChange={(e: any) => setFilterCompany(e.target.value)}
+            onChange={(e: any) => { setFilterCompany(e.target.value); setEditingCompany(false) }}
             className="border border-gray-300 rounded px-3 py-2 text-sm"
           >
             <option value="all">All Companies</option>
@@ -476,38 +536,38 @@ export default function Dashboard() {
             ))}
           </select>
           {filterCompany !== 'all' && userRole === 'super_admin' && (
-            <button
-              onClick={async () => {
-                if (!confirm('Are you sure you want to delete this company? This will also delete all properties under it.')) return
-
-                // First detach any profiles linked to this company
-                const { error: profileError } = await supabase
-                  .from('profiles')
-                  .update({ company_id: null })
-                  .eq('company_id', filterCompany)
-                if (profileError) {
-                  alert('Error updating team members for this company: ' + profileError.message)
-                  return
-                }
-
-                // Then delete the company
-                const { error: deleteError } = await supabase
-                  .from('companies')
-                  .delete()
-                  .eq('id', filterCompany)
-                if (deleteError) {
-                  alert('Error deleting company: ' + deleteError.message)
-                  return
-                }
-
-                setFilterCompany('all')
-                fetchCompanies()
-                fetchProperties()
-              }}
-              className="text-red-400 hover:text-red-600 text-sm"
-            >
-              🗑️ Delete Company
-            </button>
+            editingCompany ? (
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={editCompanyName}
+                  onChange={(e: any) => setEditCompanyName(e.target.value)}
+                  className="border border-gray-300 rounded px-3 py-2 text-sm"
+                  placeholder="Company name"
+                />
+                <button onClick={saveCompanyName} className="bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700">Save</button>
+                <button onClick={() => setEditingCompany(false)} className="text-gray-500 hover:text-gray-700 text-sm">Cancel</button>
+              </div>
+            ) : (
+              <>
+                <button
+                  onClick={() => {
+                    const company = companies.find((c: any) => c.id === filterCompany)
+                    setEditCompanyName(company?.name || '')
+                    setEditingCompany(true)
+                  }}
+                  className="text-blue-500 hover:text-blue-700 text-sm"
+                >
+                  ✏️ Edit Company Name
+                </button>
+                <button
+                  onClick={openDeleteCompany}
+                  className="text-red-400 hover:text-red-600 text-sm"
+                >
+                  🗑️ Delete Company
+                </button>
+              </>
+            )
           )}
         </div>
 
@@ -790,6 +850,37 @@ export default function Dashboard() {
                 >
                   {importing ? 'Importing...' : `Import ${importRows.length} ${importRows.length === 1 ? 'Property' : 'Properties'}`}
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Company Warning Modal */}
+        {deleteCompanyModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[85vh] flex flex-col">
+              <h3 className="text-lg font-bold mb-2 text-red-700">Delete {deleteCompanyModal.name}?</h3>
+              {deleteCompanyModal.properties.length > 0 ? (
+                <>
+                  <p className="text-sm text-gray-700 mb-3">
+                    This company has {deleteCompanyModal.properties.length} {deleteCompanyModal.properties.length === 1 ? 'property' : 'properties'}. Deleting it will also delete all these properties and their MOR data. Users assigned to this company will lose access until reassigned. Are you sure?
+                  </p>
+                  <div className="border border-gray-200 rounded overflow-y-auto mb-4">
+                    <ul className="divide-y text-sm">
+                      {deleteCompanyModal.properties.map((p: any) => (
+                        <li key={p.id} className="px-3 py-2 text-gray-800">{p.name}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-gray-700 mb-4">
+                  This company has no properties. Are you sure you want to delete it?
+                </p>
+              )}
+              <div className="flex gap-3 justify-end">
+                <button onClick={() => setDeleteCompanyModal(null)} className="px-4 py-2 text-sm text-gray-600 border rounded hover:bg-gray-50">Cancel</button>
+                <button onClick={confirmDeleteCompany} className="bg-red-600 text-white px-4 py-2 rounded text-sm hover:bg-red-700">Delete Company</button>
               </div>
             </div>
           </div>
