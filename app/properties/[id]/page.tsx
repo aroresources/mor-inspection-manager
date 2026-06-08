@@ -82,7 +82,8 @@ function DocumentsTab({ propertyId, morId }: any) {
   }
 
   const updateDoc = async (id: any, updates: any) => {
-    await supabase.from('documents').update(updates).eq('id', id)
+    const { error } = await supabase.from('documents').update(updates).eq('id', id)
+    if (error) { toast('Error saving document: ' + error.message, 'error'); return }
     setDocuments(docs => docs.map((d: any) => d.id === id ? { ...d, ...updates } : d))
     if ('status' in updates) toast('Document status updated.', 'success')
   }
@@ -96,8 +97,9 @@ function DocumentsTab({ propertyId, morId }: any) {
     newDocs[swapIndex] = temp
     const updated = newDocs.map((d: any, i: number) => ({ ...d, sort_order: i }))
     setDocuments(updated)
-    await supabase.from('documents').update({ sort_order: updated[index].sort_order }).eq('id', updated[index].id)
-    await supabase.from('documents').update({ sort_order: updated[swapIndex].sort_order }).eq('id', updated[swapIndex].id)
+    const { error: e1 } = await supabase.from('documents').update({ sort_order: updated[index].sort_order }).eq('id', updated[index].id)
+    const { error: e2 } = await supabase.from('documents').update({ sort_order: updated[swapIndex].sort_order }).eq('id', updated[swapIndex].id)
+    if (e1 || e2) toast('Error reordering documents: ' + (e1 || e2)!.message, 'error')
   }
 
   const addCustomDoc = async (e: any) => {
@@ -114,7 +116,8 @@ function DocumentsTab({ propertyId, morId }: any) {
       is_custom: true,
       sort_order: documents.length
     }
-    const { data } = await supabase.from('documents').insert([docData]).select()
+    const { data, error } = await supabase.from('documents').insert([docData]).select()
+    if (error) { toast('Error adding document: ' + error.message, 'error'); return }
     if (data) {
       if (customDoc.addToTemplate) {
         await supabase.from('document_templates').insert([{ name: customDoc.name }])
@@ -122,6 +125,7 @@ function DocumentsTab({ propertyId, morId }: any) {
       setDocuments([...documents, ...data])
       setCustomDoc({ name: '', assigned_to: '', due_date: '', notes: '' })
       setShowAddCustom(false)
+      toast('Document added.', 'success')
     }
   }
 
@@ -345,7 +349,8 @@ function TasksTab({ propertyId, morId }: any) {
   }
 
   const updateTask = async (id: any, updates: any) => {
-    await supabase.from('tasks').update(updates).eq('id', id)
+    const { error } = await supabase.from('tasks').update(updates).eq('id', id)
+    if (error) { toast('Error saving task: ' + error.message, 'error'); return }
     setTasks(tasks => tasks.map((t: any) => t.id === id ? { ...t, ...updates } : t))
     if (updates.completed === true) toast('Task completed.', 'success')
   }
@@ -362,7 +367,8 @@ function TasksTab({ propertyId, morId }: any) {
       completed: false,
       is_custom: true
     }
-    const { data } = await supabase.from('tasks').insert([taskData]).select()
+    const { data, error } = await supabase.from('tasks').insert([taskData]).select()
+    if (error) { toast('Error adding task: ' + error.message, 'error'); return }
     if (data) {
       if (newTask.addToTemplate) {
         await supabase.from('task_templates').insert([{ title: newTask.title }])
@@ -370,6 +376,7 @@ function TasksTab({ propertyId, morId }: any) {
       setTasks([...tasks, ...data])
       setNewTask({ title: '', assigned_to: '', due_date: '' })
       setShowAddTask(false)
+      toast('Task added.', 'success')
     }
   }
 
@@ -441,6 +448,7 @@ function TasksTab({ propertyId, morId }: any) {
 }
 
 function MeetingsTab({ propertyId, morId }: any) {
+  const { toast } = useToast()
   const [meetings, setMeetings] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddMeeting, setShowAddMeeting] = useState(false)
@@ -461,7 +469,7 @@ function MeetingsTab({ propertyId, morId }: any) {
   const addMeeting = async (e: any) => {
     if (e) e.preventDefault()
     if (!newMeeting.notes) return
-    const { data } = await supabase.from('meetings').insert([{
+    const { data, error } = await supabase.from('meetings').insert([{
       property_id: propertyId,
       mor_id: morId,
       meeting_date: newMeeting.meeting_date || null,
@@ -469,16 +477,20 @@ function MeetingsTab({ propertyId, morId }: any) {
       notes: newMeeting.notes,
       action_items: newMeeting.action_items || null
     }]).select()
+    if (error) { toast('Error saving meeting: ' + error.message, 'error'); return }
     if (data) {
       setMeetings([...data, ...meetings])
       setNewMeeting({ meeting_date: '', attendees: '', notes: '', action_items: '' })
       setShowAddMeeting(false)
+      toast('Meeting saved.', 'success')
     }
   }
 
   const deleteMeeting = async (id: any) => {
-    await supabase.from('meetings').delete().eq('id', id)
+    const { error } = await supabase.from('meetings').delete().eq('id', id)
+    if (error) { toast('Error deleting meeting: ' + error.message, 'error'); return }
     setMeetings(meetings.filter((m: any) => m.id !== id))
+    toast('Meeting deleted.', 'success')
   }
 
   if (loading) return <div className="bg-white rounded-lg shadow p-6 text-gray-500">Loading meetings...</div>
@@ -600,7 +612,7 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
   const addFinding = async (e: any) => {
     if (e) e.preventDefault()
     if (!newFinding.finding) return
-    const { data } = await supabase.from('findings').insert([{
+    const { data, error } = await supabase.from('findings').insert([{
       property_id: propertyId,
       mor_id: morId,
       finding: newFinding.finding,
@@ -610,6 +622,7 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
       status: 'Open',
       sort_order: findings.length
     }]).select()
+    if (error) { toast('Error saving finding: ' + error.message, 'error'); return }
     if (data) {
       setFindings([...findings, ...data])
       setNewFinding({ finding: '', assigned_to: '', response: '', due_date: '' })
@@ -619,7 +632,8 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
   }
 
   const updateFinding = async (id: any, updates: any) => {
-    await supabase.from('findings').update(updates).eq('id', id)
+    const { error } = await supabase.from('findings').update(updates).eq('id', id)
+    if (error) { toast('Error saving finding: ' + error.message, 'error'); return }
     setFindings(findings => findings.map((f: any) => f.id === id ? { ...f, ...updates } : f))
   }
 
@@ -632,13 +646,16 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
     newFindings[swapIndex] = temp
     const updated = newFindings.map((f: any, i: number) => ({ ...f, sort_order: i }))
     setFindings(updated)
-    await supabase.from('findings').update({ sort_order: updated[index].sort_order }).eq('id', updated[index].id)
-    await supabase.from('findings').update({ sort_order: updated[swapIndex].sort_order }).eq('id', updated[swapIndex].id)
+    const { error: e1 } = await supabase.from('findings').update({ sort_order: updated[index].sort_order }).eq('id', updated[index].id)
+    const { error: e2 } = await supabase.from('findings').update({ sort_order: updated[swapIndex].sort_order }).eq('id', updated[swapIndex].id)
+    if (e1 || e2) toast('Error reordering findings: ' + (e1 || e2)!.message, 'error')
   }
 
   const deleteFinding = async (id: any) => {
-    await supabase.from('findings').delete().eq('id', id)
+    const { error } = await supabase.from('findings').delete().eq('id', id)
+    if (error) { toast('Error deleting finding: ' + error.message, 'error'); return }
     setFindings(findings.filter((f: any) => f.id !== id))
+    toast('Finding deleted.', 'success')
   }
 
   const deadline = responseDueDate ? new Date(responseDueDate) : null
