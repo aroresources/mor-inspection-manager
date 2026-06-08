@@ -27,6 +27,8 @@ export default function Dashboard() {
   const [editingCompany, setEditingCompany] = useState(false)
   const [editCompanyName, setEditCompanyName] = useState('')
   const [deleteCompanyModal, setDeleteCompanyModal] = useState<any>(null)
+  const [attentionFilter, setAttentionFilter] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => {
     const saved = localStorage.getItem('dashboardViewMode')
@@ -442,7 +444,64 @@ export default function Dashboard() {
 
   const getEffectiveMorDate = (property: any) => getActiveMorDate(property) || getNextMorDate(property)
 
-  const filtered =[...(filterCompany === 'all' ? properties : properties.filter((p: any) => p.company_id === filterCompany))].sort((a: any, b: any) => {
+  // --- Needs Attention helpers ---
+  const daysUntil = (d: Date | null) =>
+    d ? Math.ceil((d.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : null
+
+  // Overdue response: an Active MOR whose response_due_date has already passed
+  const isOverdueResponse = (p: any) => {
+    const due = getResponseDueDate(p)
+    return due != null && (daysUntil(due) as number) < 0
+  }
+  // Response due within the next 14 days
+  const isResponseDueSoon = (p: any) => {
+    const due = getResponseDueDate(p)
+    if (!due) return false
+    const d = daysUntil(due) as number
+    return d >= 0 && d <= 14
+  }
+  // A scheduled MOR date within the next 90 days
+  const isMorScheduledSoon = (p: any) => {
+    const m = getActiveMorDate(p)
+    if (!m) return false
+    const d = daysUntil(m) as number
+    return d >= 0 && d <= 90
+  }
+  // Management change where the 6-month MOR window falls within 90 days
+  const isMgmtChangeDue = (p: any) => {
+    if (!p.management_change || !p.management_change_date) return false
+    const window = new Date(p.management_change_date)
+    window.setMonth(window.getMonth() + 6)
+    return (daysUntil(window) as number) <= 90
+  }
+
+  const attentionPredicates: Record<string, (p: any) => boolean> = {
+    overdue_response: isOverdueResponse,
+    response_due_soon: isResponseDueSoon,
+    mor_scheduled_soon: isMorScheduledSoon,
+    mgmt_change_due: isMgmtChangeDue,
+  }
+
+  const companyFiltered = filterCompany === 'all'
+    ? properties
+    : properties.filter((p: any) => p.company_id === filterCompany)
+
+  const attentionCounts = {
+    overdue_response: companyFiltered.filter(isOverdueResponse).length,
+    response_due_soon: companyFiltered.filter(isResponseDueSoon).length,
+    mor_scheduled_soon: companyFiltered.filter(isMorScheduledSoon).length,
+    mgmt_change_due: companyFiltered.filter(isMgmtChangeDue).length,
+  }
+
+  const searchTerm = searchQuery.trim().toLowerCase()
+
+  const filtered = [...companyFiltered]
+    .filter((p: any) => (attentionFilter ? attentionPredicates[attentionFilter](p) : true))
+    .filter((p: any) => {
+      if (!searchTerm) return true
+      return (p.name || '').toLowerCase().includes(searchTerm) || (p.address || '').toLowerCase().includes(searchTerm)
+    })
+    .sort((a: any, b: any) => {
     let aVal: any, bVal: any
     if (sortBy === 'name') { aVal = (a.name || '').toLowerCase(); bVal = (b.name || '').toLowerCase() }
     else if (sortBy === 'company') { aVal = (a.companies?.name || '').toLowerCase(); bVal = (b.companies?.name || '').toLowerCase() }
@@ -613,6 +672,44 @@ export default function Dashboard() {
           </>
           )}
         </div>
+
+        {/* Needs Attention Bar */}
+        {!noAccessMessage && (
+          <div className="mb-4 flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-gray-500 font-medium">Needs Attention:</span>
+            {[
+              { key: 'overdue_response', label: 'Overdue Response', count: attentionCounts.overdue_response, active: 'bg-red-600 text-white border-red-600', idle: 'bg-red-50 text-red-700 border-red-200 hover:border-red-400' },
+              { key: 'response_due_soon', label: 'Response Due Soon', count: attentionCounts.response_due_soon, active: 'bg-orange-500 text-white border-orange-500', idle: 'bg-orange-50 text-orange-700 border-orange-200 hover:border-orange-400' },
+              { key: 'mor_scheduled_soon', label: 'MOR Scheduled Soon', count: attentionCounts.mor_scheduled_soon, active: 'bg-yellow-500 text-white border-yellow-500', idle: 'bg-yellow-50 text-yellow-800 border-yellow-200 hover:border-yellow-400' },
+              { key: 'mgmt_change_due', label: 'Management Change Due', count: attentionCounts.mgmt_change_due, active: 'bg-orange-500 text-white border-orange-500', idle: 'bg-orange-50 text-orange-700 border-orange-200 hover:border-orange-400' },
+            ].map(({ key, label, count, active, idle }) => (
+              <button
+                key={key}
+                onClick={() => setAttentionFilter(attentionFilter === key ? null : key)}
+                className={`text-xs px-3 py-1.5 rounded-full border font-medium transition flex items-center gap-2 ${attentionFilter === key ? active : idle} ${count === 0 ? 'opacity-50' : ''}`}
+              >
+                {label}
+                <span className={`inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full text-xs font-bold ${attentionFilter === key ? 'bg-white/25' : 'bg-white'}`}>{count}</span>
+              </button>
+            ))}
+            {attentionFilter && (
+              <button onClick={() => setAttentionFilter(null)} className="text-xs text-gray-500 hover:text-gray-700 underline">Clear</button>
+            )}
+          </div>
+        )}
+
+        {/* Search */}
+        {!noAccessMessage && (
+          <div className="mb-4">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e: any) => setSearchQuery(e.target.value)}
+              placeholder="Search properties by name or address..."
+              className="w-full sm:w-96 border border-gray-300 rounded px-3 py-2 text-sm"
+            />
+          </div>
+        )}
 
         {/* Sort Controls */}
         <div className="mb-4 flex items-center gap-2 flex-wrap">
