@@ -6,6 +6,7 @@ import { supabase } from '../../lib/supabase'
 export default function Dashboard() {
   const [user, setUser] = useState<any>(null)
   const [userRole, setUserRole] = useState('')
+  const [userCompanyId, setUserCompanyId] = useState<any>(null)
   const [properties, setProperties] = useState<any[]>([])
   const [companies, setCompanies] = useState<any[]>([])
   const [showAddProperty, setShowAddProperty] = useState(false)
@@ -45,14 +46,32 @@ export default function Dashboard() {
         setUser(user)
         fetchProperties()
         fetchCompanies()
-        const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-        if (profile) setUserRole(profile.role)
+        const { data: profile } = await supabase.from('profiles').select('role, company_id').eq('id', user.id).single()
+        if (profile) {
+          setUserRole(profile.role)
+          setUserCompanyId(profile.company_id ?? null)
+        }
       }
     }
     getUser()
   }, [])
 
   const fetchProperties = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role, company_id')
+      .eq('id', user.id)
+      .single()
+
+    // An asset_manager with no company assigned should see no properties
+    if (profile?.role === 'asset_manager' && !profile.company_id) {
+      setProperties([])
+      return
+    }
+
     const { data } = await supabase
       .from('properties')
       .select('*, companies(name), mors(mor_date, response_due_date, status, created_at)')
@@ -525,6 +544,12 @@ export default function Dashboard() {
 
         {/* Company Filter */}
         <div className="mb-4 flex items-center gap-3">
+          {userRole === 'asset_manager' && !userCompanyId ? (
+            <p className="text-sm text-yellow-700 bg-yellow-50 border border-yellow-200 rounded px-3 py-2">
+              No company assigned - contact your administrator
+            </p>
+          ) : (
+          <>
           <select
             value={filterCompany}
             onChange={(e: any) => { setFilterCompany(e.target.value); setEditingCompany(false) }}
@@ -568,6 +593,8 @@ export default function Dashboard() {
                 </button>
               </>
             )
+          )}
+          </>
           )}
         </div>
 
