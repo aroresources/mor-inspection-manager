@@ -5,8 +5,10 @@ import { supabase } from '../../../lib/supabase'
 import jsPDF from 'jspdf'
 import JSZip from 'jszip'
 import { saveAs } from 'file-saver'
+import { useToast } from '../../components/ToastProvider'
 
 function DocumentsTab({ propertyId, morId }: any) {
+  const { toast } = useToast()
   const [documents, setDocuments] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddCustom, setShowAddCustom] = useState(false)
@@ -82,6 +84,7 @@ function DocumentsTab({ propertyId, morId }: any) {
   const updateDoc = async (id: any, updates: any) => {
     await supabase.from('documents').update(updates).eq('id', id)
     setDocuments(docs => docs.map((d: any) => d.id === id ? { ...d, ...updates } : d))
+    if ('status' in updates) toast('Document status updated.', 'success')
   }
 
   const moveDoc = async (index: any, direction: any) => {
@@ -302,6 +305,7 @@ function DocumentsTab({ propertyId, morId }: any) {
   )
 }
 function TasksTab({ propertyId, morId }: any) {
+  const { toast } = useToast()
   const [tasks, setTasks] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddTask, setShowAddTask] = useState(false)
@@ -343,6 +347,7 @@ function TasksTab({ propertyId, morId }: any) {
   const updateTask = async (id: any, updates: any) => {
     await supabase.from('tasks').update(updates).eq('id', id)
     setTasks(tasks => tasks.map((t: any) => t.id === id ? { ...t, ...updates } : t))
+    if (updates.completed === true) toast('Task completed.', 'success')
   }
 
   const addTask = async (e: any) => {
@@ -551,6 +556,7 @@ function FindingTextarea({ value, onSave, ...props }: any) {
 }
 
 function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, onUpdateMor }: any) {
+  const { toast, confirm } = useToast()
   const [findings, setFindings] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddFinding, setShowAddFinding] = useState(false)
@@ -608,6 +614,7 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
       setFindings([...findings, ...data])
       setNewFinding({ finding: '', assigned_to: '', response: '', due_date: '' })
       setShowAddFinding(false)
+      toast('Finding saved.', 'success')
     }
   }
 
@@ -640,8 +647,13 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
   const total = findings.length
 
   const completeMor = async () => {
-    if (!morRating) { alert('Please select an MOR rating before completing.'); return }
-    if (!confirm('Mark this MOR as Completed? This will update the Last MOR Date and Rating on the property.')) return
+    if (!morRating) { toast('Please select an MOR rating before completing.', 'warning'); return }
+    const ok = await confirm({
+      title: 'Complete MOR?',
+      message: 'Mark this MOR as Completed? This will update the Last MOR Date and Rating on the property.',
+      confirmLabel: 'Complete MOR',
+    })
+    if (!ok) return
     setCompleting(true)
     await supabase.from('properties').update({
       last_mor_date: currentMor?.mor_date || null,
@@ -685,7 +697,7 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
       setExtractedFindings(data.findings)
       setShowExtracted(true)
     } catch (err: any) {
-      alert('Error extracting findings. Please try again.')
+      toast('Error extracting findings. Please try again.', 'error')
       console.error(err)
     }
     setExtracting(false)
@@ -1141,6 +1153,7 @@ Corrective Action: ${f.corrective_action || ''}`
   )
 }
 export default function PropertyPage() {
+  const { toast, confirm } = useToast()
   const { id } = useParams()
   const [property, setProperty] = useState<any>(null)
   const [activeTab, setActiveTab] = useState('overview')
@@ -1201,7 +1214,13 @@ const fetchMors = async () => {
 
   const deleteMor = async (morIdToDelete: string) => {
     if (!morIdToDelete) return
-    if (!confirm('Delete this MOR? This will permanently delete all documents, tasks, meetings, and findings associated with it. This cannot be undone.')) return
+    const ok = await confirm({
+      title: 'Delete MOR?',
+      message: 'Delete this MOR? This will permanently delete all documents, tasks, meetings, and findings associated with it. This cannot be undone.',
+      confirmLabel: 'Delete',
+      danger: true,
+    })
+    if (!ok) return
 
     await supabase.from('documents').delete().eq('mor_id', morIdToDelete)
     await supabase.from('tasks').delete().eq('mor_id', morIdToDelete)
@@ -1226,10 +1245,16 @@ const fetchMors = async () => {
   const saveProperty = async () => {
     setSaving(true)
     const { companies, created_at, ...updateData } = form
-    await supabase.from('properties').update(updateData).eq('id', id)
+    const { error } = await supabase.from('properties').update(updateData).eq('id', id)
+    if (error) {
+      setSaving(false)
+      toast('Error saving property: ' + error.message, 'error')
+      return
+    }
     await fetchProperty()
     setEditing(false)
     setSaving(false)
+    toast('Property saved successfully.', 'success')
   }
 
   if (!property) return (

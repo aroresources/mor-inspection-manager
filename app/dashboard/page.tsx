@@ -2,8 +2,10 @@
 import { useEffect, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '../../lib/supabase'
+import { useToast } from '../components/ToastProvider'
 
 export default function Dashboard() {
+  const { toast, confirm } = useToast()
   const [user, setUser] = useState<any>(null)
   const [userRole, setUserRole] = useState('')
   const [userCompanyId, setUserCompanyId] = useState<any>(null)
@@ -112,10 +114,12 @@ export default function Dashboard() {
 
   const addProperty = async () => {
     if (!newProperty.name) return
-    await supabase.from('properties').insert([newProperty])
+    const { error } = await supabase.from('properties').insert([newProperty])
+    if (error) { toast('Error saving property: ' + error.message, 'error'); return }
     setNewProperty({ name: '', address: '', company_id: '', contract_type: '' })
     setShowAddProperty(false)
     fetchProperties()
+    toast('Property saved successfully.', 'success')
   }
 
   const pad = (n: number) => String(n).padStart(2, '0')
@@ -175,14 +179,14 @@ export default function Dashboard() {
         .filter((r: any) => r.name)
 
       if (rows.length === 0) {
-        alert('No valid rows found. Make sure the spreadsheet has a "Property Name" column with values.')
+        toast('No valid rows found. Make sure the spreadsheet has a "Property Name" column with values.', 'warning')
       } else {
         setImportRows(rows)
         setShowImportPreview(true)
       }
     } catch (err: any) {
       console.error(err)
-      alert('Could not read the file. Please make sure it is a valid .xlsx or .xls spreadsheet.')
+      toast('Could not read the file. Please make sure it is a valid .xlsx or .xls spreadsheet.', 'error')
     }
     e.target.value = ''
   }
@@ -236,7 +240,7 @@ export default function Dashboard() {
       const { data: inserted, error } = await supabase.from('properties').insert(propsToInsert).select()
       if (error) {
         setImporting(false)
-        alert('Import failed: ' + error.message)
+        toast('Import failed: ' + error.message, 'error')
         return
       }
       importedCount = inserted?.length ?? 0
@@ -247,7 +251,7 @@ export default function Dashboard() {
     setImportRows([])
     await fetchCompanies()
     await fetchProperties()
-    alert(`Imported ${importedCount} ${importedCount === 1 ? 'property' : 'properties'}, skipped ${skipped} ${skipped === 1 ? 'duplicate' : 'duplicates'}.`)
+    toast(`Imported ${importedCount} ${importedCount === 1 ? 'property' : 'properties'}, skipped ${skipped} ${skipped === 1 ? 'duplicate' : 'duplicates'}.`, 'success')
   }
 
   const getActiveMor = (property: any) => {
@@ -379,17 +383,25 @@ export default function Dashboard() {
     return { label, classes: urgencyClasses(urgency) }
   }
 
-  const deleteProperty = (property: any) => {
-    if (confirm('Are you sure you want to delete this property? This will delete all documents, tasks, meetings and findings associated with it.')) {
-      supabase.from('properties').delete().eq('id', property.id).then(() => fetchProperties())
-    }
+  const deleteProperty = async (property: any) => {
+    const ok = await confirm({
+      title: 'Delete Property?',
+      message: 'Are you sure you want to delete this property? This will delete all documents, tasks, meetings and findings associated with it.',
+      confirmLabel: 'Delete',
+      danger: true,
+    })
+    if (!ok) return
+    const { error } = await supabase.from('properties').delete().eq('id', property.id)
+    if (error) { toast('Error deleting property: ' + error.message, 'error'); return }
+    await fetchProperties()
+    toast('Property deleted.', 'success')
   }
 
   const saveCompanyName = async () => {
     if (!editCompanyName.trim()) return
     const { error } = await supabase.from('companies').update({ name: editCompanyName.trim() }).eq('id', filterCompany)
     if (error) {
-      alert('Error renaming company: ' + error.message)
+      toast('Error renaming company: ' + error.message, 'error')
       return
     }
     setEditingCompany(false)
@@ -423,14 +435,14 @@ export default function Dashboard() {
       .update({ company_id: null })
       .eq('company_id', id)
     if (profileError) {
-      alert('Error updating team members for this company: ' + profileError.message)
+      toast('Error updating team members for this company: ' + profileError.message, 'error')
       return
     }
 
     // Then delete the company (cascade deletes its properties via the foreign key)
     const { error: deleteError } = await supabase.from('companies').delete().eq('id', id)
     if (deleteError) {
-      alert('Error deleting company: ' + deleteError.message)
+      toast('Error deleting company: ' + deleteError.message, 'error')
       return
     }
 
@@ -439,7 +451,7 @@ export default function Dashboard() {
     setFilterCompany('all')
     await fetchCompanies()
     await fetchProperties()
-    alert(`Company deleted. ${companyProperties.length} properties removed. ${userCount} users will need to be reassigned.`)
+    toast(`Company deleted. ${companyProperties.length} properties removed. ${userCount} users will need to be reassigned.`, 'success')
   }
 
   const getEffectiveMorDate = (property: any) => getActiveMorDate(property) || getNextMorDate(property)
@@ -532,7 +544,7 @@ export default function Dashboard() {
   })
 
   const exportToExcel = () => {
-    if (filtered.length === 0) { alert('No properties to export.'); return }
+    if (filtered.length === 0) { toast('No properties to export.', 'warning'); return }
     const fmt = (d: Date | null, utc = false) =>
       d ? d.toLocaleDateString('en-US', utc ? { timeZone: 'UTC' } : undefined) : ''
     const headers = ['Property Name', 'Company', 'Address', 'Contract Type', 'Risk Classification', 'Last MOR Rating', 'Scheduled MOR Date', 'Next MOR Due', 'Response Due By']
@@ -839,9 +851,7 @@ export default function Dashboard() {
               <button
                 onClick={(e: any) => {
                   e.stopPropagation()
-                  if (confirm('Are you sure you want to delete this property? This will delete all documents, tasks, meetings and findings associated with it.')) {
-                    supabase.from('properties').delete().eq('id', property.id).then(() => fetchProperties())
-                  }
+                  deleteProperty(property)
                 }}
                 className="absolute top-3 right-3 text-red-400 hover:text-red-600 text-xs"
               >
