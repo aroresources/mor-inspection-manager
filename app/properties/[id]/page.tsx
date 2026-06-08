@@ -535,6 +535,21 @@ function MeetingsTab({ propertyId, morId }: any) {
     </div>
   )
 }
+// Textarea with local state that only saves to the database onBlur.
+// Keeps the cursor from jumping to the end while typing.
+function FindingTextarea({ value, onSave, ...props }: any) {
+  const [local, setLocal] = useState(value || '')
+  useEffect(() => { setLocal(value || '') }, [value])
+  return (
+    <textarea
+      {...props}
+      value={local}
+      onChange={(e: any) => setLocal(e.target.value)}
+      onBlur={() => { if (local !== (value || '')) onSave(local) }}
+    />
+  )
+}
+
 function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, onUpdateMor }: any) {
   const [findings, setFindings] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -562,7 +577,17 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
     setLoading(true)
     if (!morId) { setLoading(false); return }
     const { data } = await supabase.from('findings').select('*').eq('property_id', propertyId).eq('mor_id', morId).order('created_at')
-    if (data) setFindings(data)
+    if (data) {
+      // Initialize sort_order based on created_at order the first time (all defaults are 0)
+      const needsInit = data.length > 0 && data.every((f: any) => !f.sort_order)
+      if (needsInit) {
+        const ordered = data.map((f: any, i: number) => ({ ...f, sort_order: i }))
+        await Promise.all(ordered.map((f: any) => supabase.from('findings').update({ sort_order: f.sort_order }).eq('id', f.id)))
+        setFindings(ordered)
+      } else {
+        setFindings([...data].sort((a: any, b: any) => a.sort_order - b.sort_order))
+      }
+    }
     setLoading(false)
   }
 
@@ -576,7 +601,8 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
       assigned_to: newFinding.assigned_to || null,
       response: newFinding.response || null,
       due_date: newFinding.due_date || null,
-      status: 'Open'
+      status: 'Open',
+      sort_order: findings.length
     }]).select()
     if (data) {
       setFindings([...findings, ...data])
@@ -588,6 +614,19 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
   const updateFinding = async (id: any, updates: any) => {
     await supabase.from('findings').update(updates).eq('id', id)
     setFindings(findings => findings.map((f: any) => f.id === id ? { ...f, ...updates } : f))
+  }
+
+  const moveFinding = async (index: any, direction: any) => {
+    const newFindings = [...findings]
+    const swapIndex = index + direction
+    if (swapIndex < 0 || swapIndex >= newFindings.length) return
+    const temp = newFindings[index]
+    newFindings[index] = newFindings[swapIndex]
+    newFindings[swapIndex] = temp
+    const updated = newFindings.map((f: any, i: number) => ({ ...f, sort_order: i }))
+    setFindings(updated)
+    await supabase.from('findings').update({ sort_order: updated[index].sort_order }).eq('id', updated[index].id)
+    await supabase.from('findings').update({ sort_order: updated[swapIndex].sort_order }).eq('id', updated[swapIndex].id)
   }
 
   const deleteFinding = async (id: any) => {
@@ -654,6 +693,7 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
         
 
   const importFindings = async () => {
+    let order = findings.length
     for (const f of extractedFindings) {
       const findingText = `${f.item}: ${f.title || ''}
 
@@ -666,7 +706,8 @@ Corrective Action: ${f.corrective_action || ''}`
         mor_id: morId,
         finding: findingText,
         due_date: f.due_date || null,
-        status: 'Open'
+        status: 'Open',
+        sort_order: order++
       }])
     }
     setShowExtracted(false)
@@ -949,8 +990,14 @@ Corrective Action: ${f.corrective_action || ''}`
         <div className="bg-white rounded-lg shadow p-6 text-center text-gray-500 text-sm">No findings yet. Click "+ Add Finding" to log findings from the MOR report.</div>
       ) : (
         <div className="space-y-3">
-          {findings.map((finding: any) => (
+          {findings.map((finding: any, index: number) => (
             <div key={finding.id} className="bg-white rounded-lg shadow p-5">
+              <div className="flex items-start gap-3">
+                <div className="flex flex-col gap-1 mt-1">
+                  <button onClick={() => moveFinding(index, -1)} className="text-gray-400 hover:text-gray-600 text-xs leading-none">▲</button>
+                  <button onClick={() => moveFinding(index, 1)} className="text-gray-400 hover:text-gray-600 text-xs leading-none">▼</button>
+                </div>
+                <div className="flex-1">
               <div className="flex justify-between items-start mb-3">
                 <select value={finding.status} onChange={(e: any) => updateFinding(finding.id, { status: e.target.value })} className={`text-xs px-2 py-1 rounded border ${finding.status === 'Submitted' ? 'bg-green-100 text-green-700 border-green-200' : finding.status === 'Ready' ? 'bg-blue-100 text-blue-700 border-blue-200' : finding.status === 'In Progress' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' : 'bg-red-100 text-red-700 border-red-200'}`}>
                   <option value="Open">Open</option>
@@ -963,7 +1010,7 @@ Corrective Action: ${f.corrective_action || ''}`
               <div className="space-y-3">
                 <div>
                   <label className="text-xs text-gray-500">Finding</label>
-                  <textarea value={finding.finding} onChange={(e: any) => updateFinding(finding.id, { finding: e.target.value })} rows={12} className="w-full mt-1 border border-gray-200 rounded px-3 py-2 text-sm resize-y" />
+                  <FindingTextarea value={finding.finding} onSave={(v: string) => updateFinding(finding.id, { finding: v })} rows={12} className="w-full mt-1 border border-gray-200 rounded px-3 py-2 text-sm resize-y" />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -977,7 +1024,7 @@ Corrective Action: ${f.corrective_action || ''}`
                 </div>
                 <div>
                   <label className="text-xs text-gray-500">Written Response</label>
-                  <textarea value={finding.response || ''} onChange={(e: any) => updateFinding(finding.id, { response: e.target.value })} rows={3} placeholder="Type your response to this finding here..." className="w-full mt-1 border border-gray-200 rounded px-3 py-2 text-sm" />
+                  <FindingTextarea value={finding.response || ''} onSave={(v: string) => updateFinding(finding.id, { response: v || null })} rows={3} placeholder="Type your response to this finding here..." className="w-full mt-1 border border-gray-200 rounded px-3 py-2 text-sm" />
                 </div>
                 <div>
                   <label className="text-xs text-gray-500">Supporting Document</label>
@@ -1003,6 +1050,8 @@ Corrective Action: ${f.corrective_action || ''}`
                       </label>
                     )}
                   </div>
+                </div>
+              </div>
                 </div>
               </div>
             </div>
