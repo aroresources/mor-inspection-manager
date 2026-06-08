@@ -1,8 +1,10 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '../../lib/supabase'
 
 export default function TemplatesPage() {
+  const router = useRouter()
   const [docTemplates, setDocTemplates] = useState<any[]>([])
 const [taskTemplates, setTaskTemplates] = useState<any[]>([])
   const [activeTab, setActiveTab] = useState('documents')
@@ -15,7 +17,7 @@ const [taskTemplates, setTaskTemplates] = useState<any[]>([])
   useEffect(() => {
     const getUser = async () => {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) window.location.href = '/'
+      if (!user) router.push('/')
     }
     getUser()
     fetchTemplates()
@@ -91,13 +93,13 @@ const [taskTemplates, setTaskTemplates] = useState<any[]>([])
     <div className="min-h-screen bg-gray-100">
       <nav className="bg-white shadow-sm px-6 py-4 flex justify-between items-center">
         <div className="flex items-center gap-4">
-          <button onClick={() => window.location.href = '/dashboard'} className="text-sm text-blue-600 hover:underline">
+          <button onClick={() => router.push('/dashboard')} className="text-sm text-blue-600 hover:underline">
             ← Back to Dashboard
           </button>
           <h1 className="text-xl font-bold text-gray-800">Templates</h1>
         </div>
         <button
-          onClick={async () => { await supabase.auth.signOut(); window.location.href = '/' }}
+          onClick={async () => { await supabase.auth.signOut(); router.push('/') }}
           className="text-sm text-gray-500 hover:text-gray-700"
         >
           Sign Out

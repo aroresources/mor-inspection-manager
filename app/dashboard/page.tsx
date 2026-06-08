@@ -1,11 +1,13 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import * as XLSX from 'xlsx'
 import { supabase } from '../../lib/supabase'
 import { useToast } from '../components/ToastProvider'
 import { parseDate } from '../../lib/dateUtils'
 
 export default function Dashboard() {
+  const router = useRouter()
   const { toast, confirm } = useToast()
   const [user, setUser] = useState<any>(null)
   const [userRole, setUserRole] = useState('')
@@ -47,7 +49,7 @@ export default function Dashboard() {
     const getUser = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
-        window.location.href = '/'
+        router.push('/')
       } else {
         setUser(user)
         fetchProperties()
@@ -572,19 +574,19 @@ export default function Dashboard() {
         <h1 className="text-xl font-bold text-gray-800">MOR Inspection Manager</h1>
         <div className="flex items-center gap-4">
           <button
-            onClick={() => window.location.href = '/templates'}
+            onClick={() => router.push('/templates')}
             className="text-sm text-gray-600 hover:text-gray-800"
           >
             Templates
           </button>
           <button
-            onClick={() => window.location.href = '/users'}
+            onClick={() => router.push('/users')}
             className="text-sm text-gray-600 hover:text-gray-800"
           >
             Team Members
           </button>
           <button
-            onClick={async () => { await supabase.auth.signOut(); window.location.href = '/' }}
+            onClick={async () => { await supabase.auth.signOut(); router.push('/') }}
             className="text-sm text-gray-500 hover:text-gray-700"
           >
             Sign Out
@@ -803,7 +805,7 @@ export default function Dashboard() {
                     <tr key={property.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 align-top">
                         <button
-                          onClick={() => window.location.href = `/properties/${property.id}`}
+                          onClick={() => router.push(`/properties/${property.id}`)}
                           className="font-medium text-blue-600 hover:underline text-left"
                         >
                           {property.name}
@@ -859,7 +861,7 @@ export default function Dashboard() {
                 🗑️
               </button>
               )}
-              <div onClick={() => window.location.href = `/properties/${property.id}`} className="cursor-pointer">
+              <div onClick={() => router.push(`/properties/${property.id}`)} className="cursor-pointer">
               <h3 className="font-bold text-gray-800">{property.name}</h3>
               <p className="text-sm text-gray-500 mt-1">{property.companies?.name}</p>
               <p className="text-sm text-gray-500">{property.address}</p>

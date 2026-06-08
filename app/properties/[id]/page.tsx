@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '../../../lib/supabase'
 import jsPDF from 'jspdf'
 import JSZip from 'jszip'
@@ -1172,6 +1172,7 @@ Corrective Action: ${f.corrective_action || ''}`
 }
 export default function PropertyPage() {
   const { toast, confirm } = useToast()
+  const router = useRouter()
   const { id } = useParams()
   const [property, setProperty] = useState<any>(null)
   const [activeTab, setActiveTab] = useState('overview')
@@ -1188,7 +1189,7 @@ export default function PropertyPage() {
   useEffect(() => {
     const getUser = async () => {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) window.location.href = '/'
+      if (!user) router.push('/')
     }
     getUser()
     fetchProperty()
@@ -1287,13 +1288,13 @@ const fetchMors = async () => {
     <div className="min-h-screen bg-gray-100">
       <nav className="bg-white shadow-sm px-6 py-4 flex justify-between items-center">
         <div className="flex items-center gap-4">
-          <button onClick={() => window.location.href = '/dashboard'} className="text-sm text-blue-600 hover:underline">
+          <button onClick={() => router.push('/dashboard')} className="text-sm text-blue-600 hover:underline">
             ← Back to Dashboard
           </button>
           <h1 className="text-xl font-bold text-gray-800">{property.name}</h1>
           <span className="text-sm text-gray-500">{property.companies?.name}</span>
         </div>
-        <button onClick={async () => { await supabase.auth.signOut(); window.location.href = '/' }} className="text-sm text-gray-500 hover:text-gray-700">
+        <button onClick={async () => { await supabase.auth.signOut(); router.push('/') }} className="text-sm text-gray-500 hover:text-gray-700">
           Sign Out
         </button>
       </nav>
