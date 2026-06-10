@@ -60,6 +60,8 @@ function formatDate(dateStr: string): string {
 }
 
 interface Reminder {
+  morId: string
+  reminderType: string
   propertyId: string
   propertyName: string
   companyName: string
@@ -206,9 +208,13 @@ export async function GET(request: NextRequest) {
         scheduledSoon,
       })
 
+      const morId: string = (mor as any).id
+
       // Response deadline reminders.
       if (isOverdue) {
         reminders.push({
+          morId,
+          reminderType: 'response_overdue',
           propertyId,
           propertyName,
           companyName,
@@ -217,6 +223,8 @@ export async function GET(request: NextRequest) {
         })
       } else if (responseDueSoon) {
         reminders.push({
+          morId,
+          reminderType: 'response_due_soon',
           propertyId,
           propertyName,
           companyName,
@@ -228,6 +236,8 @@ export async function GET(request: NextRequest) {
       // Scheduled MOR reminder (any MOR scheduled within the next 30 days).
       if (scheduledSoon) {
         reminders.push({
+          morId,
+          reminderType: 'mor_scheduled_soon',
           propertyId,
           propertyName,
           companyName,
@@ -237,11 +247,38 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Send one email per reminder to all super_admins.
+    // Send one email per reminder to all super_admins, skipping any reminder of
+    // the same type already sent for the same MOR in the last 6 days (so each
+    // reminder type sends at most once per week per MOR).
+    const sixDaysAgo = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString()
+
     let sent = 0
+    let skipped = 0
     const errors: string[] = []
     for (const reminder of reminders) {
       try {
+        const { data: existing, error: existingError } = await supabaseAdmin
+          .from('sent_reminders')
+          .select('id')
+          .eq('mor_id', reminder.morId)
+          .eq('reminder_type', reminder.reminderType)
+          .gte('sent_at', sixDaysAgo)
+          .limit(1)
+
+        if (existingError) {
+          console.error('[send-reminders] Error checking sent_reminders:', existingError)
+          throw new Error(existingError.message)
+        }
+
+        if (existing && existing.length > 0) {
+          console.log('[send-reminders] Skipping (already sent in last 6 days):', {
+            morId: reminder.morId,
+            reminderType: reminder.reminderType,
+          })
+          skipped++
+          continue
+        }
+
         await resend.emails.send({
           from: 'MOR Inspection Manager <onboarding@resend.dev>',
           to: recipients,
@@ -249,6 +286,13 @@ export async function GET(request: NextRequest) {
           html: buildEmailHtml(reminder),
         })
         sent++
+
+        const { error: insertError } = await supabaseAdmin
+          .from('sent_reminders')
+          .insert([{ mor_id: reminder.morId, reminder_type: reminder.reminderType }])
+        if (insertError) {
+          console.error('[send-reminders] Error recording sent reminder:', insertError)
+        }
       } catch (err: any) {
         errors.push(`${reminder.propertyName} (${reminder.deadlineLabel}): ${err.message}`)
       }
@@ -257,6 +301,7 @@ export async function GET(request: NextRequest) {
     console.log('[send-reminders] Summary:', {
       remindersFound: reminders.length,
       sent,
+      skipped,
       recipients: recipients.length,
       errors,
     })
@@ -265,6 +310,7 @@ export async function GET(request: NextRequest) {
       success: true,
       remindersFound: reminders.length,
       sent,
+      skipped,
       recipients: recipients.length,
       errors,
     })
