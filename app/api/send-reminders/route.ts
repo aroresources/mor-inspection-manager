@@ -191,57 +191,49 @@ export async function GET(request: NextRequest) {
       const responseDue = toDateOnly((mor as any).response_due_date)
       const morDate = toDateOnly((mor as any).mor_date)
 
+      // Range-based checks (YYYY-MM-DD strings compare correctly with </<=).
+      const isOverdue = responseDue !== null && responseDue < today
+      const responseDueSoon = responseDue !== null && responseDue >= today && responseDue <= in7Days
+      const scheduledSoon = morDate !== null && morDate >= today && morDate <= in30Days
+
       console.log('[send-reminders] Checking MOR:', {
         morId: (mor as any).id,
         property: propertyName,
         responseDue,
         morDate,
-        overdue: responseDue ? responseDue < today : false,
-        responseDueIn7: responseDue === in7Days,
-        scheduledIn30: morDate === in30Days,
-        scheduledIn7: morDate === in7Days,
+        isOverdue,
+        responseDueSoon,
+        scheduledSoon,
       })
 
       // Response deadline reminders.
-      if (responseDue) {
-        if (responseDue < today) {
-          reminders.push({
-            propertyId,
-            propertyName,
-            companyName,
-            deadlineLabel: 'MOR response is OVERDUE',
-            date: responseDue,
-          })
-        } else if (responseDue === in7Days) {
-          reminders.push({
-            propertyId,
-            propertyName,
-            companyName,
-            deadlineLabel: 'MOR response is due in 7 days',
-            date: responseDue,
-          })
-        }
+      if (isOverdue) {
+        reminders.push({
+          propertyId,
+          propertyName,
+          companyName,
+          deadlineLabel: 'MOR response is OVERDUE',
+          date: responseDue!,
+        })
+      } else if (responseDueSoon) {
+        reminders.push({
+          propertyId,
+          propertyName,
+          companyName,
+          deadlineLabel: 'MOR response is due within 7 days',
+          date: responseDue!,
+        })
       }
 
-      // Scheduled MOR reminders.
-      if (morDate) {
-        if (morDate === in30Days) {
-          reminders.push({
-            propertyId,
-            propertyName,
-            companyName,
-            deadlineLabel: 'MOR is scheduled in 30 days',
-            date: morDate,
-          })
-        } else if (morDate === in7Days) {
-          reminders.push({
-            propertyId,
-            propertyName,
-            companyName,
-            deadlineLabel: 'MOR is scheduled in 7 days',
-            date: morDate,
-          })
-        }
+      // Scheduled MOR reminder (any MOR scheduled within the next 30 days).
+      if (scheduledSoon) {
+        reminders.push({
+          propertyId,
+          propertyName,
+          companyName,
+          deadlineLabel: 'MOR is scheduled within 30 days',
+          date: morDate!,
+        })
       }
     }
 
