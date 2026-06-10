@@ -6,7 +6,21 @@ import jsPDF from 'jspdf'
 import JSZip from 'jszip'
 import { saveAs } from 'file-saver'
 import { useToast } from '../../components/ToastProvider'
-import { parseDate, formatDate } from '../../../lib/dateUtils'
+import { parseDate } from '../../../lib/dateUtils'
+
+// Consistent date display: parse the YYYY-MM-DD string as local midnight and
+// format in the local timezone so the same calendar day always renders.
+const formatDate = (dateStr: string | null) => {
+  if (!dateStr) return '—'
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric'
+  })
+}
+
+// Format a UTC-based Date object (e.g. from parseDate) through formatDate by
+// first reducing it to its YYYY-MM-DD parts.
+const formatDateObj = (date: Date | null) =>
+  date ? formatDate(date.toISOString().slice(0, 10)) : '—'
 
 function DocumentsTab({ propertyId, morId }: any) {
   const { toast } = useToast()
@@ -989,7 +1003,7 @@ Corrective Action: ${f.corrective_action || ''}`
       {deadline && (
         <div className={`rounded-lg p-4 ${daysLeft !== null && daysLeft < 0 ? 'bg-red-50 border border-red-200' : daysLeft !== null && daysLeft <= 7 ? 'bg-yellow-50 border border-yellow-200' : 'bg-blue-50 border border-blue-200'}`}>
           <p className={`text-sm font-medium ${daysLeft !== null && daysLeft < 0 ? 'text-red-700' : daysLeft !== null && daysLeft <= 7 ? 'text-yellow-700' : 'text-blue-700'}`}>
-            {daysLeft !== null && daysLeft < 0 ? `⚠️ Response deadline was ${Math.abs(daysLeft)} days ago!` : daysLeft === 0 ? '⚠️ Response due today!' : `📅 Response deadline: ${deadline.toLocaleDateString('en-US', { timeZone: 'UTC' })} (${daysLeft} days remaining)`}
+            {daysLeft !== null && daysLeft < 0 ? `⚠️ Response deadline was ${Math.abs(daysLeft)} days ago!` : daysLeft === 0 ? '⚠️ Response due today!' : `📅 Response deadline: ${formatDateObj(deadline)} (${daysLeft} days remaining)`}
           </p>
         </div>
       )}
@@ -1268,7 +1282,7 @@ const fetchMors = async () => {
   const getCurrentMorStatus = () => {
     if (!currentMor || currentMor.status !== 'Active' || !currentMor.mor_date) return null
     const morDate = parseDate(currentMor.mor_date)!
-    const dateStr = morDate.toLocaleDateString('en-US', { timeZone: 'UTC' })
+    const dateStr = formatDate(currentMor.mor_date)
     const now = new Date()
     const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
     if (morDate.getTime() >= todayUTC) {

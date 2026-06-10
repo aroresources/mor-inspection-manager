@@ -6,6 +6,30 @@ import { supabase } from '../../lib/supabase'
 import { useToast } from '../components/ToastProvider'
 import { parseDate } from '../../lib/dateUtils'
 
+// Consistent date display: parse the YYYY-MM-DD string as local midnight and
+// format in the local timezone so the same calendar day always renders.
+const formatDate = (dateStr: string | null) => {
+  if (!dateStr) return '—'
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric'
+  })
+}
+
+// Format a UTC-based Date object (e.g. from parseDate / addMonthsUTC) through
+// formatDate by first reducing it to its YYYY-MM-DD parts.
+const formatDateObj = (date: Date | null) =>
+  date ? formatDate(date.toISOString().slice(0, 10)) : '—'
+
+// Add `months` months to a UTC date without timezone drift, clamping the day to
+// the target month's length (e.g. Jan 31 + 1 month -> Feb 28, not Mar 3).
+const addMonthsUTC = (date: Date, months: number) => {
+  const year = date.getUTCFullYear()
+  const month = date.getUTCMonth()
+  const day = date.getUTCDate()
+  const daysInTarget = new Date(Date.UTC(year, month + months + 1, 0)).getUTCDate()
+  return new Date(Date.UTC(year, month + months, Math.min(day, daysInTarget)))
+}
+
 export default function Dashboard() {
   const router = useRouter()
   const { toast, confirm } = useToast()
@@ -345,9 +369,7 @@ export default function Dashboard() {
     // Management/ownership change: when set and no MOR is actively scheduled,
     // the next MOR is due 6 months from the change date
     if (property.management_change && property.management_change_date && !getActiveMorDate(property)) {
-      const changeDate = parseDate(property.management_change_date)!
-      changeDate.setUTCMonth(changeDate.getUTCMonth() + 6)
-      return changeDate
+      return addMonthsUTC(parseDate(property.management_change_date)!, 6)
     }
 
     if (!property.last_mor_date) return null
@@ -374,9 +396,7 @@ export default function Dashboard() {
       }
     }
 
-    const nextDate = new Date(lastMor)
-    nextDate.setUTCMonth(nextDate.getUTCMonth() + monthsToAdd)
-    return nextDate
+    return addMonthsUTC(lastMor, monthsToAdd)
   }
 
   const getMorUrgency = (nextDate: any) => {
@@ -407,7 +427,7 @@ export default function Dashboard() {
     const activeMor = getActiveMor(property)
     if (!activeMor || !activeMor.mor_date) return null
     const morDate = parseDate(activeMor.mor_date)!
-    const dateStr = morDate.toLocaleDateString('en-US', { timeZone: 'UTC' })
+    const dateStr = formatDate(activeMor.mor_date)
     const now = new Date()
     const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
     if (morDate.getTime() >= todayUTC) {
@@ -426,12 +446,12 @@ export default function Dashboard() {
     if (!nextMor) return { label: 'No MOR date recorded', classes: 'bg-gray-100 text-gray-400' }
     const daysUntil = Math.ceil((nextMor.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
     if (property.management_change && property.management_change_date) {
-      return { label: `📅 Mgmt Change - MOR Due: ${nextMor.toLocaleDateString('en-US', { timeZone: 'UTC' })} (${daysUntil} days)`, classes: 'bg-orange-100 text-orange-700' }
+      return { label: `📅 Mgmt Change - MOR Due: ${formatDateObj(nextMor)} (${daysUntil} days)`, classes: 'bg-orange-100 text-orange-700' }
     }
     const urgency = getMorUrgency(nextMor)
     const label = urgency === 'overdue'
       ? `⚠️ MOR overdue by ${Math.abs(daysUntil)} days`
-      : `📅 Next MOR due: ${nextMor.toLocaleDateString('en-US', { timeZone: 'UTC' })} (${daysUntil} days)`
+      : `📅 Next MOR due: ${formatDateObj(nextMor)} (${daysUntil} days)`
     return { label, classes: urgencyClasses(urgency) }
   }
 
@@ -442,7 +462,7 @@ export default function Dashboard() {
     const daysUntil = Math.ceil((responseDue.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
     const label = urgency === 'overdue'
       ? `⚠️ Response overdue by ${Math.abs(daysUntil)} days`
-      : `📝 Response Due: ${responseDue.toLocaleDateString('en-US', { timeZone: 'UTC' })} (${daysUntil} days)`
+      : `📝 Response Due: ${formatDateObj(responseDue)} (${daysUntil} days)`
     return { label, classes: urgencyClasses(urgency) }
   }
 
@@ -545,8 +565,7 @@ export default function Dashboard() {
   // Management change where the 6-month MOR window falls within 90 days
   const isMgmtChangeDue = (p: any) => {
     if (!p.management_change || !p.management_change_date) return false
-    const window = parseDate(p.management_change_date)!
-    window.setUTCMonth(window.getUTCMonth() + 6)
+    const window = addMonthsUTC(parseDate(p.management_change_date)!, 6)
     return (daysUntil(window) as number) <= 90
   }
 
@@ -608,8 +627,7 @@ export default function Dashboard() {
 
   const exportToExcel = () => {
     if (filtered.length === 0) { toast('No properties to export.', 'warning'); return }
-    const fmt = (d: Date | null) =>
-      d ? d.toLocaleDateString('en-US', { timeZone: 'UTC' }) : ''
+    const fmt = (d: Date | null) => (d ? formatDateObj(d) : '')
     const headers = ['Property Name', 'Company', 'Address', 'Contract Type', 'Risk Classification', 'Last MOR Rating', 'Scheduled MOR Date', 'Next MOR Due', 'Response Due By']
     const rows = filtered.map((p: any) => ({
       'Property Name': p.name || '',
@@ -972,7 +990,7 @@ export default function Dashboard() {
                 const daysUntil = Math.ceil((nextMor.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
                 if (property.management_change && property.management_change_date) return (
                   <div className="mt-3 text-xs px-2 py-1 rounded bg-orange-100 text-orange-700">
-                    📅 Mgmt Change - MOR Due: {nextMor.toLocaleDateString('en-US', { timeZone: 'UTC' })} ({daysUntil} days)
+                    📅 Mgmt Change - MOR Due: {formatDateObj(nextMor)} ({daysUntil} days)
                   </div>
                 )
                 const urgency = getMorUrgency(nextMor)
@@ -985,7 +1003,7 @@ export default function Dashboard() {
                   }`}>
                     {urgency === 'overdue'
                       ? `⚠️ MOR overdue by ${Math.abs(daysUntil)} days`
-                      : `📅 Next MOR due: ${nextMor.toLocaleDateString('en-US', { timeZone: 'UTC' })} (${daysUntil} days)`
+                      : `📅 Next MOR due: ${formatDateObj(nextMor)} (${daysUntil} days)`
                     }
                   </div>
                 )
@@ -1009,7 +1027,7 @@ export default function Dashboard() {
                   }`}>
                     {urgency === 'overdue'
                       ? `⚠️ Response overdue by ${Math.abs(daysUntil)} days`
-                      : `📝 Response Due: ${responseDue.toLocaleDateString('en-US', { timeZone: 'UTC' })} (${daysUntil} days)`
+                      : `📝 Response Due: ${formatDateObj(responseDue)} (${daysUntil} days)`
                     }
                   </div>
                 )
