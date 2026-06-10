@@ -132,6 +132,7 @@ export async function GET(request: NextRequest) {
     const today = easternDateString(0)
     const in7Days = easternDateString(7)
     const in30Days = easternDateString(30)
+    console.log('[send-reminders] Date windows:', { today, in7Days, in30Days })
 
     // Recipients: every super_admin with an email address.
     const { data: admins, error: adminsError } = await supabaseAdmin
@@ -139,13 +140,21 @@ export async function GET(request: NextRequest) {
       .select('email')
       .eq('role', 'super_admin')
 
-    if (adminsError) throw new Error(adminsError.message)
+    if (adminsError) {
+      console.error('[send-reminders] Error querying super_admin profiles:', adminsError)
+      throw new Error(adminsError.message)
+    }
+
+    console.log('[send-reminders] super_admin profiles found:', admins?.length ?? 0)
 
     const recipients = (admins || [])
       .map((a: { email: string | null }) => a.email)
       .filter((e): e is string => !!e)
 
+    console.log('[send-reminders] super_admin recipients with an email:', recipients.length, recipients)
+
     if (recipients.length === 0) {
+      console.log('[send-reminders] No super_admin recipients found — exiting without sending.')
       return NextResponse.json({ message: 'No super_admin recipients found.', sent: 0 })
     }
 
@@ -155,7 +164,12 @@ export async function GET(request: NextRequest) {
       .select('id, status, mor_date, response_due_date, property_id, properties(id, name, companies(name))')
       .eq('status', 'Active')
 
-    if (morsError) throw new Error(morsError.message)
+    if (morsError) {
+      console.error('[send-reminders] Error querying active MORs:', morsError)
+      throw new Error(morsError.message)
+    }
+
+    console.log('[send-reminders] Active MORs found:', mors?.length ?? 0)
 
     const reminders: Reminder[] = []
 
@@ -176,6 +190,17 @@ export async function GET(request: NextRequest) {
 
       const responseDue = toDateOnly((mor as any).response_due_date)
       const morDate = toDateOnly((mor as any).mor_date)
+
+      console.log('[send-reminders] Checking MOR:', {
+        morId: (mor as any).id,
+        property: propertyName,
+        responseDue,
+        morDate,
+        overdue: responseDue ? responseDue < today : false,
+        responseDueIn7: responseDue === in7Days,
+        scheduledIn30: morDate === in30Days,
+        scheduledIn7: morDate === in7Days,
+      })
 
       // Response deadline reminders.
       if (responseDue) {
@@ -236,6 +261,13 @@ export async function GET(request: NextRequest) {
         errors.push(`${reminder.propertyName} (${reminder.deadlineLabel}): ${err.message}`)
       }
     }
+
+    console.log('[send-reminders] Summary:', {
+      remindersFound: reminders.length,
+      sent,
+      recipients: recipients.length,
+      errors,
+    })
 
     return NextResponse.json({
       success: true,
