@@ -9,8 +9,13 @@
 //   SUPABASE_SERVICE_ROLE_KEY - Supabase service role key (bypasses RLS so the
 //                               cron can read every property / MOR / profile)
 //   CRON_SECRET               - Shared secret. Vercel cron sends it as
-//                               "Authorization: Bearer <CRON_SECRET>"; the route
-//                               rejects any request that doesn't match.
+//                               "Authorization: Bearer <CRON_SECRET>".
+//
+// Authentication (either one grants access):
+//   1. CRON_SECRET in the Authorization header (used by the Vercel cron job).
+//   2. A valid Supabase session access token in the Authorization header
+//      belonging to a super_admin user (lets super admins trigger it manually
+//      from the app for testing).
 
 import { NextRequest, NextResponse } from 'next/server'
 import { Resend } from 'resend'
@@ -93,10 +98,33 @@ function buildEmailHtml(r: Reminder): string {
   `
 }
 
+// Authorize a request via either the CRON_SECRET (cron job) or a valid Supabase
+// session token belonging to a super_admin (manual trigger from the app).
+async function isAuthorized(request: NextRequest): Promise<boolean> {
+  const authHeader = request.headers.get('authorization') || ''
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
+  if (!token) return false
+
+  // 1) Cron job: the secret matches exactly.
+  if (process.env.CRON_SECRET && token === process.env.CRON_SECRET) {
+    return true
+  }
+
+  // 2) Manual trigger: the token is a valid Supabase session for a super_admin.
+  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token)
+  if (error || !user) return false
+
+  const { data: profile } = await supabaseAdmin
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single()
+
+  return profile?.role === 'super_admin'
+}
+
 export async function GET(request: NextRequest) {
-  // Only the Vercel cron job (which forwards the CRON_SECRET) may call this.
-  const authHeader = request.headers.get('authorization')
-  if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!(await isAuthorized(request))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

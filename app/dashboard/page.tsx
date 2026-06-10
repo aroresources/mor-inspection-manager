@@ -34,6 +34,7 @@ export default function Dashboard() {
   const [deleteCompanyModal, setDeleteCompanyModal] = useState<any>(null)
   const [attentionFilter, setAttentionFilter] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [testingReminders, setTestingReminders] = useState(false)
 
   useEffect(() => {
     const saved = localStorage.getItem('dashboardViewMode')
@@ -255,6 +256,37 @@ export default function Dashboard() {
     await fetchCompanies()
     await fetchProperties()
     toast(`Imported ${importedCount} ${importedCount === 1 ? 'property' : 'properties'}, skipped ${skipped} ${skipped === 1 ? 'duplicate' : 'duplicates'}.`, 'success')
+  }
+
+  // Super-admin-only: manually trigger the reminder cron, authenticating with
+  // the current Supabase session token.
+  const testReminders = async () => {
+    setTestingReminders(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        toast('Your session has expired. Please sign in again.', 'error')
+        return
+      }
+      const res = await fetch('/api/send-reminders', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+      const result = await res.json()
+      if (!res.ok) {
+        toast('Failed to send reminders: ' + (result.error || res.statusText), 'error')
+        return
+      }
+      toast(
+        `Reminders sent: ${result.sent} email${result.sent === 1 ? '' : 's'} to ` +
+        `${result.recipients} super admin${result.recipients === 1 ? '' : 's'} ` +
+        `(${result.remindersFound} reminder${result.remindersFound === 1 ? '' : 's'} found).`,
+        'success'
+      )
+    } catch (err: any) {
+      toast('Failed to send reminders: ' + err.message, 'error')
+    } finally {
+      setTestingReminders(false)
+    }
   }
 
   const getActiveMor = (property: any) => {
@@ -573,6 +605,16 @@ export default function Dashboard() {
       <nav className="bg-white shadow-sm px-6 py-4 flex justify-between items-center">
         <h1 className="text-xl font-bold text-gray-800">MOR Inspection Manager</h1>
         <div className="flex items-center gap-4">
+          {userRole === 'super_admin' && (
+            <button
+              onClick={testReminders}
+              disabled={testingReminders}
+              className="text-sm text-gray-600 hover:text-gray-800 disabled:opacity-50"
+              title="Send deadline reminder emails to super admins now"
+            >
+              {testingReminders ? 'Sending…' : '🔔 Test Reminders'}
+            </button>
+          )}
           <button
             onClick={() => router.push('/templates')}
             className="text-sm text-gray-600 hover:text-gray-800"
