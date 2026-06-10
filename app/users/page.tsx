@@ -76,8 +76,12 @@ const inviteUser = async (e: any) => {
     }
   }
   const updateUserRole = async (userId: any, role: any) => {
-    await supabase.from('profiles').update({ role }).eq('id', userId)
-    setUsers(users.map(u => u.id === userId ? { ...u, role } : u))
+    // Super admins implicitly have access to all companies, so clear company_id
+    const update = role === 'super_admin' ? { role, company_id: null } : { role }
+    await supabase.from('profiles').update(update).eq('id', userId)
+    setUsers(users.map(u => u.id === userId
+      ? { ...u, role, ...(role === 'super_admin' ? { company_id: null, companies: null } : {}) }
+      : u))
   }
 
   const updateUserCompany = async (userId: any, company_id: any) => {
