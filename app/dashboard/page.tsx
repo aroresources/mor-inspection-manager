@@ -400,11 +400,28 @@ export default function Dashboard() {
     risk === 'Unknown' ? 'bg-gray-100 text-gray-700' :
     'bg-green-100 text-green-700'
 
-  const getMorCell = (property: any) => {
-    const activeMorDate = getActiveMorDate(property)
-    if (activeMorDate) {
-      return { label: `📋 MOR Scheduled: ${activeMorDate.toLocaleDateString('en-US', { timeZone: 'UTC' })}`, classes: 'bg-blue-100 text-blue-700' }
+  // Status label for an Active MOR that has a scheduled date set.
+  // Returns null when no MOR date is set, so callers fall through to the
+  // calculated "Next MOR Due" logic.
+  const getActiveMorLabel = (property: any) => {
+    const activeMor = getActiveMor(property)
+    if (!activeMor || !activeMor.mor_date) return null
+    const morDate = parseDate(activeMor.mor_date)!
+    const dateStr = morDate.toLocaleDateString('en-US', { timeZone: 'UTC' })
+    const now = new Date()
+    const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+    if (morDate.getTime() >= todayUTC) {
+      return { label: `📋 Scheduled - ${dateStr}`, classes: 'bg-blue-100 text-blue-700' }
     }
+    if (!activeMor.response_due_date) {
+      return { label: `⏳ Awaiting Report - ${dateStr}`, classes: 'bg-orange-100 text-orange-700' }
+    }
+    return { label: `📋 MOR Date - ${dateStr}`, classes: 'bg-green-100 text-green-700' }
+  }
+
+  const getMorCell = (property: any) => {
+    const activeLabel = getActiveMorLabel(property)
+    if (activeLabel) return activeLabel
     const nextMor = getNextMorDate(property)
     if (!nextMor) return { label: 'No MOR date recorded', classes: 'bg-gray-100 text-gray-400' }
     const daysUntil = Math.ceil((nextMor.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
@@ -942,10 +959,10 @@ export default function Dashboard() {
               </div>
 
               {(() => {
-                const activeMorDate = getActiveMorDate(property)
-                if (activeMorDate) return (
-                  <div className="mt-3 text-xs px-2 py-1 rounded bg-blue-100 text-blue-700">
-                    📋 MOR Scheduled: {activeMorDate.toLocaleDateString('en-US', { timeZone: 'UTC' })}
+                const activeLabel = getActiveMorLabel(property)
+                if (activeLabel) return (
+                  <div className={`mt-3 text-xs px-2 py-1 rounded ${activeLabel.classes}`}>
+                    {activeLabel.label}
                   </div>
                 )
                 const nextMor = getNextMorDate(property)

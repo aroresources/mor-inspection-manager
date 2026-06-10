@@ -1184,6 +1184,8 @@ export default function PropertyPage() {
   const [currentMor, setCurrentMor] = useState<any>(null)
   const [showNewMor, setShowNewMor] = useState(false)
   const [newMorDate, setNewMorDate] = useState('')
+  const [showEditMorDate, setShowEditMorDate] = useState(false)
+  const [editMorDate, setEditMorDate] = useState('')
   const [companies, setCompanies] = useState<any[]>([])
 
   useEffect(() => {
@@ -1261,6 +1263,35 @@ const fetchMors = async () => {
     }
   }
 
+  // Status label for the currently selected Active MOR with a scheduled date.
+  // Returns null when the MOR isn't Active or has no date (no label shown).
+  const getCurrentMorStatus = () => {
+    if (!currentMor || currentMor.status !== 'Active' || !currentMor.mor_date) return null
+    const morDate = parseDate(currentMor.mor_date)!
+    const dateStr = morDate.toLocaleDateString('en-US', { timeZone: 'UTC' })
+    const now = new Date()
+    const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+    if (morDate.getTime() >= todayUTC) {
+      return { label: `📋 Scheduled - ${dateStr}`, classes: 'bg-blue-100 text-blue-700' }
+    }
+    if (!currentMor.response_due_date) {
+      return { label: `⏳ Awaiting Report - ${dateStr}`, classes: 'bg-orange-100 text-orange-700' }
+    }
+    return { label: `📋 MOR Date - ${dateStr}`, classes: 'bg-green-100 text-green-700' }
+  }
+
+  const saveMorDate = async () => {
+    if (!currentMorId) return
+    const { error } = await supabase.from('mors').update({ mor_date: editMorDate || null }).eq('id', currentMorId)
+    if (error) {
+      toast('Error updating MOR date: ' + error.message, 'error')
+      return
+    }
+    setShowEditMorDate(false)
+    await fetchMors()
+    toast('MOR date updated.', 'success')
+  }
+
   const saveProperty = async () => {
     setSaving(true)
     const { companies, created_at, ...updateData } = form
@@ -1318,6 +1349,21 @@ const fetchMors = async () => {
                 </option>
               ))}
             </select>
+            {currentMorId && (
+              <button
+                onClick={() => { setEditMorDate(currentMor?.mor_date || ''); setShowEditMorDate(true) }}
+                title="Edit MOR date"
+                className="text-gray-400 hover:text-blue-600 text-base"
+              >
+                ✏️
+              </button>
+            )}
+            {(() => {
+              const status = getCurrentMorStatus()
+              return status ? (
+                <span className={`text-xs px-2 py-1 rounded ${status.classes}`}>{status.label}</span>
+              ) : null
+            })()}
             {currentMorId && (
               <button
                 onClick={() => deleteMor(currentMorId)}
@@ -1636,7 +1682,30 @@ const fetchMors = async () => {
               </div>
             </div>
           </div>
-        )}  
+        )}
+
+        {showEditMorDate && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md">
+              <h3 className="text-lg font-bold mb-4">Edit MOR Date</h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Scheduled MOR Date</label>
+                  <input
+                    type="date"
+                    value={editMorDate}
+                    onChange={(e: any) => setEditMorDate(e.target.value)}
+                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 justify-end mt-4">
+                <button onClick={() => setShowEditMorDate(false)} className="px-4 py-2 text-sm text-gray-600">Cancel</button>
+                <button onClick={saveMorDate} className="bg-blue-600 text-white px-4 py-2 rounded text-sm">Save</button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   )
