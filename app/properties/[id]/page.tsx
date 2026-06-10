@@ -6,21 +6,7 @@ import jsPDF from 'jspdf'
 import JSZip from 'jszip'
 import { saveAs } from 'file-saver'
 import { useToast } from '../../components/ToastProvider'
-import { parseDate } from '../../../lib/dateUtils'
-
-// Consistent date display: parse the YYYY-MM-DD string as local midnight and
-// format in the local timezone so the same calendar day always renders.
-const formatDate = (dateStr: string | null) => {
-  if (!dateStr) return '—'
-  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric'
-  })
-}
-
-// Format a UTC-based Date object (e.g. from parseDate) through formatDate by
-// first reducing it to its YYYY-MM-DD parts.
-const formatDateObj = (date: Date | null) =>
-  date ? formatDate(date.toISOString().slice(0, 10)) : '—'
+import { parseDate, formatDate, formatDateObj } from '../../../lib/dateUtils'
 
 function DocumentsTab({ propertyId, morId }: any) {
   const { toast } = useToast()

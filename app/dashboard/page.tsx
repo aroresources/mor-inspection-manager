@@ -4,21 +4,7 @@ import { useRouter } from 'next/navigation'
 import * as XLSX from 'xlsx'
 import { supabase } from '../../lib/supabase'
 import { useToast } from '../components/ToastProvider'
-import { parseDate } from '../../lib/dateUtils'
-
-// Consistent date display: parse the YYYY-MM-DD string as local midnight and
-// format in the local timezone so the same calendar day always renders.
-const formatDate = (dateStr: string | null) => {
-  if (!dateStr) return '—'
-  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric'
-  })
-}
-
-// Format a UTC-based Date object (e.g. from parseDate / addMonthsUTC) through
-// formatDate by first reducing it to its YYYY-MM-DD parts.
-const formatDateObj = (date: Date | null) =>
-  date ? formatDate(date.toISOString().slice(0, 10)) : '—'
+import { parseDate, formatDate, formatDateObj } from '../../lib/dateUtils'
 
 // Add `months` months to a UTC date without timezone drift, clamping the day to
 // the target month's length (e.g. Jan 31 + 1 month -> Feb 28, not Mar 3).
