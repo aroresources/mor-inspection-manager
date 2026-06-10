@@ -1325,7 +1325,7 @@ const fetchMors = async () => {
           <h1 className="text-xl font-bold text-gray-800">{property.name}</h1>
           <span className="text-sm text-gray-500">{property.companies?.name}</span>
         </div>
-        <button onClick={async () => { await supabase.auth.signOut(); router.push('/') }} className="text-sm text-gray-500 hover:text-gray-700">
+        <button onClick={async () => { await supabase.auth.signOut(); window.location.href = '/' }} className="text-sm text-gray-500 hover:text-gray-700">
           Sign Out
         </button>
       </nav>
