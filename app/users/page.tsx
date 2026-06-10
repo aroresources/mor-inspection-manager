@@ -177,7 +177,9 @@ const inviteUser = async (e: any) => {
                       <p className="text-xs text-gray-500">{user.email}</p>
                     </div>
                     <div className="flex items-center gap-3">
-                      {user.companies?.name ? (
+                      {user.role === 'super_admin' ? (
+                        <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700">All Companies</span>
+                      ) : user.companies?.name ? (
                         <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700">{user.companies.name}</span>
                       ) : (
                         <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-500">No Company</span>
@@ -200,16 +202,22 @@ const inviteUser = async (e: any) => {
                     </div>
                     <div>
                       <label className="text-xs text-gray-500">Company Access</label>
-                      <select
-                        value={user.company_id || ''}
-                        onChange={(e: any) => updateUserCompany(user.id, e.target.value)}
-                        className="w-full mt-1 border border-gray-200 rounded px-2 py-1 text-xs"
-                      >
-                        <option value="">No Company</option>
-                        {companies.map(c => (
-                          <option key={c.id} value={c.id}>{c.name}</option>
-                        ))}
-                      </select>
+                      {user.role === 'super_admin' ? (
+                        <p className="w-full mt-1 border border-gray-200 rounded px-2 py-1 text-xs bg-gray-50 text-gray-600">
+                          All Companies (Super Admin)
+                        </p>
+                      ) : (
+                        <select
+                          value={user.company_id || ''}
+                          onChange={(e: any) => updateUserCompany(user.id, e.target.value)}
+                          className="w-full mt-1 border border-gray-200 rounded px-2 py-1 text-xs"
+                        >
+                          <option value="">No Company</option>
+                          {companies.map(c => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                          ))}
+                        </select>
+                      )}
                     </div>
                   </div>
                   {user.role === 'property_manager' && (

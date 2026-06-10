@@ -75,6 +75,17 @@ export default function Dashboard() {
       .eq('id', user.id)
       .single()
 
+    // A super_admin always sees every property, regardless of their company_id
+    if (profile?.role === 'super_admin') {
+      setNoAccessMessage(null)
+      const { data } = await supabase
+        .from('properties')
+        .select('*, companies(name), mors(mor_date, response_due_date, status, created_at)')
+        .order('name')
+      if (data) setProperties(data)
+      return
+    }
+
     // An asset_manager with no company assigned should see no properties
     if (profile?.role === 'asset_manager' && !profile.company_id) {
       setProperties([])
