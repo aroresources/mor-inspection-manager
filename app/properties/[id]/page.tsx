@@ -876,7 +876,8 @@ Corrective Action: ${f.corrective_action || ''}`
     doc.save('MOR-Response-Report.pdf')
   }
 
-  const generateDOCX = async () => {
+  // Build the Word report (shared by the standalone download and the ZIP package).
+  const buildReportDocx = () => {
     // Merge in any responses still pending the debounced save (same as the PDF).
     const findingsWithPending = findings.map((f: any) => ({
       ...f,
@@ -965,8 +966,11 @@ Corrective Action: ${f.corrective_action || ''}`
       children.push(new Paragraph({ children: [new TextRun(`Date: ${new Date().toLocaleDateString()}`)] }))
     }
 
-    const docx = new Document({ sections: [{ children }] })
-    const blob = await Packer.toBlob(docx)
+    return new Document({ sections: [{ children }] })
+  }
+
+  const generateDOCX = async () => {
+    const blob = await Packer.toBlob(buildReportDocx())
     saveAs(blob, 'MOR-Response-Report.docx')
   }
 
@@ -977,97 +981,10 @@ Corrective Action: ${f.corrective_action || ''}`
       response: pendingResponses.current[f.id] ?? f.response,
     }))
     const zip = new JSZip()
-    const doc = new jsPDF()
-    let y = 20
 
-    const addHeader = () => {
-      doc.setFontSize(14)
-      doc.setFont('helvetica', 'bold')
-      doc.text(property.name || 'Property Name', 105, 12, { align: 'center' })
-      doc.setDrawColor(200, 200, 200)
-      doc.line(15, 16, 195, 16)
-    }
-
-    addHeader()
-    doc.setFontSize(10)
-    doc.setFont('helvetica', 'normal')
-    doc.text(`Date Generated: ${new Date().toLocaleDateString()}`, 15, y)
-    y += 6
-    if (property.section8_number) {
-      doc.text(`Section 8 Project Number: ${property.section8_number}`, 15, y)
-      y += 6
-    }
-    if (property.mor_date) {
-      doc.text(`Date of MOR: ${formatDate(property.mor_date)}`, 15, y)
-      y += 6
-    }
-    y += 6
-    doc.line(15, y, 195, y)
-    y += 10
-
-    const introLines = doc.splitTextToSize(introText, 175)
-    doc.text(introLines, 15, y)
-    y += introLines.length * 6 + 10
-    doc.line(15, y, 195, y)
-    y += 10
-
-    findingsWithPending.forEach((finding: any, index: number) => {
-      if (y > 240) { doc.addPage(); y = 20; addHeader(); y += 10 }
-      doc.setFontSize(11)
-      doc.setFont('helvetica', 'bold')
-      doc.text(`Finding ${index + 1}:`, 15, y)
-      y += 7
-      doc.setFontSize(10)
-      doc.setFont('helvetica', 'normal')
-      const findingLines = doc.splitTextToSize(finding.finding || '', 175)
-      findingLines.forEach((line: string) => {
-        if (y > 270) { doc.addPage(); y = 20; addHeader(); y += 10 }
-        doc.text(line, 15, y)
-        y += 6
-      })
-      y += 4
-      if (finding.response) {
-        if (y > 240) { doc.addPage(); y = 20; addHeader(); y += 10 }
-        doc.setFont('helvetica', 'bold')
-        doc.text('Response:', 15, y)
-        y += 6
-        if (y > 240) { doc.addPage(); y = 20; addHeader(); y += 10 }
-        doc.setFont('helvetica', 'normal')
-        const responseLines = doc.splitTextToSize(finding.response, 175)
-        responseLines.forEach((line: string) => {
-          if (y > 270) { doc.addPage(); y = 20; addHeader(); y += 10 }
-          doc.text(line, 15, y)
-          y += 6
-        })
-        y += 4
-      }
-      if (finding.document_url) {
-        doc.setFont('helvetica', 'italic')
-        doc.text(`See attached: Finding_${index + 1}_attachment`, 15, y)
-        doc.setFont('helvetica', 'normal')
-        y += 6
-      }
-      doc.setDrawColor(220, 220, 220)
-      doc.line(15, y, 195, y)
-      y += 10
-    })
-
-    if (signatoryName) {
-      if (y > 220) { doc.addPage(); y = 20; addHeader(); y += 10 }
-      y += 10
-      doc.setFontSize(10)
-      doc.setFont('helvetica', 'normal')
-      doc.text(signatoryName, 15, y)
-      y += 10
-      doc.line(15, y, 100, y)
-      y += 6
-      doc.text('Signature', 15, y)
-      y += 6
-      doc.text(`Date: ${new Date().toLocaleDateString()}`, 15, y)
-    }
-
-    const pdfBlob = doc.output('blob')
-    zip.file('MOR_Response_Report.pdf', pdfBlob)
+    // Word version of the response report (same content as the standalone download).
+    const docxBlob = await Packer.toBlob(buildReportDocx())
+    zip.file('MOR_Response_Report.docx', docxBlob)
 
     for (let i = 0; i < findingsWithPending.length; i++) {
       const finding = findingsWithPending[i]
