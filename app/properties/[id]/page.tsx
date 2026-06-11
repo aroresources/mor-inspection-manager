@@ -821,22 +821,33 @@ Corrective Action: ${f.corrective_action || ''}`
       doc.setFontSize(10)
       doc.setFont('helvetica', 'normal')
       const findingLines = doc.splitTextToSize(finding.finding || '', 175)
-      doc.text(findingLines, 15, y)
-      y += findingLines.length * 6 + 4
+      findingLines.forEach((line: string) => {
+        if (y > 270) { doc.addPage(); y = 20; addHeader(); y += 10 }
+        doc.text(line, 15, y)
+        y += 6
+      })
+      y += 4
       if (finding.assigned_to) {
+        if (y > 270) { doc.addPage(); y = 20; addHeader(); y += 10 }
         doc.setFont('helvetica', 'italic')
         doc.text(`Assigned to: ${finding.assigned_to}`, 15, y)
         doc.setFont('helvetica', 'normal')
         y += 6
       }
       if (finding.response) {
+        if (y > 240) { doc.addPage(); y = 20; addHeader(); y += 10 }
         doc.setFont('helvetica', 'bold')
         doc.text('Response:', 15, y)
         y += 6
+        if (y > 240) { doc.addPage(); y = 20; addHeader(); y += 10 }
         doc.setFont('helvetica', 'normal')
         const responseLines = doc.splitTextToSize(finding.response, 175)
-        doc.text(responseLines, 15, y)
-        y += responseLines.length * 6 + 4
+        responseLines.forEach((line: string) => {
+          if (y > 270) { doc.addPage(); y = 20; addHeader(); y += 10 }
+          doc.text(line, 15, y)
+          y += 6
+        })
+        y += 4
       }
       if (finding.document_url) {
         doc.setFont('helvetica', 'italic')
@@ -916,16 +927,26 @@ Corrective Action: ${f.corrective_action || ''}`
       doc.setFontSize(10)
       doc.setFont('helvetica', 'normal')
       const findingLines = doc.splitTextToSize(finding.finding || '', 175)
-      doc.text(findingLines, 15, y)
-      y += findingLines.length * 6 + 4
+      findingLines.forEach((line: string) => {
+        if (y > 270) { doc.addPage(); y = 20; addHeader(); y += 10 }
+        doc.text(line, 15, y)
+        y += 6
+      })
+      y += 4
       if (finding.response) {
+        if (y > 240) { doc.addPage(); y = 20; addHeader(); y += 10 }
         doc.setFont('helvetica', 'bold')
         doc.text('Response:', 15, y)
         y += 6
+        if (y > 240) { doc.addPage(); y = 20; addHeader(); y += 10 }
         doc.setFont('helvetica', 'normal')
         const responseLines = doc.splitTextToSize(finding.response, 175)
-        doc.text(responseLines, 15, y)
-        y += responseLines.length * 6 + 4
+        responseLines.forEach((line: string) => {
+          if (y > 270) { doc.addPage(); y = 20; addHeader(); y += 10 }
+          doc.text(line, 15, y)
+          y += 6
+        })
+        y += 4
       }
       if (finding.document_url) {
         doc.setFont('helvetica', 'italic')
