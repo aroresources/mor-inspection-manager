@@ -634,8 +634,9 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
 
   const updateFinding = async (id: any, updates: any) => {
     const { error } = await supabase.from('findings').update(updates).eq('id', id)
-    if (error) { toast('Error saving finding: ' + error.message, 'error'); return }
+    if (error) { toast('Error saving finding: ' + error.message, 'error'); return error }
     setFindings(findings => findings.map((f: any) => f.id === id ? { ...f, ...updates } : f))
+    return null
   }
 
   const moveFinding = async (index: any, direction: any) => {
@@ -745,7 +746,28 @@ Corrective Action: ${f.corrective_action || ''}`
     fetchFindings()
   }
 
-  const generatePDF = () => {
+  // Pull findings straight from the DB so any edit just saved on blur (e.g. the
+  // last finding's response) is included, even if local React state is stale.
+  // Also flush the currently focused field so its onBlur save fires first.
+  const getCurrentFindings = async () => {
+    if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur()
+    }
+    const { data, error } = await supabase
+      .from('findings').select('*')
+      .eq('property_id', propertyId).eq('mor_id', morId)
+      .order('created_at')
+    if (error) {
+      console.error('[generate report] failed to fetch findings:', error)
+      toast('Could not load the latest findings. Please try again.', 'error')
+      return null
+    }
+    return [...(data || [])].sort((a: any, b: any) => a.sort_order - b.sort_order)
+  }
+
+  const generatePDF = async () => {
+    const findingsData = await getCurrentFindings()
+    if (!findingsData) return
     const doc = new jsPDF()
     let y = 20
 
@@ -780,7 +802,7 @@ Corrective Action: ${f.corrective_action || ''}`
     doc.line(15, y, 195, y)
     y += 10
 
-    findings.forEach((finding: any, index: number) => {
+    findingsData.forEach((finding: any, index: number) => {
       if (y > 240) { doc.addPage(); y = 20; addHeader(); y += 10 }
       doc.setFontSize(11)
       doc.setFont('helvetica', 'bold')
@@ -835,6 +857,8 @@ Corrective Action: ${f.corrective_action || ''}`
   }
 
   const downloadZip = async () => {
+    const findingsData = await getCurrentFindings()
+    if (!findingsData) return
     const zip = new JSZip()
     const doc = new jsPDF()
     let y = 20
@@ -870,7 +894,7 @@ Corrective Action: ${f.corrective_action || ''}`
     doc.line(15, y, 195, y)
     y += 10
 
-    findings.forEach((finding: any, index: number) => {
+    findingsData.forEach((finding: any, index: number) => {
       if (y > 240) { doc.addPage(); y = 20; addHeader(); y += 10 }
       doc.setFontSize(11)
       doc.setFont('helvetica', 'bold')
@@ -918,8 +942,8 @@ Corrective Action: ${f.corrective_action || ''}`
     const pdfBlob = doc.output('blob')
     zip.file('MOR_Response_Report.pdf', pdfBlob)
 
-    for (let i = 0; i < findings.length; i++) {
-      const finding = findings[i]
+    for (let i = 0; i < findingsData.length; i++) {
+      const finding = findingsData[i]
       if (finding.document_url) {
         try {
           const response = await fetch(finding.document_url)
@@ -1070,12 +1094,25 @@ Corrective Action: ${f.corrective_action || ''}`
                         <input type="file" className="hidden" onChange={async (e: any) => {
                           const file = e.target.files[0]
                           if (!file) return
-                          const filePath = `${propertyId}/findings/${finding.id}/${file.name}`
-                          const { error } = await supabase.storage.from('mor-documents').upload(filePath, file, { upsert: true })
-                          if (!error) {
-                            const { data: urlData } = supabase.storage.from('mor-documents').getPublicUrl(filePath)
-                            await updateFinding(finding.id, { document_url: urlData.publicUrl })
+                          // Sanitize the file name — Supabase storage keys reject spaces and many symbols,
+                          // which previously caused the upload to fail silently.
+                          const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+                          const filePath = `${propertyId}/findings/${finding.id}/${safeName}`
+                          const { error: uploadError } = await supabase.storage.from('mor-documents').upload(filePath, file, { upsert: true })
+                          if (uploadError) {
+                            console.error('[finding upload] storage upload failed:', uploadError)
+                            toast('Error uploading document: ' + uploadError.message, 'error')
+                            return
                           }
+                          const { data: urlData } = supabase.storage.from('mor-documents').getPublicUrl(filePath)
+                          console.log('[finding upload] uploaded to', filePath, '→', urlData.publicUrl)
+                          const updateError = await updateFinding(finding.id, { document_url: urlData.publicUrl })
+                          if (updateError) {
+                            console.error('[finding upload] saving document_url failed:', updateError)
+                            return
+                          }
+                          toast('Document uploaded.', 'success')
+                          e.target.value = ''
                         }} />
                       </label>
                     )}
