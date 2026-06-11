@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '../../../lib/supabase'
 import jsPDF from 'jspdf'
@@ -568,6 +568,28 @@ function FindingTextarea({ value, onSave, ...props }: any) {
   )
 }
 
+// Like FindingTextarea but saves on every keystroke (debounced) instead of on
+// blur, so the parent's findings state stays current as the user types.
+function DebouncedFindingTextarea({ value, onSave, delay = 1000, ...props }: any) {
+  const [local, setLocal] = useState(value || '')
+  const timerRef = useRef<any>(null)
+  useEffect(() => { setLocal(value || '') }, [value])
+  // Cancel any pending save when the component unmounts.
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current) }, [])
+  return (
+    <textarea
+      {...props}
+      value={local}
+      onChange={(e: any) => {
+        const v = e.target.value
+        setLocal(v)
+        if (timerRef.current) clearTimeout(timerRef.current)
+        timerRef.current = setTimeout(() => onSave(v), delay)
+      }}
+    />
+  )
+}
+
 function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, onUpdateMor }: any) {
   const { toast, confirm } = useToast()
   const [findings, setFindings] = useState<any[]>([])
@@ -746,30 +768,7 @@ Corrective Action: ${f.corrective_action || ''}`
     fetchFindings()
   }
 
-  // Pull findings straight from the DB so any edit just saved on blur (e.g. the
-  // last finding's response) is included, even if local React state is stale.
-  // Also flush the currently focused field so its onBlur save fires first.
-  const getCurrentFindings = async () => {
-    if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
-      document.activeElement.blur()
-    }
-    // Give the blur-triggered onBlur save time to complete before reading.
-    await new Promise(resolve => setTimeout(resolve, 500))
-    const { data, error } = await supabase
-      .from('findings').select('*')
-      .eq('property_id', propertyId).eq('mor_id', morId)
-      .order('created_at')
-    if (error) {
-      console.error('[generate report] failed to fetch findings:', error)
-      toast('Could not load the latest findings. Please try again.', 'error')
-      return null
-    }
-    return [...(data || [])].sort((a: any, b: any) => a.sort_order - b.sort_order)
-  }
-
-  const generatePDF = async () => {
-    const findingsData = await getCurrentFindings()
-    if (!findingsData) return
+  const generatePDF = () => {
     const doc = new jsPDF()
     let y = 20
 
@@ -804,7 +803,7 @@ Corrective Action: ${f.corrective_action || ''}`
     doc.line(15, y, 195, y)
     y += 10
 
-    findingsData.forEach((finding: any, index: number) => {
+    findings.forEach((finding: any, index: number) => {
       if (y > 240) { doc.addPage(); y = 20; addHeader(); y += 10 }
       doc.setFontSize(11)
       doc.setFont('helvetica', 'bold')
@@ -859,8 +858,6 @@ Corrective Action: ${f.corrective_action || ''}`
   }
 
   const downloadZip = async () => {
-    const findingsData = await getCurrentFindings()
-    if (!findingsData) return
     const zip = new JSZip()
     const doc = new jsPDF()
     let y = 20
@@ -896,7 +893,7 @@ Corrective Action: ${f.corrective_action || ''}`
     doc.line(15, y, 195, y)
     y += 10
 
-    findingsData.forEach((finding: any, index: number) => {
+    findings.forEach((finding: any, index: number) => {
       if (y > 240) { doc.addPage(); y = 20; addHeader(); y += 10 }
       doc.setFontSize(11)
       doc.setFont('helvetica', 'bold')
@@ -944,8 +941,8 @@ Corrective Action: ${f.corrective_action || ''}`
     const pdfBlob = doc.output('blob')
     zip.file('MOR_Response_Report.pdf', pdfBlob)
 
-    for (let i = 0; i < findingsData.length; i++) {
-      const finding = findingsData[i]
+    for (let i = 0; i < findings.length; i++) {
+      const finding = findings[i]
       if (finding.document_url) {
         try {
           const response = await fetch(finding.document_url)
@@ -1080,7 +1077,7 @@ Corrective Action: ${f.corrective_action || ''}`
                 </div>
                 <div>
                   <label className="text-xs text-gray-500">Written Response</label>
-                  <FindingTextarea value={finding.response || ''} onSave={(v: string) => updateFinding(finding.id, { response: v || null })} rows={3} placeholder="Type your response to this finding here..." className="w-full mt-1 border border-gray-200 rounded px-3 py-2 text-sm" />
+                  <DebouncedFindingTextarea value={finding.response || ''} onSave={(v: string) => updateFinding(finding.id, { response: v || null })} rows={3} placeholder="Type your response to this finding here..." className="w-full mt-1 border border-gray-200 rounded px-3 py-2 text-sm" />
                 </div>
                 <div>
                   <label className="text-xs text-gray-500">Supporting Document</label>
