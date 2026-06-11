@@ -570,7 +570,7 @@ function FindingTextarea({ value, onSave, ...props }: any) {
 
 // Like FindingTextarea but saves on every keystroke (debounced) instead of on
 // blur, so the parent's findings state stays current as the user types.
-function DebouncedFindingTextarea({ value, onSave, delay = 1000, ...props }: any) {
+function DebouncedFindingTextarea({ value, onSave, onType, delay = 1000, ...props }: any) {
   const [local, setLocal] = useState(value || '')
   const timerRef = useRef<any>(null)
   useEffect(() => { setLocal(value || '') }, [value])
@@ -583,6 +583,7 @@ function DebouncedFindingTextarea({ value, onSave, delay = 1000, ...props }: any
       onChange={(e: any) => {
         const v = e.target.value
         setLocal(v)
+        if (onType) onType(v)
         if (timerRef.current) clearTimeout(timerRef.current)
         timerRef.current = setTimeout(() => onSave(v), delay)
       }}
@@ -605,6 +606,9 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
   const [morRating, setMorRating] = useState('')
   const [responseDueDate, setResponseDueDate] = useState(currentMor?.response_due_date || '')
   const [completing, setCompleting] = useState(false)
+  // Tracks the latest typed response per finding id, including values not yet
+  // persisted by the debounced save, so reports can use the most current text.
+  const pendingResponses = useRef<{ [key: string]: string }>({})
 
   useEffect(() => {
     fetchFindings()
@@ -769,6 +773,11 @@ Corrective Action: ${f.corrective_action || ''}`
   }
 
   const generatePDF = () => {
+    // Merge in any responses still pending the debounced save.
+    const findingsWithPending = findings.map((f: any) => ({
+      ...f,
+      response: pendingResponses.current[f.id] ?? f.response,
+    }))
     const doc = new jsPDF()
     let y = 20
 
@@ -803,7 +812,7 @@ Corrective Action: ${f.corrective_action || ''}`
     doc.line(15, y, 195, y)
     y += 10
 
-    findings.forEach((finding: any, index: number) => {
+    findingsWithPending.forEach((finding: any, index: number) => {
       if (y > 240) { doc.addPage(); y = 20; addHeader(); y += 10 }
       doc.setFontSize(11)
       doc.setFont('helvetica', 'bold')
@@ -858,6 +867,11 @@ Corrective Action: ${f.corrective_action || ''}`
   }
 
   const downloadZip = async () => {
+    // Merge in any responses still pending the debounced save.
+    const findingsWithPending = findings.map((f: any) => ({
+      ...f,
+      response: pendingResponses.current[f.id] ?? f.response,
+    }))
     const zip = new JSZip()
     const doc = new jsPDF()
     let y = 20
@@ -893,7 +907,7 @@ Corrective Action: ${f.corrective_action || ''}`
     doc.line(15, y, 195, y)
     y += 10
 
-    findings.forEach((finding: any, index: number) => {
+    findingsWithPending.forEach((finding: any, index: number) => {
       if (y > 240) { doc.addPage(); y = 20; addHeader(); y += 10 }
       doc.setFontSize(11)
       doc.setFont('helvetica', 'bold')
@@ -941,8 +955,8 @@ Corrective Action: ${f.corrective_action || ''}`
     const pdfBlob = doc.output('blob')
     zip.file('MOR_Response_Report.pdf', pdfBlob)
 
-    for (let i = 0; i < findings.length; i++) {
-      const finding = findings[i]
+    for (let i = 0; i < findingsWithPending.length; i++) {
+      const finding = findingsWithPending[i]
       if (finding.document_url) {
         try {
           const response = await fetch(finding.document_url)
@@ -1077,7 +1091,7 @@ Corrective Action: ${f.corrective_action || ''}`
                 </div>
                 <div>
                   <label className="text-xs text-gray-500">Written Response</label>
-                  <DebouncedFindingTextarea value={finding.response || ''} onSave={(v: string) => updateFinding(finding.id, { response: v || null })} rows={3} placeholder="Type your response to this finding here..." className="w-full mt-1 border border-gray-200 rounded px-3 py-2 text-sm" />
+                  <DebouncedFindingTextarea value={finding.response || ''} onType={(v: string) => { pendingResponses.current[finding.id] = v }} onSave={(v: string) => updateFinding(finding.id, { response: v || null })} rows={3} placeholder="Type your response to this finding here..." className="w-full mt-1 border border-gray-200 rounded px-3 py-2 text-sm" />
                 </div>
                 <div>
                   <label className="text-xs text-gray-500">Supporting Document</label>
