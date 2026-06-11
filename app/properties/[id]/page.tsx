@@ -813,43 +813,48 @@ Corrective Action: ${f.corrective_action || ''}`
     y += 10
 
     findingsWithPending.forEach((finding: any, index: number) => {
-      if (y > 240) { doc.addPage(); y = 20; addHeader(); y += 10 }
+      if (y > 260) { doc.addPage(); y = 20; addHeader(); y += 10 }
       doc.setFontSize(11)
       doc.setFont('helvetica', 'bold')
       doc.text(`Finding ${index + 1}:`, 15, y)
       y += 7
       doc.setFontSize(10)
       doc.setFont('helvetica', 'normal')
+      // Wrap finding content (condition, corrective action, etc.) to 175mm so it
+      // never runs past the right margin; render each line and check for overflow.
       const findingLines = doc.splitTextToSize(finding.finding || '', 175)
       findingLines.forEach((line: string) => {
-        if (y > 270) { doc.addPage(); y = 20; addHeader(); y += 10 }
+        if (y > 260) { doc.addPage(); y = 20; addHeader(); y += 10 }
         doc.text(line, 15, y)
         y += 6
       })
       y += 4
       if (finding.assigned_to) {
-        if (y > 270) { doc.addPage(); y = 20; addHeader(); y += 10 }
         doc.setFont('helvetica', 'italic')
-        doc.text(`Assigned to: ${finding.assigned_to}`, 15, y)
+        const assignedLines = doc.splitTextToSize(`Assigned to: ${finding.assigned_to}`, 175)
+        assignedLines.forEach((line: string) => {
+          if (y > 260) { doc.addPage(); y = 20; addHeader(); y += 10 }
+          doc.text(line, 15, y)
+          y += 6
+        })
         doc.setFont('helvetica', 'normal')
-        y += 6
       }
       if (finding.response) {
-        if (y > 240) { doc.addPage(); y = 20; addHeader(); y += 10 }
+        if (y > 260) { doc.addPage(); y = 20; addHeader(); y += 10 }
         doc.setFont('helvetica', 'bold')
         doc.text('Response:', 15, y)
         y += 6
-        if (y > 240) { doc.addPage(); y = 20; addHeader(); y += 10 }
         doc.setFont('helvetica', 'normal')
         const responseLines = doc.splitTextToSize(finding.response, 175)
         responseLines.forEach((line: string) => {
-          if (y > 270) { doc.addPage(); y = 20; addHeader(); y += 10 }
+          if (y > 260) { doc.addPage(); y = 20; addHeader(); y += 10 }
           doc.text(line, 15, y)
           y += 6
         })
         y += 4
       }
       if (finding.document_url) {
+        if (y > 260) { doc.addPage(); y = 20; addHeader(); y += 10 }
         doc.setFont('helvetica', 'italic')
         doc.text(`See attached: Finding_${index + 1}_attachment`, 15, y)
         doc.setFont('helvetica', 'normal')
