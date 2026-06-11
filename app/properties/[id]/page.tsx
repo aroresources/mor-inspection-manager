@@ -2,7 +2,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '../../../lib/supabase'
-import jsPDF from 'jspdf'
 import JSZip from 'jszip'
 import { saveAs } from 'file-saver'
 import { Document, Packer, Paragraph, TextRun, AlignmentType, BorderStyle } from 'docx'
@@ -773,107 +772,114 @@ Corrective Action: ${f.corrective_action || ''}`
     fetchFindings()
   }
 
-  const generatePDF = () => {
+  const generatePDF = async () => {
     // Merge in any responses still pending the debounced save.
     const findingsWithPending = findings.map((f: any) => ({
       ...f,
       response: pendingResponses.current[f.id] ?? f.response,
     }))
-    const doc = new jsPDF()
-    let y = 20
 
-    const addHeader = () => {
-      doc.setFontSize(14)
-      doc.setFont('helvetica', 'bold')
-      doc.text(property.name || 'Property Name', 105, 12, { align: 'center' })
-      doc.setDrawColor(200, 200, 200)
-      doc.line(15, 16, 195, 16)
+    const esc = (s: any) =>
+      String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+
+    // Render finding text as HTML, bolding the first line (item code + title)
+    // and any "Condition:" / "Corrective Action:" style labels.
+    const renderFindingBody = (text: string) => {
+      const labelRegex = /^(Condition|Corrective Action|Criteria|Cause|Effect):\s*([\s\S]*)$/
+      let firstContentDone = false
+      const parts: string[] = []
+      for (const line of (text || '').split('\n')) {
+        if (line.trim() === '') continue
+        const m = line.match(labelRegex)
+        if (m) {
+          parts.push(`<p style="margin:0 0 6px 0;"><strong>${esc(m[1])}:</strong> ${esc(m[2])}</p>`)
+          firstContentDone = true
+        } else if (!firstContentDone) {
+          parts.push(`<p style="margin:0 0 6px 0;"><strong>${esc(line)}</strong></p>`)
+          firstContentDone = true
+        } else {
+          parts.push(`<p style="margin:0 0 6px 0;">${esc(line)}</p>`)
+        }
+      }
+      return parts.join('')
     }
 
-    // Page-break check — call BEFORE rendering any text block.
-    const checkPageBreak = () => {
-      if (y > 255) { doc.addPage(); addHeader(); y = 20 }
-    }
-    // Render variable-length body text: always pre-split to 170mm and place at
-    // x=20, then advance y by the wrapped line count. Never pass raw strings.
-    const writeBody = (text: string) => {
-      checkPageBreak()
-      const lines = doc.splitTextToSize(text || '', 170)
-      doc.text(lines, 20, y)
-      y += lines.length * 6
-    }
-
-    addHeader()
-    doc.setFontSize(10)
-    doc.setFont('helvetica', 'normal')
-    writeBody(`Date Generated: ${new Date().toLocaleDateString()}`)
+    const headerMeta: string[] = []
+    headerMeta.push(`<p style="margin:0 0 4px 0;">Date Generated: ${esc(new Date().toLocaleDateString())}</p>`)
     if (property.section8_number) {
-      writeBody(`Section 8 Project Number: ${property.section8_number}`)
+      headerMeta.push(`<p style="margin:0 0 4px 0;">Section 8 Project Number: ${esc(property.section8_number)}</p>`)
     }
     if (property.mor_date) {
-      writeBody(`Date of MOR: ${formatDate(property.mor_date)}`)
-    }
-    y += 6
-    doc.line(15, y, 195, y)
-    y += 10
-
-    writeBody(introText)
-    y += 4
-    doc.line(15, y, 195, y)
-    y += 10
-
-    findingsWithPending.forEach((finding: any, index: number) => {
-      checkPageBreak()
-      doc.setFontSize(11)
-      doc.setFont('helvetica', 'bold')
-      doc.text(`Finding ${index + 1}:`, 20, y)
-      y += 7
-      doc.setFontSize(10)
-      doc.setFont('helvetica', 'normal')
-      // Condition + corrective action are stored together in finding.finding.
-      writeBody(finding.finding || '')
-      y += 4
-      if (finding.assigned_to) {
-        doc.setFont('helvetica', 'italic')
-        writeBody(`Assigned to: ${finding.assigned_to}`)
-        doc.setFont('helvetica', 'normal')
-      }
-      if (finding.response) {
-        checkPageBreak()
-        doc.setFont('helvetica', 'bold')
-        doc.text('Response:', 20, y)
-        y += 6
-        doc.setFont('helvetica', 'normal')
-        writeBody(finding.response)
-        y += 4
-      }
-      if (finding.document_url) {
-        checkPageBreak()
-        doc.setFont('helvetica', 'italic')
-        doc.text(`See attached: Finding_${index + 1}_attachment`, 20, y)
-        doc.setFont('helvetica', 'normal')
-        y += 6
-      }
-      doc.setDrawColor(220, 220, 220)
-      doc.line(15, y, 195, y)
-      y += 10
-    })
-
-    if (signatoryName) {
-      checkPageBreak()
-      y += 10
-      doc.setFontSize(10)
-      doc.setFont('helvetica', 'normal')
-      writeBody(signatoryName)
-      y += 4
-      doc.line(15, y, 100, y)
-      y += 6
-      doc.text('Signature', 20, y)
-      y += 6
-      writeBody(`Date: ${new Date().toLocaleDateString()}`)
+      headerMeta.push(`<p style="margin:0 0 4px 0;">Date of MOR: ${esc(formatDate(property.mor_date))}</p>`)
     }
 
-    doc.save('MOR-Response-Report.pdf')
+    const findingsHtml = findingsWithPending.map((finding: any, index: number) => {
+      const assigned = finding.assigned_to
+        ? `<p style="margin:0 0 6px 0; font-style:italic;">Assigned to: ${esc(finding.assigned_to)}</p>`
+        : ''
+      const responseLines = finding.response
+        ? String(finding.response).split('\n').filter((l: string) => l.trim() !== '')
+          .map((l: string) => `<p style="margin:0 0 6px 0;">${esc(l)}</p>`).join('')
+        : ''
+      const response = finding.response
+        ? `<p style="margin:8px 0 4px 0;"><strong>Response:</strong></p>${responseLines}`
+        : ''
+      const attachment = finding.document_url
+        ? `<p style="margin:6px 0 0 0; font-style:italic;">See attached: ${esc(decodeURIComponent((finding.document_url.split('/').pop() || 'attachment').split('?')[0]))}</p>`
+        : ''
+      return `
+        <div style="page-break-inside: avoid; margin:0 0 16px 0; padding:0 0 10px 0; border-bottom:1px solid #ddd;">
+          <p style="margin:0 0 6px 0; font-weight:bold; font-size:13px;">Finding ${index + 1}:</p>
+          ${renderFindingBody(finding.finding || '')}
+          ${assigned}
+          ${response}
+          ${attachment}
+        </div>`
+    }).join('')
+
+    const signatureHtml = signatoryName
+      ? `
+        <div style="page-break-inside: avoid; margin-top:40px;">
+          <p style="margin:0 0 24px 0;">${esc(signatoryName)}</p>
+          <p style="margin:0; width:200px; border-top:1px solid #000; padding-top:4px;">Signature</p>
+          <p style="margin:8px 0 0 0;">Date: ${esc(new Date().toLocaleDateString())}</p>
+        </div>`
+      : ''
+
+    const html = `
+      <div style="font-family: Helvetica, Arial, sans-serif; font-size:11px; line-height:1.5; color:#000;">
+        <h1 style="text-align:center; font-size:18px; font-weight:bold; margin:0 0 12px 0;">${esc(property.name || 'Property Name')}</h1>
+        ${headerMeta.join('')}
+        <hr style="border:none; border-top:1px solid #999; margin:12px 0;" />
+        <p style="margin:0 0 12px 0;">${esc(introText)}</p>
+        <hr style="border:none; border-top:1px solid #999; margin:12px 0;" />
+        ${findingsHtml}
+        ${signatureHtml}
+      </div>`
+
+    // Render off-screen so html2canvas can measure the layout, then clean up.
+    const container = document.createElement('div')
+    container.style.position = 'fixed'
+    container.style.left = '-10000px'
+    container.style.top = '0'
+    container.style.width = '180mm'
+    container.innerHTML = html
+    document.body.appendChild(container)
+
+    try {
+      const html2pdf = (await import('html2pdf.js')).default
+      await html2pdf().set({
+        margin: [15, 15, 15, 15],
+        filename: 'MOR-Response-Report.pdf',
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: 'mm', format: 'letter', orientation: 'portrait' },
+      }).from(container).save()
+    } finally {
+      document.body.removeChild(container)
+    }
   }
 
   // Build the Word report (shared by the standalone download and the ZIP package).
