@@ -753,6 +753,8 @@ Corrective Action: ${f.corrective_action || ''}`
     if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
       document.activeElement.blur()
     }
+    // Give the blur-triggered onBlur save time to complete before reading.
+    await new Promise(resolve => setTimeout(resolve, 500))
     const { data, error } = await supabase
       .from('findings').select('*')
       .eq('property_id', propertyId).eq('mor_id', morId)
