@@ -789,74 +789,67 @@ Corrective Action: ${f.corrective_action || ''}`
       doc.line(15, 16, 195, 16)
     }
 
+    // Page-break check — call BEFORE rendering any text block.
+    const checkPageBreak = () => {
+      if (y > 255) { doc.addPage(); addHeader(); y = 20 }
+    }
+    // Render variable-length body text: always pre-split to 170mm and place at
+    // x=20, then advance y by the wrapped line count. Never pass raw strings.
+    const writeBody = (text: string) => {
+      checkPageBreak()
+      const lines = doc.splitTextToSize(text || '', 170)
+      doc.text(lines, 20, y)
+      y += lines.length * 6
+    }
+
     addHeader()
     doc.setFontSize(10)
     doc.setFont('helvetica', 'normal')
-    doc.text(`Date Generated: ${new Date().toLocaleDateString()}`, 15, y)
-    y += 6
+    writeBody(`Date Generated: ${new Date().toLocaleDateString()}`)
     if (property.section8_number) {
-      doc.text(`Section 8 Project Number: ${property.section8_number}`, 15, y)
-      y += 6
+      writeBody(`Section 8 Project Number: ${property.section8_number}`)
     }
     if (property.mor_date) {
-      doc.text(`Date of MOR: ${formatDate(property.mor_date)}`, 15, y)
-      y += 6
+      writeBody(`Date of MOR: ${formatDate(property.mor_date)}`)
     }
     y += 6
     doc.line(15, y, 195, y)
     y += 10
 
-    const introLines = doc.splitTextToSize(introText, 175)
-    doc.text(introLines, 15, y)
-    y += introLines.length * 6 + 10
+    writeBody(introText)
+    y += 4
     doc.line(15, y, 195, y)
     y += 10
 
     findingsWithPending.forEach((finding: any, index: number) => {
-      if (y > 260) { doc.addPage(); y = 20; addHeader(); y += 10 }
+      checkPageBreak()
       doc.setFontSize(11)
       doc.setFont('helvetica', 'bold')
-      doc.text(`Finding ${index + 1}:`, 15, y)
+      doc.text(`Finding ${index + 1}:`, 20, y)
       y += 7
       doc.setFontSize(10)
       doc.setFont('helvetica', 'normal')
-      // Wrap finding content (condition, corrective action, etc.) to 175mm so it
-      // never runs past the right margin; render each line and check for overflow.
-      const findingLines = doc.splitTextToSize(finding.finding || '', 175)
-      findingLines.forEach((line: string) => {
-        if (y > 260) { doc.addPage(); y = 20; addHeader(); y += 10 }
-        doc.text(line, 15, y)
-        y += 6
-      })
+      // Condition + corrective action are stored together in finding.finding.
+      writeBody(finding.finding || '')
       y += 4
       if (finding.assigned_to) {
         doc.setFont('helvetica', 'italic')
-        const assignedLines = doc.splitTextToSize(`Assigned to: ${finding.assigned_to}`, 175)
-        assignedLines.forEach((line: string) => {
-          if (y > 260) { doc.addPage(); y = 20; addHeader(); y += 10 }
-          doc.text(line, 15, y)
-          y += 6
-        })
+        writeBody(`Assigned to: ${finding.assigned_to}`)
         doc.setFont('helvetica', 'normal')
       }
       if (finding.response) {
-        if (y > 260) { doc.addPage(); y = 20; addHeader(); y += 10 }
+        checkPageBreak()
         doc.setFont('helvetica', 'bold')
-        doc.text('Response:', 15, y)
+        doc.text('Response:', 20, y)
         y += 6
         doc.setFont('helvetica', 'normal')
-        const responseLines = doc.splitTextToSize(finding.response, 175)
-        responseLines.forEach((line: string) => {
-          if (y > 260) { doc.addPage(); y = 20; addHeader(); y += 10 }
-          doc.text(line, 15, y)
-          y += 6
-        })
+        writeBody(finding.response)
         y += 4
       }
       if (finding.document_url) {
-        if (y > 260) { doc.addPage(); y = 20; addHeader(); y += 10 }
+        checkPageBreak()
         doc.setFont('helvetica', 'italic')
-        doc.text(`See attached: Finding_${index + 1}_attachment`, 15, y)
+        doc.text(`See attached: Finding_${index + 1}_attachment`, 20, y)
         doc.setFont('helvetica', 'normal')
         y += 6
       }
@@ -866,17 +859,17 @@ Corrective Action: ${f.corrective_action || ''}`
     })
 
     if (signatoryName) {
-      if (y > 220) { doc.addPage(); y = 20; addHeader(); y += 10 }
+      checkPageBreak()
       y += 10
       doc.setFontSize(10)
       doc.setFont('helvetica', 'normal')
-      doc.text(signatoryName, 15, y)
-      y += 10
+      writeBody(signatoryName)
+      y += 4
       doc.line(15, y, 100, y)
       y += 6
-      doc.text('Signature', 15, y)
+      doc.text('Signature', 20, y)
       y += 6
-      doc.text(`Date: ${new Date().toLocaleDateString()}`, 15, y)
+      writeBody(`Date: ${new Date().toLocaleDateString()}`)
     }
 
     doc.save('MOR-Response-Report.pdf')
