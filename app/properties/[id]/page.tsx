@@ -5,6 +5,7 @@ import { supabase } from '../../../lib/supabase'
 import jsPDF from 'jspdf'
 import JSZip from 'jszip'
 import { saveAs } from 'file-saver'
+import { Document, Packer, Paragraph, TextRun, AlignmentType, BorderStyle } from 'docx'
 import { useToast } from '../../components/ToastProvider'
 import { parseDate, formatDate, formatDateObj } from '../../../lib/dateUtils'
 
@@ -875,6 +876,100 @@ Corrective Action: ${f.corrective_action || ''}`
     doc.save('MOR-Response-Report.pdf')
   }
 
+  const generateDOCX = async () => {
+    // Merge in any responses still pending the debounced save (same as the PDF).
+    const findingsWithPending = findings.map((f: any) => ({
+      ...f,
+      response: pendingResponses.current[f.id] ?? f.response,
+    }))
+
+    // A full-width bottom border makes a horizontal rule.
+    const hr = (color: string, size: number) =>
+      new Paragraph({
+        spacing: { before: 120, after: 120 },
+        border: { bottom: { style: BorderStyle.SINGLE, size, color, space: 1 } },
+        children: [],
+      })
+
+    // Render the finding text, bolding the first line (item code + title) and
+    // any "Condition:" / "Corrective Action:" style labels.
+    const renderFindingBody = (text: string): Paragraph[] => {
+      const labelRegex = /^(Condition|Corrective Action|Criteria|Cause|Effect):\s*([\s\S]*)$/
+      const paragraphs: Paragraph[] = []
+      let firstContentDone = false
+      for (const line of (text || '').split('\n')) {
+        if (line.trim() === '') continue
+        const m = line.match(labelRegex)
+        if (m) {
+          paragraphs.push(new Paragraph({ children: [
+            new TextRun({ text: `${m[1]}: `, bold: true }),
+            new TextRun(m[2]),
+          ] }))
+          firstContentDone = true
+        } else if (!firstContentDone) {
+          // First content line = item code + title.
+          paragraphs.push(new Paragraph({ children: [new TextRun({ text: line, bold: true })] }))
+          firstContentDone = true
+        } else {
+          paragraphs.push(new Paragraph({ children: [new TextRun(line)] }))
+        }
+      }
+      return paragraphs
+    }
+
+    const children: Paragraph[] = []
+
+    // Header
+    children.push(new Paragraph({
+      alignment: AlignmentType.CENTER,
+      children: [new TextRun({ text: property.name || 'Property Name', bold: true, size: 36 })],
+    }))
+    children.push(new Paragraph({ children: [new TextRun(`Date Generated: ${new Date().toLocaleDateString()}`)] }))
+    if (property.section8_number) {
+      children.push(new Paragraph({ children: [new TextRun(`Section 8 Project Number: ${property.section8_number}`)] }))
+    }
+    if (property.mor_date) {
+      children.push(new Paragraph({ children: [new TextRun(`Date of MOR: ${formatDate(property.mor_date)}`)] }))
+    }
+    children.push(new Paragraph({ children: [] })) // blank line
+    children.push(new Paragraph({ children: [new TextRun(introText)] }))
+    children.push(hr('000000', 6))
+
+    // Findings
+    findingsWithPending.forEach((finding: any, index: number) => {
+      children.push(new Paragraph({
+        spacing: { before: 240 },
+        children: [new TextRun({ text: `Finding ${index + 1}:`, bold: true })],
+      }))
+      children.push(...renderFindingBody(finding.finding || ''))
+      if (finding.assigned_to) {
+        children.push(new Paragraph({ children: [new TextRun({ text: `Assigned to: ${finding.assigned_to}`, italics: true })] }))
+      }
+      if (finding.response) {
+        children.push(new Paragraph({ children: [new TextRun({ text: 'Response:', bold: true })] }))
+        for (const line of String(finding.response).split('\n')) {
+          children.push(new Paragraph({ children: [new TextRun(line)] }))
+        }
+      }
+      if (finding.document_url) {
+        const fileName = decodeURIComponent((finding.document_url.split('/').pop() || 'attachment').split('?')[0])
+        children.push(new Paragraph({ children: [new TextRun({ text: `See attached: ${fileName}`, italics: true })] }))
+      }
+      children.push(hr('CCCCCC', 4))
+    })
+
+    // Signature block
+    if (signatoryName) {
+      children.push(new Paragraph({ spacing: { before: 480 }, children: [new TextRun(signatoryName)] }))
+      children.push(new Paragraph({ children: [new TextRun('Signature')] }))
+      children.push(new Paragraph({ children: [new TextRun(`Date: ${new Date().toLocaleDateString()}`)] }))
+    }
+
+    const docx = new Document({ sections: [{ children }] })
+    const blob = await Packer.toBlob(docx)
+    saveAs(blob, 'MOR-Response-Report.docx')
+  }
+
   const downloadZip = async () => {
     // Merge in any responses still pending the debounced save.
     const findingsWithPending = findings.map((f: any) => ({
@@ -1065,6 +1160,7 @@ Corrective Action: ${f.corrective_action || ''}`
             <>
               <button onClick={() => setShowReportSettings(true)} className="bg-gray-600 text-white px-3 py-1 rounded text-sm hover:bg-gray-700">⚙️ Report Settings</button>
               <button onClick={generatePDF} className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700">📄 Generate PDF Report</button>
+              <button onClick={generateDOCX} className="bg-blue-700 text-white px-3 py-1 rounded text-sm hover:bg-blue-800">📝 Download as Word</button>
               <button onClick={downloadZip} className="bg-purple-600 text-white px-3 py-1 rounded text-sm hover:bg-purple-700">📦 Download Full Package (ZIP)</button>
             </>
           )}
