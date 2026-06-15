@@ -539,13 +539,16 @@ export default function Dashboard() {
   const daysUntil = (d: Date | null) =>
     d ? Math.ceil((d.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : null
 
-  // Overdue response: an Active MOR whose response_due_date has already passed
+  // Overdue response: an Active MOR whose response_due_date has already passed.
+  // A submitted response resolves it — no longer needs attention.
   const isOverdueResponse = (p: any) => {
+    if (getResponseSubmittedDate(p)) return false
     const due = getResponseDueDate(p)
     return due != null && (daysUntil(due) as number) < 0
   }
-  // Response due within the next 14 days
+  // Response due within the next 14 days (resolved once a response is submitted).
   const isResponseDueSoon = (p: any) => {
+    if (getResponseSubmittedDate(p)) return false
     const due = getResponseDueDate(p)
     if (!due) return false
     const d = daysUntil(due) as number
