@@ -605,6 +605,7 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
   const [showExtracted, setShowExtracted] = useState(false)
   const [morRating, setMorRating] = useState('')
   const [responseDueDate, setResponseDueDate] = useState(currentMor?.response_due_date || '')
+  const [responseSubmittedDate, setResponseSubmittedDate] = useState(currentMor?.response_submitted_date || '')
   const [completing, setCompleting] = useState(false)
   // Tracks the latest typed response per finding id, including values not yet
   // persisted by the debounced save, so reports can use the most current text.
@@ -616,6 +617,7 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
 
   useEffect(() => {
     setResponseDueDate(currentMor?.response_due_date || '')
+    setResponseSubmittedDate(currentMor?.response_submitted_date || '')
   }, [currentMor])
 
   const fetchFindings = async () => {
@@ -1067,6 +1069,25 @@ Corrective Action: ${f.corrective_action || ''}`
           </p>
         </div>
       )}
+
+      {/* Response Submitted to CA */}
+      <div className={`rounded-lg p-4 ${responseSubmittedDate ? 'bg-green-50 border border-green-200' : 'bg-white shadow'}`}>
+        <label className="block text-xs text-gray-500 mb-1">Response Submitted to CA:</label>
+        <input
+          type="date"
+          value={responseSubmittedDate}
+          onChange={(e: any) => setResponseSubmittedDate(e.target.value)}
+          onBlur={async (e: any) => {
+            if (!morId) return
+            await supabase.from('mors').update({ response_submitted_date: e.target.value || null }).eq('id', morId)
+            if (onUpdateMor) onUpdateMor()
+          }}
+          className={`border rounded px-3 py-2 text-sm ${responseSubmittedDate ? 'border-green-300 bg-white text-green-700 font-medium' : 'border-gray-300'}`}
+        />
+        {responseSubmittedDate && (
+          <p className="mt-2 text-sm font-medium text-green-700">✅ Response Sent: {formatDate(responseSubmittedDate)}</p>
+        )}
+      </div>
 
       <div className="flex justify-between items-center">
         <h2 className="text-lg font-bold text-gray-800">

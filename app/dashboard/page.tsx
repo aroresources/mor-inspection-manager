@@ -90,7 +90,7 @@ export default function Dashboard() {
       setNoAccessMessage(null)
       const { data } = await supabase
         .from('properties')
-        .select('*, companies(name), mors(mor_date, response_due_date, status, created_at)')
+        .select('*, companies(name), mors(mor_date, response_due_date, response_submitted_date, status, created_at)')
         .order('name')
       if (data) setProperties(data)
       return
@@ -119,7 +119,7 @@ export default function Dashboard() {
     setNoAccessMessage(null)
     const { data } = await supabase
       .from('properties')
-      .select('*, companies(name), mors(mor_date, response_due_date, status, created_at)')
+      .select('*, companies(name), mors(mor_date, response_due_date, response_submitted_date, status, created_at)')
       .order('name')
     if (data) setProperties(data)
   }
@@ -329,6 +329,12 @@ export default function Dashboard() {
     return parseDate(activeMor.response_due_date)
   }
 
+  const getResponseSubmittedDate = (property: any) => {
+    const activeMor = getActiveMor(property)
+    if (!activeMor || !activeMor.response_submitted_date) return null
+    return parseDate(activeMor.response_submitted_date)
+  }
+
   const getResponseUrgency = (dueDate: any) => {
     if (!dueDate) return 'none'
     const daysUntil = Math.ceil((dueDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
@@ -442,6 +448,10 @@ export default function Dashboard() {
   }
 
   const getResponseCell = (property: any) => {
+    const submitted = getResponseSubmittedDate(property)
+    if (submitted) {
+      return { label: `✅ Response Sent: ${formatDateObj(submitted)}`, classes: 'bg-green-100 text-green-700' }
+    }
     const responseDue = getResponseDueDate(property)
     if (!responseDue) return { label: 'No response due date set', classes: 'bg-gray-100 text-gray-500' }
     const urgency = getResponseUrgency(responseDue)
@@ -996,6 +1006,12 @@ export default function Dashboard() {
               })()}
 
               {(() => {
+                const submitted = getResponseSubmittedDate(property)
+                if (submitted) return (
+                  <div className="mt-2 text-xs px-2 py-1 rounded bg-green-100 text-green-700">
+                    ✅ Response Sent: {formatDateObj(submitted)}
+                  </div>
+                )
                 const responseDue = getResponseDueDate(property)
                 const urgency = getResponseUrgency(responseDue)
                 if (!responseDue) return (
