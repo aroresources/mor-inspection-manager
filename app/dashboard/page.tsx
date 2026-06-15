@@ -570,10 +570,17 @@ export default function Dashboard() {
     const window = addMonthsUTC(parseDate(p.management_change_date)!, 6)
     return (daysUntil(window) as number) <= 90
   }
+  // Awaiting Report: active MOR whose scheduled date has passed with no response
+  // due date yet (mirrors the "Awaiting Report" card label).
+  const isAwaitingReport = (p: any) => {
+    const label = getActiveMorLabel(p)
+    return !!label && label.label.startsWith('⏳ Awaiting Report')
+  }
 
   const attentionPredicates: Record<string, (p: any) => boolean> = {
     overdue_response: isOverdueResponse,
     response_due_soon: isResponseDueSoon,
+    awaiting_report: isAwaitingReport,
     mor_scheduled_soon: isMorScheduledSoon,
     mgmt_change_due: isMgmtChangeDue,
   }
@@ -585,6 +592,7 @@ export default function Dashboard() {
   const attentionCounts = {
     overdue_response: companyFiltered.filter(isOverdueResponse).length,
     response_due_soon: companyFiltered.filter(isResponseDueSoon).length,
+    awaiting_report: companyFiltered.filter(isAwaitingReport).length,
     mor_scheduled_soon: companyFiltered.filter(isMorScheduledSoon).length,
     mgmt_change_due: companyFiltered.filter(isMgmtChangeDue).length,
   }
@@ -785,6 +793,7 @@ export default function Dashboard() {
             {[
               { key: 'overdue_response', label: 'Overdue Response', count: attentionCounts.overdue_response, active: 'bg-red-600 text-white border-red-600', idle: 'bg-red-50 text-red-700 border-red-200 hover:border-red-400' },
               { key: 'response_due_soon', label: 'Response Due Soon', count: attentionCounts.response_due_soon, active: 'bg-orange-500 text-white border-orange-500', idle: 'bg-orange-50 text-orange-700 border-orange-200 hover:border-orange-400' },
+              { key: 'awaiting_report', label: 'Awaiting Report', count: attentionCounts.awaiting_report, active: 'bg-orange-500 text-white border-orange-500', idle: 'bg-orange-50 text-orange-700 border-orange-200 hover:border-orange-400' },
               { key: 'mor_scheduled_soon', label: 'MOR Scheduled Soon', count: attentionCounts.mor_scheduled_soon, active: 'bg-yellow-500 text-white border-yellow-500', idle: 'bg-yellow-50 text-yellow-800 border-yellow-200 hover:border-yellow-400' },
               { key: 'mgmt_change_due', label: 'Management Change Due', count: attentionCounts.mgmt_change_due, active: 'bg-orange-500 text-white border-orange-500', idle: 'bg-orange-50 text-orange-700 border-orange-200 hover:border-orange-400' },
             ].map(({ key, label, count, active, idle }) => (
