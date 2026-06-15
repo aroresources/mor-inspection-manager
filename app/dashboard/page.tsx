@@ -88,10 +88,12 @@ export default function Dashboard() {
     // A super_admin always sees every property, regardless of their company_id
     if (profile?.role === 'super_admin') {
       setNoAccessMessage(null)
-      const { data } = await supabase
+      // mors(*) avoids errors if an expected MOR column hasn't been migrated yet.
+      const { data, error } = await supabase
         .from('properties')
-        .select('*, companies(name), mors(mor_date, response_due_date, response_submitted_date, status, created_at)')
+        .select('*, companies(name), mors(*)')
         .order('name')
+      if (error) console.error('Error fetching properties (super_admin):', error)
       if (data) setProperties(data)
       return
     }
@@ -117,10 +119,11 @@ export default function Dashboard() {
     }
 
     setNoAccessMessage(null)
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('properties')
-      .select('*, companies(name), mors(mor_date, response_due_date, response_submitted_date, status, created_at)')
+      .select('*, companies(name), mors(*)')
       .order('name')
+    if (error) console.error('Error fetching properties:', error)
     if (data) setProperties(data)
   }
 
