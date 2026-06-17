@@ -362,12 +362,19 @@ function TasksTab({ propertyId, morId }: any) {
     fetchTasks()
   }, [propertyId, morId])
 
+  // Order by sort_order (falling back to created_at). Resilient to the
+  // sort_order column not existing yet (treated as 0).
+  const sortTasks = (arr: any[]) =>
+    [...arr].sort((a, b) =>
+      ((a.sort_order ?? 0) - (b.sort_order ?? 0)) ||
+      (new Date(a.created_at).getTime() - new Date(b.created_at).getTime()))
+
   const fetchTasks = async () => {
     setLoading(true)
     if (!morId) { setLoading(false); return }
     const { data } = await supabase.from('tasks').select('*').eq('property_id', propertyId).eq('mor_id', morId).order('created_at')
     if (data && data.length > 0) {
-      setTasks(data)
+      setTasks(sortTasks(data))
     } else {
       await loadFromTemplates()
     }
@@ -377,17 +384,19 @@ function TasksTab({ propertyId, morId }: any) {
   const loadFromTemplates = async () => {
     const { data: tmpl } = await supabase.from('task_templates').select('*').order('created_at')
     if (tmpl && tmpl.length > 0) {
-      const tasks = tmpl.map((t: any) => ({
+      const ordered = sortTasks(tmpl)
+      const tasks = ordered.map((t: any, i: number) => ({
         property_id: propertyId,
         mor_id: morId,
         title: t.title,
         assigned_to: '',
         due_date: null,
         completed: false,
-        is_custom: false
+        is_custom: false,
+        sort_order: t.sort_order ?? i
       }))
       const { data: inserted } = await supabase.from('tasks').insert(tasks).select()
-      if (inserted) setTasks(inserted)
+      if (inserted) setTasks(sortTasks(inserted))
     }
   }
 
@@ -396,6 +405,29 @@ function TasksTab({ propertyId, morId }: any) {
     if (error) { toast('Error saving task: ' + error.message, 'error'); return }
     setTasks(tasks => tasks.map((t: any) => t.id === id ? { ...t, ...updates } : t))
     if (updates.completed === true) toast('Task completed.', 'success')
+  }
+
+  // Upload one or more documents for a checklist task, appending to existing ones.
+  const uploadTaskFiles = async (task: any, fileList: FileList | null) => {
+    const files = Array.from(fileList || [])
+    if (!files.length) return
+    const existing = parseAttachmentUrls(task.document_url)
+    const added: string[] = []
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+      const filePath = `${propertyId}/tasks/${task.id}/${Date.now()}-${i}/${safeName}`
+      const { error } = await supabase.storage.from('mor-documents').upload(filePath, file, { upsert: true })
+      if (error) { toast(`Error uploading ${file.name}: ${error.message}`, 'error'); continue }
+      const { data: urlData } = supabase.storage.from('mor-documents').getPublicUrl(filePath)
+      added.push(urlData.publicUrl)
+    }
+    if (added.length) await updateTask(task.id, { document_url: serializeAttachmentUrls([...existing, ...added]) })
+  }
+
+  const removeTaskFile = async (task: any, url: string) => {
+    const remaining = parseAttachmentUrls(task.document_url).filter((u: string) => u !== url)
+    await updateTask(task.id, { document_url: serializeAttachmentUrls(remaining) })
   }
 
   const addTask = async (e: any) => {
@@ -408,7 +440,8 @@ function TasksTab({ propertyId, morId }: any) {
       property_id: propertyId,
       mor_id: morId,
       completed: false,
-      is_custom: true
+      is_custom: true,
+      sort_order: tasks.length
     }
     const { data, error } = await supabase.from('tasks').insert([taskData]).select()
     if (error) { toast('Error adding task: ' + error.message, 'error'); return }
@@ -416,7 +449,7 @@ function TasksTab({ propertyId, morId }: any) {
       if (newTask.addToTemplate) {
         await supabase.from('task_templates').insert([{ title: newTask.title }])
       }
-      setTasks([...tasks, ...data])
+      setTasks(sortTasks([...tasks, ...data]))
       setNewTask({ title: '', assigned_to: '', due_date: '' })
       setShowAddTask(false)
       toast('Task added.', 'success')
@@ -457,6 +490,29 @@ function TasksTab({ propertyId, morId }: any) {
                     <div className="mt-2 grid grid-cols-2 gap-2">
                       <input type="text" placeholder="Assigned to" value={task.assigned_to || ''} onChange={(e: any) => updateTask(task.id, { assigned_to: e.target.value })} className="border border-gray-200 rounded px-2 py-1 text-xs" />
                       <input type="date" value={task.due_date || ''} onChange={(e: any) => updateTask(task.id, { due_date: e.target.value })} className="border border-gray-200 rounded px-2 py-1 text-xs" />
+                    </div>
+                    <div className="mt-2">
+                      <label className="text-xs text-gray-500">Notes</label>
+                      <textarea
+                        key={task.id}
+                        defaultValue={task.notes || ''}
+                        onBlur={(e: any) => { if (e.target.value !== (task.notes || '')) updateTask(task.id, { notes: e.target.value || null }) }}
+                        rows={2}
+                        placeholder="Notes..."
+                        className="w-full mt-1 border border-gray-200 rounded px-2 py-1 text-xs"
+                      />
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-3">
+                      {parseAttachmentUrls(task.document_url).map((url: string, i: number) => (
+                        <span key={i} className="flex items-center gap-1">
+                          <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">📎 {attachmentFileName(url)}</a>
+                          <button onClick={() => removeTaskFile(task, url)} className="text-xs text-red-400 hover:text-red-600" title="Remove file">✕</button>
+                        </span>
+                      ))}
+                      <label className="cursor-pointer text-xs text-blue-600 hover:underline">
+                        📎 Upload Document(s)
+                        <input type="file" multiple className="hidden" onChange={async (e: any) => { await uploadTaskFiles(task, e.target.files); e.target.value = '' }} />
+                      </label>
                     </div>
                   </div>
                 </div>
@@ -1716,22 +1772,23 @@ const fetchMors = async () => {
 
         {activeTab === 'tasks' && (
           <div className="space-y-4">
+            {/* MOR Scheduling Email — standalone info block at the very top (not a checklist item). */}
             <div className="bg-white rounded-lg shadow p-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Last NSPIRE Notes</label>
-              <textarea
-                key={property.id}
-                defaultValue={property.last_nspire_notes || ''}
-                onBlur={async (e: any) => {
-                  await supabase.from('properties').update({ last_nspire_notes: e.target.value }).eq('id', id)
-                  fetchProperty()
-                }}
-                rows={4}
-                className="w-full border border-gray-200 rounded px-3 py-2 text-sm"
-                placeholder="Enter NSPIRE notes..."
-              />
-            </div>
-            <div className="bg-white rounded-lg shadow p-4">
-              <h3 className="text-sm font-medium text-gray-700 mb-3">MOR Related Documents</h3>
+              <h3 className="text-sm font-medium text-gray-700 mb-3">MOR Scheduling Email</h3>
+              <div className="mb-3">
+                <label className="block text-xs text-gray-500 mb-1">Notes</label>
+                <textarea
+                  key={property.id}
+                  defaultValue={property.mor_scheduling_email_notes || ''}
+                  onBlur={async (e: any) => {
+                    await supabase.from('properties').update({ mor_scheduling_email_notes: e.target.value }).eq('id', id)
+                    fetchProperty()
+                  }}
+                  rows={3}
+                  className="w-full border border-gray-200 rounded px-3 py-2 text-sm"
+                  placeholder="Enter notes about the MOR scheduling email..."
+                />
+              </div>
               <div className="space-y-2">
                 {(property.overview_files || []).map((file: any, i: number) => (
                   <div key={i} className="flex items-center justify-between p-2 border border-gray-200 rounded">
@@ -1751,22 +1808,29 @@ const fetchMors = async () => {
                   </div>
                 ))}
                 <label className="cursor-pointer inline-flex items-center gap-2 text-sm text-blue-600 hover:underline">
-                  📎 Upload Document
+                  📎 Upload Document(s)
                   <input
                     type="file"
+                    multiple
                     className="hidden"
                     onChange={async (e: any) => {
-                      const file = e.target.files[0]
-                      if (!file) return
-                      const filePath = `${id}/overview/${file.name}`
-                      const { error } = await supabase.storage.from('mor-documents').upload(filePath, file, { upsert: true })
-                      if (!error) {
+                      const files = Array.from(e.target.files || []) as File[]
+                      if (!files.length) return
+                      const currentFiles = property.overview_files || []
+                      const added: any[] = []
+                      for (const file of files) {
+                        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+                        const filePath = `${id}/overview/${Date.now()}-${safeName}`
+                        const { error } = await supabase.storage.from('mor-documents').upload(filePath, file, { upsert: true })
+                        if (error) { toast(`Error uploading ${file.name}: ${error.message}`, 'error'); continue }
                         const { data: urlData } = supabase.storage.from('mor-documents').getPublicUrl(filePath)
-                        const currentFiles = property.overview_files || []
-                        const updated = [...currentFiles, { name: file.name, url: urlData.publicUrl }]
-                        await supabase.from('properties').update({ overview_files: updated }).eq('id', id)
+                        added.push({ name: file.name, url: urlData.publicUrl })
+                      }
+                      if (added.length) {
+                        await supabase.from('properties').update({ overview_files: [...currentFiles, ...added] }).eq('id', id)
                         fetchProperty()
                       }
+                      e.target.value = ''
                     }}
                   />
                 </label>
