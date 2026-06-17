@@ -8,6 +8,31 @@ import { Document, Packer, Paragraph, TextRun, AlignmentType, BorderStyle } from
 import { useToast } from '../../components/ToastProvider'
 import { parseDate, formatDate, formatDateObj } from '../../../lib/dateUtils'
 
+// File-attachment URLs are stored in a single text column as either a legacy
+// plain URL string or a JSON-encoded array of URLs. These helpers bridge both
+// so we can support multiple files without a schema change.
+const parseAttachmentUrls = (val: any): string[] => {
+  if (!val) return []
+  if (Array.isArray(val)) return val
+  try {
+    const parsed = JSON.parse(val)
+    return Array.isArray(parsed) ? parsed : [String(val)]
+  } catch {
+    return [String(val)]
+  }
+}
+
+const serializeAttachmentUrls = (urls: string[]): string | null =>
+  urls.length ? JSON.stringify(urls) : null
+
+const attachmentFileName = (url: string): string => {
+  try {
+    return decodeURIComponent((url.split('/').pop() || 'file').split('?')[0])
+  } catch {
+    return 'file'
+  }
+}
+
 function DocumentsTab({ propertyId, morId }: any) {
   const { toast } = useToast()
   const [documents, setDocuments] = useState<any[]>([])
@@ -87,6 +112,29 @@ function DocumentsTab({ propertyId, morId }: any) {
     if (error) { toast('Error saving document: ' + error.message, 'error'); return }
     setDocuments(docs => docs.map((d: any) => d.id === id ? { ...d, ...updates } : d))
     if ('status' in updates) toast('Document status updated.', 'success')
+  }
+
+  // Upload one or more files for a checklist item, appending to any existing files.
+  const uploadDocFiles = async (doc: any, fileList: FileList | null) => {
+    const files = Array.from(fileList || [])
+    if (!files.length) return
+    const existing = parseAttachmentUrls(doc.file_url)
+    const added: string[] = []
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+      const filePath = `${propertyId}/${doc.id}/${Date.now()}-${i}/${safeName}`
+      const { error } = await supabase.storage.from('mor-documents').upload(filePath, file, { upsert: true })
+      if (error) { toast(`Error uploading ${file.name}: ${error.message}`, 'error'); continue }
+      const { data: urlData } = supabase.storage.from('mor-documents').getPublicUrl(filePath)
+      added.push(urlData.publicUrl)
+    }
+    if (added.length) await updateDoc(doc.id, { file_url: serializeAttachmentUrls([...existing, ...added]) })
+  }
+
+  const removeDocFile = async (doc: any, url: string) => {
+    const remaining = parseAttachmentUrls(doc.file_url).filter((u: string) => u !== url)
+    await updateDoc(doc.id, { file_url: serializeAttachmentUrls(remaining) })
   }
 
   const moveDoc = async (index: any, direction: any) => {
@@ -226,27 +274,17 @@ function DocumentsTab({ propertyId, morId }: any) {
                     </select>
                   </div>
                   <input type="text" placeholder="Notes" value={doc.notes || ''} onChange={(e: any) => updateDoc(doc.id, { notes: e.target.value })} className="mt-1 ml-6 w-[calc(100%-1.5rem)] border border-gray-200 rounded px-2 py-1 text-xs" />
-                  <div className="mt-2 ml-6 flex items-center gap-2">
-                    {doc.file_url ? (
-                      <div className="flex items-center gap-2">
-                        <a href={doc.file_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">📎 View File</a>
-                        <button onClick={() => updateDoc(doc.id, { file_url: null })} className="text-xs text-red-400 hover:text-red-600">Remove</button>
-                      </div>
-                    ) : (
-                      <label className="cursor-pointer text-xs text-blue-600 hover:underline">
-                        📎 Upload File
-                        <input type="file" className="hidden" onChange={async (e: any) => {
-                          const file = e.target.files[0]
-                          if (!file) return
-                          const filePath = `${propertyId}/${doc.id}/${file.name}`
-                          const { error } = await supabase.storage.from('mor-documents').upload(filePath, file, { upsert: true })
-                          if (!error) {
-                            const { data: urlData } = supabase.storage.from('mor-documents').getPublicUrl(filePath)
-                            await updateDoc(doc.id, { file_url: urlData.publicUrl })
-                          }
-                        }} />
-                      </label>
-                    )}
+                  <div className="mt-2 ml-6 flex flex-wrap items-center gap-3">
+                    {parseAttachmentUrls(doc.file_url).map((url: string, i: number) => (
+                      <span key={i} className="flex items-center gap-1">
+                        <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">📎 {attachmentFileName(url)}</a>
+                        <button onClick={() => removeDocFile(doc, url)} className="text-xs text-red-400 hover:text-red-600" title="Remove file">✕</button>
+                      </span>
+                    ))}
+                    <label className="cursor-pointer text-xs text-blue-600 hover:underline">
+                      📎 Upload File(s)
+                      <input type="file" multiple className="hidden" onChange={async (e: any) => { await uploadDocFiles(doc, e.target.files); e.target.value = '' }} />
+                    </label>
                   </div>
                 </div>
               </div>
@@ -260,17 +298,21 @@ function DocumentsTab({ propertyId, morId }: any) {
           <div className="bg-white rounded-lg p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto">
             <h3 className="text-lg font-bold mb-2">Submission Packet</h3>
             <p className="text-sm text-gray-500 mb-4">All uploaded documents for this property.</p>
-            {documents.filter((d: any) => d.file_url).length === 0 ? (
+            {documents.filter((d: any) => parseAttachmentUrls(d.file_url).length > 0).length === 0 ? (
               <p className="text-sm text-gray-500 text-center py-4">No files uploaded yet.</p>
             ) : (
               <div className="space-y-2">
-                {documents.filter((d: any) => d.file_url).map((doc: any) => (
-                  <div key={doc.id} className="flex items-center justify-between p-3 border border-gray-200 rounded">
+                {documents.filter((d: any) => parseAttachmentUrls(d.file_url).length > 0).map((doc: any) => (
+                  <div key={doc.id} className="flex items-start justify-between p-3 border border-gray-200 rounded">
                     <div className="flex-1">
                       <p className="text-sm font-medium text-gray-800">{doc.name}</p>
                       <p className="text-xs text-gray-500">{doc.status}</p>
                     </div>
-                    <a href={doc.file_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline ml-3">📎 View</a>
+                    <div className="flex flex-col items-end gap-1 ml-3">
+                      {parseAttachmentUrls(doc.file_url).map((url: string, i: number) => (
+                        <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">📎 {attachmentFileName(url)}</a>
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -667,6 +709,36 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
     return null
   }
 
+  // Upload one or more supporting documents for a finding, keeping existing ones.
+  const uploadFindingFiles = async (finding: any, fileList: FileList | null) => {
+    const files = Array.from(fileList || [])
+    if (!files.length) return
+    const existing = parseAttachmentUrls(finding.document_url)
+    const added: string[] = []
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+      const filePath = `${propertyId}/findings/${finding.id}/${Date.now()}-${i}/${safeName}`
+      const { error: uploadError } = await supabase.storage.from('mor-documents').upload(filePath, file, { upsert: true })
+      if (uploadError) {
+        console.error('[finding upload] storage upload failed:', uploadError)
+        toast(`Error uploading ${file.name}: ${uploadError.message}`, 'error')
+        continue
+      }
+      const { data: urlData } = supabase.storage.from('mor-documents').getPublicUrl(filePath)
+      added.push(urlData.publicUrl)
+    }
+    if (added.length) {
+      const updateError = await updateFinding(finding.id, { document_url: serializeAttachmentUrls([...existing, ...added]) })
+      if (!updateError) toast(`Uploaded ${added.length} document${added.length === 1 ? '' : 's'}.`, 'success')
+    }
+  }
+
+  const removeFindingFile = async (finding: any, url: string) => {
+    const remaining = parseAttachmentUrls(finding.document_url).filter((u: string) => u !== url)
+    await updateFinding(finding.id, { document_url: serializeAttachmentUrls(remaining) })
+  }
+
   const moveFinding = async (index: any, direction: any) => {
     const newFindings = [...findings]
     const swapIndex = index + direction
@@ -829,9 +901,9 @@ Corrective Action: ${f.corrective_action || ''}`
       const response = finding.response
         ? `<p style="margin:8px 0 4px 0;"><strong>Response:</strong></p>${responseLines}`
         : ''
-      const attachment = finding.document_url
-        ? `<p style="margin:6px 0 0 0; font-style:italic;">See attached: ${esc(decodeURIComponent((finding.document_url.split('/').pop() || 'attachment').split('?')[0]))}</p>`
-        : ''
+      const attachment = parseAttachmentUrls(finding.document_url)
+        .map((u: string) => `<p style="margin:6px 0 0 0; font-style:italic;">See attached: ${esc(attachmentFileName(u))}</p>`)
+        .join('')
       return `
         <div style="page-break-inside: avoid; margin:0 0 16px 0; padding:0 0 10px 0; border-bottom:1px solid #ddd;">
           <p style="margin:0 0 6px 0; font-weight:bold; font-size:13px;">Finding ${index + 1}:</p>
@@ -960,9 +1032,8 @@ Corrective Action: ${f.corrective_action || ''}`
           children.push(new Paragraph({ children: [new TextRun(line)] }))
         }
       }
-      if (finding.document_url) {
-        const fileName = decodeURIComponent((finding.document_url.split('/').pop() || 'attachment').split('?')[0])
-        children.push(new Paragraph({ children: [new TextRun({ text: `See attached: ${fileName}`, italics: true })] }))
+      for (const url of parseAttachmentUrls(finding.document_url)) {
+        children.push(new Paragraph({ children: [new TextRun({ text: `See attached: ${attachmentFileName(url)}`, italics: true })] }))
       }
       children.push(hr('CCCCCC', 4))
     })
@@ -996,16 +1067,19 @@ Corrective Action: ${f.corrective_action || ''}`
 
     for (let i = 0; i < findingsWithPending.length; i++) {
       const finding = findingsWithPending[i]
-      if (finding.document_url) {
+      const urls = parseAttachmentUrls(finding.document_url)
+      for (let j = 0; j < urls.length; j++) {
+        const url = urls[j]
         try {
-          const response = await fetch(finding.document_url)
+          const response = await fetch(url)
           const blob = await response.blob()
-          const originalExt = finding.document_url.split('.').pop().split('?')[0]
+          const originalExt = (url.split('.').pop() || 'bin').split('?')[0]
           const shortDesc = finding.finding ? finding.finding.substring(0, 30).replace(/[^a-zA-Z0-9]/g, '_') : 'attachment'
-          const fileName = `Finding_${i + 1}_${shortDesc}.${originalExt}`
+          const suffix = urls.length > 1 ? `_${j + 1}` : ''
+          const fileName = `Finding_${i + 1}${suffix}_${shortDesc}.${originalExt}`
           zip.file(fileName, blob)
         } catch (err) {
-          console.error(`Failed to fetch attachment for finding ${i + 1}`)
+          console.error(`Failed to fetch attachment ${j + 1} for finding ${i + 1}`)
         }
       }
     }
@@ -1153,41 +1227,18 @@ Corrective Action: ${f.corrective_action || ''}`
                   <DebouncedFindingTextarea value={finding.response || ''} onType={(v: string) => { pendingResponses.current[finding.id] = v }} onSave={(v: string) => updateFinding(finding.id, { response: v || null })} rows={3} placeholder="Type your response to this finding here..." className="w-full mt-1 border border-gray-200 rounded px-3 py-2 text-sm" />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-500">Supporting Document</label>
-                  <div className="mt-1 flex items-center gap-2">
-                    {finding.document_url ? (
-                      <div className="flex items-center gap-2">
-                        <a href={finding.document_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">📎 View Document</a>
-                        <button onClick={() => updateFinding(finding.id, { document_url: null })} className="text-xs text-red-400 hover:text-red-600">Remove</button>
-                      </div>
-                    ) : (
-                      <label className="cursor-pointer text-xs text-blue-600 hover:underline">
-                        📎 Upload Supporting Document
-                        <input type="file" className="hidden" onChange={async (e: any) => {
-                          const file = e.target.files[0]
-                          if (!file) return
-                          // Sanitize the file name — Supabase storage keys reject spaces and many symbols,
-                          // which previously caused the upload to fail silently.
-                          const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-                          const filePath = `${propertyId}/findings/${finding.id}/${safeName}`
-                          const { error: uploadError } = await supabase.storage.from('mor-documents').upload(filePath, file, { upsert: true })
-                          if (uploadError) {
-                            console.error('[finding upload] storage upload failed:', uploadError)
-                            toast('Error uploading document: ' + uploadError.message, 'error')
-                            return
-                          }
-                          const { data: urlData } = supabase.storage.from('mor-documents').getPublicUrl(filePath)
-                          console.log('[finding upload] uploaded to', filePath, '→', urlData.publicUrl)
-                          const updateError = await updateFinding(finding.id, { document_url: urlData.publicUrl })
-                          if (updateError) {
-                            console.error('[finding upload] saving document_url failed:', updateError)
-                            return
-                          }
-                          toast('Document uploaded.', 'success')
-                          e.target.value = ''
-                        }} />
-                      </label>
-                    )}
+                  <label className="text-xs text-gray-500">Supporting Documents</label>
+                  <div className="mt-1 flex flex-wrap items-center gap-3">
+                    {parseAttachmentUrls(finding.document_url).map((url: string, i: number) => (
+                      <span key={i} className="flex items-center gap-1">
+                        <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">📎 {attachmentFileName(url)}</a>
+                        <button onClick={() => removeFindingFile(finding, url)} className="text-xs text-red-400 hover:text-red-600" title="Remove file">✕</button>
+                      </span>
+                    ))}
+                    <label className="cursor-pointer text-xs text-blue-600 hover:underline">
+                      📎 Upload Document(s)
+                      <input type="file" multiple className="hidden" onChange={async (e: any) => { await uploadFindingFiles(finding, e.target.files); e.target.value = '' }} />
+                    </label>
                   </div>
                 </div>
               </div>
