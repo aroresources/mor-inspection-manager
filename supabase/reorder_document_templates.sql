@@ -1,19 +1,44 @@
--- Reorder the default MOR Binder checklist items to match Addendum C.
+-- Reorder the default MOR Binder checklist items to match Addendum C, and
+-- consolidate the VAWA / Form HUD-538x items into a single row.
 --
--- Updates sort_order on the default templates (document_templates) and on any
--- existing per-MOR checklists (documents) that use these default item names.
--- Custom items (documents.is_custom = true) are left untouched.
+-- Steps:
+--   1. Delete the four separate VAWA / Form HUD-538x rows (templates + documents).
+--   2. Insert one consolidated VAWA row into document_templates at sort_order 43,
+--      using whatever category the other (General Documents) items use.
+--   3. Reorder document_templates and matching non-custom documents rows by exact
+--      name to the Addendum C sequence (0-52).
 --
--- Names below match the EXACT stored values (reconciled from the verification
--- query). The four VAWA / Form HUD-538x items are stored as separate rows and
--- are grouped sequentially at 43-46; everything after them is shifted up by 3
--- (so the list now runs 0-55 instead of 0-52).
---
--- Run the verification query at the bottom after running this; it should return
--- no rows once every stored template name matches.
---
--- Run this in the Supabase SQL Editor.
+-- Run this in the Supabase SQL Editor. The verification query at the bottom
+-- should return no rows once every stored template name matches.
 
+-- 1) Remove the four separate VAWA / Form HUD-538x rows.
+delete from documents
+where name in (
+  'Form HUD-5380 Notice of Occupancy Rights under VAWA',
+  'Form HUD-5382 Certification Form',
+  'Form HUD-5383 Emergency Transfer Request Form',
+  'VAWA documents including Emergency Transfer Plan'
+);
+
+delete from document_templates
+where name in (
+  'Form HUD-5380 Notice of Occupancy Rights under VAWA',
+  'Form HUD-5382 Certification Form',
+  'Form HUD-5383 Emergency Transfer Request Form',
+  'VAWA documents including Emergency Transfer Plan'
+);
+
+-- 2) Insert one consolidated VAWA row, reusing the category of a sibling
+--    General Documents item.
+insert into document_templates (name, category, sort_order, is_default)
+values (
+  'Other VAWA documents including Emergency Transfer Plan, Form HUD-5380 Notice of Occupancy Rights under VAWA; Form HUD-5382 Certification Form; and Form HUD-5383 Emergency Transfer Request Form',
+  (select category from document_templates where name = 'EIV Forms & Procedures' limit 1),
+  43,
+  true
+);
+
+-- 3) Reorder everything by exact name.
 create temporary table _ord (name text primary key, ord int) on commit drop;
 
 insert into _ord (name, ord) values
@@ -60,35 +85,29 @@ insert into _ord (name, ord) values
   ('HUD approval letter for any owner/agent initiated lease modifications', 40),
   ('List of all additional fees/charges above rent and security deposit', 41),
   ('EIV Forms & Procedures', 42),
-  ('Form HUD-5380 Notice of Occupancy Rights under VAWA', 43),
-  ('Form HUD-5382 Certification Form', 44),
-  ('Form HUD-5383 Emergency Transfer Request Form', 45),
-  ('VAWA documents including Emergency Transfer Plan', 46),
-  ('List of all evictions during the last 12 months', 47),
-  ('Copy of Termination of Tenancy and Termination of Assistance letters', 48),
-  ('Grievance procedures with appeal information', 49),
-  ('Lead Hazard Control Plan', 50),
-  ('Written procedures for resolving tenant complaints or concerns', 51),
-  ('Affirmative Fair Housing Marketing Plan', 52),
-  ('Tenant Selection Plan, including any approved residency preference', 53),
-  ('Recent advertising', 54),
-  ('Fair Housing logo and Fair Housing poster', 55);
+  ('Other VAWA documents including Emergency Transfer Plan, Form HUD-5380 Notice of Occupancy Rights under VAWA; Form HUD-5382 Certification Form; and Form HUD-5383 Emergency Transfer Request Form', 43),
+  ('List of all evictions during the last 12 months', 44),
+  ('Copy of Termination of Tenancy and Termination of Assistance letters', 45),
+  ('Grievance procedures with appeal information', 46),
+  ('Lead Hazard Control Plan', 47),
+  ('Written procedures for resolving tenant complaints or concerns', 48),
+  ('Affirmative Fair Housing Marketing Plan', 49),
+  ('Tenant Selection Plan, including any approved residency preference', 50),
+  ('Recent advertising', 51),
+  ('Fair Housing logo and Fair Housing poster', 52);
 
--- 1) Reorder the default templates.
 update document_templates t
 set sort_order = o.ord
 from _ord o
 where t.name = o.name;
 
--- 2) Reorder the matching (non-custom) items in every existing property checklist.
 update documents d
 set sort_order = o.ord
 from _ord o
 where d.name = o.name
   and coalesce(d.is_custom, false) = false;
 
--- 3) VERIFICATION — template names that did NOT match this list (should be empty).
---    Any rows here are wording differences to reconcile before they'll reorder.
+-- 4) VERIFICATION — template names that did NOT match this list (should be empty).
 select name, sort_order
 from document_templates
 where name not in (select name from _ord)
