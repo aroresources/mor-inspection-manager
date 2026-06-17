@@ -85,44 +85,47 @@ export default function Dashboard() {
       .eq('id', user.id)
       .single()
 
-    // A super_admin always sees every property, regardless of their company_id
+    // Scope the query explicitly by role rather than relying solely on RLS.
+    // mors(*) avoids errors if an expected MOR column hasn't been migrated yet.
+    let query = supabase
+      .from('properties')
+      .select('*, companies(name), mors(*)')
+      .order('name')
+
     if (profile?.role === 'super_admin') {
+      // A super_admin sees every property, regardless of company_id.
       setNoAccessMessage(null)
-      // mors(*) avoids errors if an expected MOR column hasn't been migrated yet.
-      const { data, error } = await supabase
-        .from('properties')
-        .select('*, companies(name), mors(*)')
-        .order('name')
-      if (error) console.error('Error fetching properties (super_admin):', error)
-      if (data) setProperties(data)
-      return
-    }
-
-    // An asset_manager with no company assigned should see no properties
-    if (profile?.role === 'asset_manager' && !profile.company_id) {
-      setProperties([])
-      setNoAccessMessage('No company assigned - contact your administrator')
-      return
-    }
-
-    // A property_manager with no property_access entries should see no properties
-    if (profile?.role === 'property_manager') {
-      const { count } = await supabase
+    } else if (profile?.role === 'asset_manager') {
+      // An asset_manager sees only properties in their assigned company.
+      if (!profile.company_id) {
+        setProperties([])
+        setNoAccessMessage('No company assigned - contact your administrator')
+        return
+      }
+      setNoAccessMessage(null)
+      query = query.eq('company_id', profile.company_id)
+    } else if (profile?.role === 'property_manager') {
+      // A property_manager sees only the specific properties they were granted.
+      const { data: access } = await supabase
         .from('property_access')
-        .select('property_id', { count: 'exact', head: true })
+        .select('property_id')
         .eq('user_id', user.id)
-      if (!count) {
+      const ids = (access || []).map((a: any) => a.property_id)
+      if (ids.length === 0) {
         setProperties([])
         setNoAccessMessage('No properties assigned - contact your administrator')
         return
       }
+      setNoAccessMessage(null)
+      query = query.in('id', ids)
+    } else {
+      // Unknown / unassigned role: no access.
+      setProperties([])
+      setNoAccessMessage('No properties assigned - contact your administrator')
+      return
     }
 
-    setNoAccessMessage(null)
-    const { data, error } = await supabase
-      .from('properties')
-      .select('*, companies(name), mors(*)')
-      .order('name')
+    const { data, error } = await query
     if (error) console.error('Error fetching properties:', error)
     if (data) setProperties(data)
   }
