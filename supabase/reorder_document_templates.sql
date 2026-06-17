@@ -98,7 +98,22 @@ from _ord o
 where d.name = o.name
   and coalesce(d.is_custom, false) = false;
 
--- 4) Renumber contiguously (0..N-1), preserving the order set above, so any gap
+-- 4) Backfill any canonical item missing from an existing checklist (e.g. the
+--    consolidated VAWA row, which was only added to templates). Only affects
+--    MORs that already have a checklist; brand-new MORs are seeded separately
+--    by initialize_mor_documents.
+insert into documents (property_id, mor_id, name, category, is_required, status, is_custom, sort_order)
+select m.property_id, m.mor_id, o.name,
+       (select dt.category from document_templates dt where dt.name = o.name limit 1),
+       true, 'Not Started', false, o.ord
+from (select distinct property_id, mor_id from documents) m
+cross join _ord o
+where not exists (
+  select 1 from documents d
+  where d.mor_id = m.mor_id and d.name = o.name
+);
+
+-- 5) Renumber contiguously (0..N-1), preserving the order set above, so any gap
 --    or off-by-one left by earlier runs is removed.
 with ranked as (
   select id, (row_number() over (order by sort_order, name)) - 1 as rn
@@ -118,7 +133,7 @@ set sort_order = r.rn
 from ranked r
 where d.id = r.id;
 
--- 5) VERIFICATION — non-canonical template names (custom items will show here).
+-- 6) VERIFICATION — non-canonical template names (custom items will show here).
 select name, sort_order
 from document_templates
 where name not in (select name from _ord)
