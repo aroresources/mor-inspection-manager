@@ -1,32 +1,23 @@
 -- Reorder the default MOR Binder checklist items to match Addendum C, and
 -- consolidate the VAWA / Form HUD-538x items into a single row.
 --
--- Steps:
---   1. Delete the four separate VAWA / Form HUD-538x rows (templates + documents).
---   2. Insert one consolidated VAWA row into document_templates at sort_order 43,
---      using whatever category the other (General Documents) items use.
---   3. Reorder document_templates and matching non-custom documents rows by exact
---      name to the Addendum C sequence (0-52).
+-- This script is idempotent and self-correcting: it removes ALL VAWA-related
+-- rows (the four separate items plus any previously-inserted consolidated row),
+-- inserts exactly one consolidated row, applies the Addendum C order by name,
+-- then renumbers everything contiguously so there are never gaps or off-by-one
+-- numbering left over from earlier runs.
 --
 -- Run this in the Supabase SQL Editor. The verification query at the bottom
--- should return no rows once every stored template name matches.
+-- lists any template names that aren't canonical Addendum C items (expected to
+-- be empty unless you've added your own custom templates).
 
--- 1) Remove the four separate VAWA / Form HUD-538x rows.
+-- 1) Remove every VAWA / Form HUD-538x row from both tables. The broad match
+--    also clears any earlier consolidated row, so re-running is safe.
 delete from documents
-where name in (
-  'Form HUD-5380 Notice of Occupancy Rights under VAWA',
-  'Form HUD-5382 Certification Form',
-  'Form HUD-5383 Emergency Transfer Request Form',
-  'VAWA documents including Emergency Transfer Plan'
-);
+where name ilike '%VAWA%' or name ilike '%HUD-538%';
 
 delete from document_templates
-where name in (
-  'Form HUD-5380 Notice of Occupancy Rights under VAWA',
-  'Form HUD-5382 Certification Form',
-  'Form HUD-5383 Emergency Transfer Request Form',
-  'VAWA documents including Emergency Transfer Plan'
-);
+where name ilike '%VAWA%' or name ilike '%HUD-538%';
 
 -- 2) Insert one consolidated VAWA row, reusing the category of a sibling
 --    General Documents item.
@@ -38,7 +29,7 @@ values (
   true
 );
 
--- 3) Reorder everything by exact name.
+-- 3) Apply the Addendum C order by exact name.
 create temporary table _ord (name text primary key, ord int) on commit drop;
 
 insert into _ord (name, ord) values
@@ -107,7 +98,27 @@ from _ord o
 where d.name = o.name
   and coalesce(d.is_custom, false) = false;
 
--- 4) VERIFICATION — template names that did NOT match this list (should be empty).
+-- 4) Renumber contiguously (0..N-1), preserving the order set above, so any gap
+--    or off-by-one left by earlier runs is removed.
+with ranked as (
+  select id, (row_number() over (order by sort_order, name)) - 1 as rn
+  from document_templates
+)
+update document_templates t
+set sort_order = r.rn
+from ranked r
+where t.id = r.id;
+
+with ranked as (
+  select id, (row_number() over (partition by mor_id order by sort_order, name)) - 1 as rn
+  from documents
+)
+update documents d
+set sort_order = r.rn
+from ranked r
+where d.id = r.id;
+
+-- 5) VERIFICATION — non-canonical template names (custom items will show here).
 select name, sort_order
 from document_templates
 where name not in (select name from _ord)
