@@ -694,6 +694,8 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
   const [findings, setFindings] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('all')
+  const [selectedFindingIds, setSelectedFindingIds] = useState<string[]>([])
+  const [bulkStatus, setBulkStatus] = useState('')
   const [showAddFinding, setShowAddFinding] = useState(false)
   const [newFinding, setNewFinding] = useState<any>({ finding: '', assigned_to: '', response: '', due_date: '' })
   const [introText, setIntroText] = useState('Below is our response to the Management and Occupancy Review above:')
@@ -819,10 +821,30 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
 
   const deadline = parseDate(responseDueDate)
   const daysLeft = deadline ? Math.ceil((deadline.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : null
-  const open = findings.filter((f: any) => f.status !== 'Submitted').length
+  const open = findings.filter((f: any) => f.status !== 'Submitted' && f.status !== 'Closed').length
   const total = findings.length
-  const findingStatuses = ['Open', 'In Progress', 'Ready', 'Submitted']
+  const findingStatuses = ['Open', 'In Progress', 'Ready', 'Follow Up', 'Submitted', 'Closed']
+  const statusClasses = (status: string) =>
+    status === 'Submitted' ? 'bg-green-100 text-green-700 border-green-200' :
+    status === 'Closed' ? 'bg-gray-200 text-gray-700 border-gray-300' :
+    status === 'Ready' ? 'bg-blue-100 text-blue-700 border-blue-200' :
+    status === 'Follow Up' ? 'bg-orange-100 text-orange-700 border-orange-200' :
+    status === 'In Progress' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
+    'bg-red-100 text-red-700 border-red-200'
   const visibleFindings = statusFilter === 'all' ? findings : findings.filter((f: any) => f.status === statusFilter)
+
+  const toggleSelectFinding = (id: string) =>
+    setSelectedFindingIds(ids => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id])
+
+  const bulkUpdateStatus = async (status: string) => {
+    if (!status || selectedFindingIds.length === 0) return
+    const { error } = await supabase.from('findings').update({ status }).in('id', selectedFindingIds)
+    if (error) { toast('Error updating findings: ' + error.message, 'error'); return }
+    setFindings(findings => findings.map((f: any) => selectedFindingIds.includes(f.id) ? { ...f, status } : f))
+    toast(`Updated ${selectedFindingIds.length} finding${selectedFindingIds.length === 1 ? '' : 's'} to "${status}".`, 'success')
+    setSelectedFindingIds([])
+    setBulkStatus('')
+  }
 
   const completeMor = async () => {
     if (!morRating) { toast('Please select an MOR rating before completing.', 'warning'); return }
@@ -905,12 +927,18 @@ Corrective Action: ${f.corrective_action || ''}`
     fetchFindings()
   }
 
+  const readyCount = () => findings.filter((f: any) => f.status === 'Ready').length
+
   const generatePDF = async () => {
+    if (readyCount() === 0) { toast('No findings are marked "Ready" to include in the report.', 'warning'); return }
     // Merge in any responses still pending the debounced save.
-    const findingsWithPending = findings.map((f: any) => ({
-      ...f,
-      response: pendingResponses.current[f.id] ?? f.response,
-    }))
+    // Only findings marked "Ready" are included in the submitted response report.
+    const findingsWithPending = findings
+      .filter((f: any) => f.status === 'Ready')
+      .map((f: any) => ({
+        ...f,
+        response: pendingResponses.current[f.id] ?? f.response,
+      }))
 
     const esc = (s: any) =>
       String(s ?? '')
@@ -1018,10 +1046,13 @@ Corrective Action: ${f.corrective_action || ''}`
   // Build the Word report (shared by the standalone download and the ZIP package).
   const buildReportDocx = () => {
     // Merge in any responses still pending the debounced save (same as the PDF).
-    const findingsWithPending = findings.map((f: any) => ({
-      ...f,
-      response: pendingResponses.current[f.id] ?? f.response,
-    }))
+    // Only findings marked "Ready" are included in the submitted response report.
+    const findingsWithPending = findings
+      .filter((f: any) => f.status === 'Ready')
+      .map((f: any) => ({
+        ...f,
+        response: pendingResponses.current[f.id] ?? f.response,
+      }))
 
     // A full-width bottom border makes a horizontal rule.
     const hr = (color: string, size: number) =>
@@ -1108,16 +1139,21 @@ Corrective Action: ${f.corrective_action || ''}`
   }
 
   const generateDOCX = async () => {
+    if (readyCount() === 0) { toast('No findings are marked "Ready" to include in the report.', 'warning'); return }
     const blob = await Packer.toBlob(buildReportDocx())
     saveAs(blob, 'MOR-Response-Report.docx')
   }
 
   const downloadZip = async () => {
+    if (readyCount() === 0) { toast('No findings are marked "Ready" to include in the report.', 'warning'); return }
     // Merge in any responses still pending the debounced save.
-    const findingsWithPending = findings.map((f: any) => ({
-      ...f,
-      response: pendingResponses.current[f.id] ?? f.response,
-    }))
+    // Only findings marked "Ready" are included in the submitted response report.
+    const findingsWithPending = findings
+      .filter((f: any) => f.status === 'Ready')
+      .map((f: any) => ({
+        ...f,
+        response: pendingResponses.current[f.id] ?? f.response,
+      }))
     const zip = new JSZip()
 
     // Word version of the response report (same content as the standalone download).
@@ -1263,6 +1299,44 @@ Corrective Action: ${f.corrective_action || ''}`
         </div>
       )}
 
+      {findings.length > 0 && (
+        <div className="flex items-center gap-3 flex-wrap bg-white rounded-lg shadow px-3 py-2">
+          <label className="flex items-center gap-1 text-xs text-gray-600">
+            <input
+              type="checkbox"
+              checked={visibleFindings.length > 0 && visibleFindings.every((f: any) => selectedFindingIds.includes(f.id))}
+              onChange={(e: any) => {
+                const visibleIds = visibleFindings.map((f: any) => f.id)
+                setSelectedFindingIds(ids => e.target.checked
+                  ? Array.from(new Set([...ids, ...visibleIds]))
+                  : ids.filter(id => !visibleIds.includes(id)))
+              }}
+            />
+            Select all shown
+          </label>
+          <span className="text-xs text-gray-500">{selectedFindingIds.length} selected</span>
+          <select
+            value={bulkStatus}
+            onChange={(e: any) => setBulkStatus(e.target.value)}
+            disabled={selectedFindingIds.length === 0}
+            className="text-xs border border-gray-300 rounded px-2 py-1 disabled:opacity-50"
+          >
+            <option value="">Set status to…</option>
+            {findingStatuses.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <button
+            onClick={() => bulkUpdateStatus(bulkStatus)}
+            disabled={!bulkStatus || selectedFindingIds.length === 0}
+            className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 disabled:opacity-50"
+          >
+            Apply
+          </button>
+          {selectedFindingIds.length > 0 && (
+            <button onClick={() => setSelectedFindingIds([])} className="text-xs text-gray-500 hover:text-gray-700 underline">Clear</button>
+          )}
+        </div>
+      )}
+
       {findings.length === 0 ? (
         <div className="bg-white rounded-lg shadow p-6 text-center text-gray-500 text-sm">No findings yet. Click "+ Add Finding" to log findings from the MOR report.</div>
       ) : visibleFindings.length === 0 ? (
@@ -1280,12 +1354,12 @@ Corrective Action: ${f.corrective_action || ''}`
                 </div>
                 <div className="flex-1">
               <div className="flex justify-between items-start mb-3">
-                <select value={finding.status} onChange={(e: any) => updateFinding(finding.id, { status: e.target.value })} className={`text-xs px-2 py-1 rounded border ${finding.status === 'Submitted' ? 'bg-green-100 text-green-700 border-green-200' : finding.status === 'Ready' ? 'bg-blue-100 text-blue-700 border-blue-200' : finding.status === 'In Progress' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' : 'bg-red-100 text-red-700 border-red-200'}`}>
-                  <option value="Open">Open</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="Ready">Ready</option>
-                  <option value="Submitted">Submitted</option>
-                </select>
+                <div className="flex items-center gap-2">
+                  <input type="checkbox" checked={selectedFindingIds.includes(finding.id)} onChange={() => toggleSelectFinding(finding.id)} title="Select for bulk status change" />
+                  <select value={finding.status} onChange={(e: any) => updateFinding(finding.id, { status: e.target.value })} className={`text-xs px-2 py-1 rounded border ${statusClasses(finding.status)}`}>
+                    {findingStatuses.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
                 <button onClick={() => deleteFinding(finding.id)} className="text-red-400 hover:text-red-600 text-xs">Delete</button>
               </div>
               <div className="space-y-3">

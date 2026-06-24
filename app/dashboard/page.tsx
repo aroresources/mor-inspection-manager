@@ -341,6 +341,16 @@ export default function Dashboard() {
     return parseDate(activeMor.response_submitted_date)
   }
 
+  // There's an outstanding response deadline when a due date exists and either
+  // nothing was submitted yet, or the due date is newer than the submission
+  // (a follow-up deadline set after the CA reviewed/rejected the response).
+  const hasOpenResponseDeadline = (property: any) => {
+    const due = getResponseDueDate(property)
+    if (!due) return false
+    const submitted = getResponseSubmittedDate(property)
+    return !submitted || due.getTime() > submitted.getTime()
+  }
+
   const getResponseUrgency = (dueDate: any) => {
     if (!dueDate) return 'none'
     const daysUntil = Math.ceil((dueDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
@@ -455,7 +465,8 @@ export default function Dashboard() {
 
   const getResponseCell = (property: any) => {
     const submitted = getResponseSubmittedDate(property)
-    if (submitted) {
+    // A newer (follow-up) due date takes priority over the "Response Sent" state.
+    if (submitted && !hasOpenResponseDeadline(property)) {
       return { label: `✅ Response Sent: ${formatDateObj(submitted)}`, classes: 'bg-green-100 text-green-700' }
     }
     const responseDue = getResponseDueDate(property)
@@ -545,16 +556,17 @@ export default function Dashboard() {
   const daysUntil = (d: Date | null) =>
     d ? Math.ceil((d.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : null
 
-  // Overdue response: an Active MOR whose response_due_date has already passed.
-  // A submitted response resolves it — no longer needs attention.
+  // Overdue response: an Active MOR with an outstanding deadline that has passed.
+  // A submission resolves it unless a newer (follow-up) due date was set after.
   const isOverdueResponse = (p: any) => {
-    if (getResponseSubmittedDate(p)) return false
+    if (!hasOpenResponseDeadline(p)) return false
     const due = getResponseDueDate(p)
     return due != null && (daysUntil(due) as number) < 0
   }
-  // Response due within the next 14 days (resolved once a response is submitted).
+  // Response due within the next 14 days (resolved once submitted, unless a
+  // newer follow-up due date was set after the submission).
   const isResponseDueSoon = (p: any) => {
-    if (getResponseSubmittedDate(p)) return false
+    if (!hasOpenResponseDeadline(p)) return false
     const due = getResponseDueDate(p)
     if (!due) return false
     const d = daysUntil(due) as number
@@ -1032,7 +1044,7 @@ export default function Dashboard() {
 
               {(() => {
                 const submitted = getResponseSubmittedDate(property)
-                if (submitted) return (
+                if (submitted && !hasOpenResponseDeadline(property)) return (
                   <div className="mt-2 text-xs px-2 py-1 rounded bg-green-100 text-green-700">
                     ✅ Response Sent: {formatDateObj(submitted)}
                   </div>
