@@ -693,6 +693,7 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
   const { toast, confirm } = useToast()
   const [findings, setFindings] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [statusFilter, setStatusFilter] = useState('all')
   const [showAddFinding, setShowAddFinding] = useState(false)
   const [newFinding, setNewFinding] = useState<any>({ finding: '', assigned_to: '', response: '', due_date: '' })
   const [introText, setIntroText] = useState('Below is our response to the Management and Occupancy Review above:')
@@ -820,6 +821,8 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
   const daysLeft = deadline ? Math.ceil((deadline.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : null
   const open = findings.filter((f: any) => f.status !== 'Submitted').length
   const total = findings.length
+  const findingStatuses = ['Open', 'In Progress', 'Ready', 'Submitted']
+  const visibleFindings = statusFilter === 'all' ? findings : findings.filter((f: any) => f.status === statusFilter)
 
   const completeMor = async () => {
     if (!morRating) { toast('Please select an MOR rating before completing.', 'warning'); return }
@@ -1242,11 +1245,33 @@ Corrective Action: ${f.corrective_action || ''}`
         </div>
       </div>
 
+      {findings.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-gray-500 font-medium">Filter by status:</span>
+          {['all', ...findingStatuses].map((s) => {
+            const count = s === 'all' ? findings.length : findings.filter((f: any) => f.status === s).length
+            return (
+              <button
+                key={s}
+                onClick={() => setStatusFilter(s)}
+                className={`text-xs px-3 py-1 rounded-full border transition ${statusFilter === s ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'}`}
+              >
+                {s === 'all' ? 'All' : s} ({count})
+              </button>
+            )
+          })}
+        </div>
+      )}
+
       {findings.length === 0 ? (
         <div className="bg-white rounded-lg shadow p-6 text-center text-gray-500 text-sm">No findings yet. Click "+ Add Finding" to log findings from the MOR report.</div>
+      ) : visibleFindings.length === 0 ? (
+        <div className="bg-white rounded-lg shadow p-6 text-center text-gray-500 text-sm">No findings with status &quot;{statusFilter}&quot;.</div>
       ) : (
         <div className="space-y-3">
-          {findings.map((finding: any, index: number) => (
+          {visibleFindings.map((finding: any) => {
+            const index = findings.findIndex((f: any) => f.id === finding.id)
+            return (
             <div key={finding.id} className="bg-white rounded-lg shadow p-5">
               <div className="flex items-start gap-3">
                 <div className="flex flex-col gap-1 mt-1">
@@ -1301,7 +1326,8 @@ Corrective Action: ${f.corrective_action || ''}`
                 </div>
               </div>
             </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
