@@ -1274,7 +1274,8 @@ Corrective Action: ${f.corrective_action || ''}`
               const checked = e.target.checked
               setFollowUp(checked)
               if (!morId) return
-              await supabase.from('mors').update({ follow_up: checked }).eq('id', morId)
+              const { error } = await supabase.from('mors').update({ follow_up: checked }).eq('id', morId)
+              if (error) { toast('Could not save follow-up — run the mor_followup_fields.sql migration in Supabase. (' + error.message + ')', 'error'); return }
               if (onUpdateMor) onUpdateMor()
             }}
           />
@@ -1290,7 +1291,8 @@ Corrective Action: ${f.corrective_action || ''}`
                 onChange={(e: any) => setFollowUpDueDate(e.target.value)}
                 onBlur={async (e: any) => {
                   if (!morId) return
-                  await supabase.from('mors').update({ follow_up_response_due_date: e.target.value || null }).eq('id', morId)
+                  const { error } = await supabase.from('mors').update({ follow_up_response_due_date: e.target.value || null }).eq('id', morId)
+                  if (error) { toast('Could not save follow-up date: ' + error.message, 'error'); return }
                   if (onUpdateMor) onUpdateMor()
                 }}
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
@@ -1304,7 +1306,8 @@ Corrective Action: ${f.corrective_action || ''}`
                 onChange={(e: any) => setFollowUpSubmittedDate(e.target.value)}
                 onBlur={async (e: any) => {
                   if (!morId) return
-                  await supabase.from('mors').update({ follow_up_response_submitted_date: e.target.value || null }).eq('id', morId)
+                  const { error } = await supabase.from('mors').update({ follow_up_response_submitted_date: e.target.value || null }).eq('id', morId)
+                  if (error) { toast('Could not save follow-up date: ' + error.message, 'error'); return }
                   if (onUpdateMor) onUpdateMor()
                 }}
                 className={`w-full border rounded px-3 py-2 text-sm ${followUpSubmittedDate ? 'border-green-300 text-green-700 font-medium' : 'border-gray-300'}`}
