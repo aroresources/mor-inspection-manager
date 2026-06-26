@@ -707,6 +707,9 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
   const [morRating, setMorRating] = useState('')
   const [responseDueDate, setResponseDueDate] = useState(currentMor?.response_due_date || '')
   const [responseSubmittedDate, setResponseSubmittedDate] = useState(currentMor?.response_submitted_date || '')
+  const [followUp, setFollowUp] = useState(!!currentMor?.follow_up)
+  const [followUpDueDate, setFollowUpDueDate] = useState(currentMor?.follow_up_response_due_date || '')
+  const [followUpSubmittedDate, setFollowUpSubmittedDate] = useState(currentMor?.follow_up_response_submitted_date || '')
   const [completing, setCompleting] = useState(false)
   // Tracks the latest typed response per finding id, including values not yet
   // persisted by the debounced save, so reports can use the most current text.
@@ -719,6 +722,9 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
   useEffect(() => {
     setResponseDueDate(currentMor?.response_due_date || '')
     setResponseSubmittedDate(currentMor?.response_submitted_date || '')
+    setFollowUp(!!currentMor?.follow_up)
+    setFollowUpDueDate(currentMor?.follow_up_response_due_date || '')
+    setFollowUpSubmittedDate(currentMor?.follow_up_response_submitted_date || '')
   }, [currentMor])
 
   const fetchFindings = async () => {
@@ -1258,6 +1264,59 @@ Corrective Action: ${f.corrective_action || ''}`
         )}
       </div>
 
+      {/* Follow-up (after CA review/rejection) */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          <input
+            type="checkbox"
+            checked={followUp}
+            onChange={async (e: any) => {
+              const checked = e.target.checked
+              setFollowUp(checked)
+              if (!morId) return
+              await supabase.from('mors').update({ follow_up: checked }).eq('id', morId)
+              if (onUpdateMor) onUpdateMor()
+            }}
+          />
+          Follow-up needed (CA rejected one or more responses)
+        </label>
+        {followUp && (
+          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Follow-up Response Due Date:</label>
+              <input
+                type="date"
+                value={followUpDueDate}
+                onChange={(e: any) => setFollowUpDueDate(e.target.value)}
+                onBlur={async (e: any) => {
+                  if (!morId) return
+                  await supabase.from('mors').update({ follow_up_response_due_date: e.target.value || null }).eq('id', morId)
+                  if (onUpdateMor) onUpdateMor()
+                }}
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Follow-up Response Submitted to CA:</label>
+              <input
+                type="date"
+                value={followUpSubmittedDate}
+                onChange={(e: any) => setFollowUpSubmittedDate(e.target.value)}
+                onBlur={async (e: any) => {
+                  if (!morId) return
+                  await supabase.from('mors').update({ follow_up_response_submitted_date: e.target.value || null }).eq('id', morId)
+                  if (onUpdateMor) onUpdateMor()
+                }}
+                className={`w-full border rounded px-3 py-2 text-sm ${followUpSubmittedDate ? 'border-green-300 text-green-700 font-medium' : 'border-gray-300'}`}
+              />
+            </div>
+          </div>
+        )}
+        {followUp && followUpSubmittedDate && (
+          <p className="mt-2 text-sm font-medium text-green-700">✅ Follow-up Sent: {formatDate(followUpSubmittedDate)}</p>
+        )}
+      </div>
+
       <div className="flex justify-between items-center">
         <h2 className="text-lg font-bold text-gray-800">
           Findings & Response
@@ -1579,21 +1638,29 @@ const fetchMors = async () => {
     }
   }
 
-  // Status label for the currently selected Active MOR with a scheduled date.
-  // Returns null when the MOR isn't Active or has no date (no label shown).
+  // Single lifecycle status for the currently selected Active MOR:
+  // scheduled -> awaiting report -> response due -> response sent ->
+  // (follow-up) follow-up due -> follow-up sent. Returns null when not Active.
   const getCurrentMorStatus = () => {
-    if (!currentMor || currentMor.status !== 'Active' || !currentMor.mor_date) return null
+    if (!currentMor || currentMor.status !== 'Active') return null
+    const fmt = (s: string) => formatDate(s)
+    if (currentMor.follow_up) {
+      if (currentMor.follow_up_response_submitted_date)
+        return { label: `✅ Follow-up Sent - ${fmt(currentMor.follow_up_response_submitted_date)}`, classes: 'bg-green-100 text-green-700' }
+      if (currentMor.follow_up_response_due_date)
+        return { label: `📝 Follow-up Response Due - ${fmt(currentMor.follow_up_response_due_date)}`, classes: 'bg-orange-100 text-orange-700' }
+    }
+    if (currentMor.response_submitted_date)
+      return { label: `✅ Response Sent - ${fmt(currentMor.response_submitted_date)}`, classes: 'bg-green-100 text-green-700' }
+    if (currentMor.response_due_date)
+      return { label: `📝 Response Due - ${fmt(currentMor.response_due_date)}`, classes: 'bg-orange-100 text-orange-700' }
+    if (!currentMor.mor_date) return null
     const morDate = parseDate(currentMor.mor_date)!
-    const dateStr = formatDate(currentMor.mor_date)
     const now = new Date()
     const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
-    if (morDate.getTime() >= todayUTC) {
-      return { label: `📋 Scheduled - ${dateStr}`, classes: 'bg-blue-100 text-blue-700' }
-    }
-    if (!currentMor.response_due_date) {
-      return { label: `⏳ Awaiting Report - ${dateStr}`, classes: 'bg-orange-100 text-orange-700' }
-    }
-    return { label: `📋 MOR Date - ${dateStr}`, classes: 'bg-green-100 text-green-700' }
+    if (morDate.getTime() >= todayUTC)
+      return { label: `📋 Scheduled - ${fmt(currentMor.mor_date)}`, classes: 'bg-blue-100 text-blue-700' }
+    return { label: `⏳ Awaiting Report - ${fmt(currentMor.mor_date)}`, classes: 'bg-orange-100 text-orange-700' }
   }
 
   const saveMorDate = async () => {

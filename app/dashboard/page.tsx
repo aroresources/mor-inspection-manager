@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import * as XLSX from 'xlsx'
 import { supabase } from '../../lib/supabase'
 import { useToast } from '../components/ToastProvider'
-import { parseDate, formatDate, formatDateObj } from '../../lib/dateUtils'
+import { parseDate, formatDateObj } from '../../lib/dateUtils'
 
 // Add `months` months to a UTC date without timezone drift, clamping the day to
 // the target month's length (e.g. Jan 31 + 1 month -> Feb 28, not Mar 3).
@@ -341,16 +341,6 @@ export default function Dashboard() {
     return parseDate(activeMor.response_submitted_date)
   }
 
-  // There's an outstanding response deadline when a due date exists and either
-  // nothing was submitted yet, or the due date is newer than the submission
-  // (a follow-up deadline set after the CA reviewed/rejected the response).
-  const hasOpenResponseDeadline = (property: any) => {
-    const due = getResponseDueDate(property)
-    if (!due) return false
-    const submitted = getResponseSubmittedDate(property)
-    return !submitted || due.getTime() > submitted.getTime()
-  }
-
   const getResponseUrgency = (dueDate: any) => {
     if (!dueDate) return 'none'
     const daysUntil = Math.ceil((dueDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
@@ -428,55 +418,52 @@ export default function Dashboard() {
     risk === 'Unknown' ? 'bg-gray-100 text-gray-700' :
     'bg-green-100 text-green-700'
 
-  // Status label for an Active MOR that has a scheduled date set.
-  // Returns null when no MOR date is set, so callers fall through to the
-  // calculated "Next MOR Due" logic.
-  const getActiveMorLabel = (property: any) => {
-    const activeMor = getActiveMor(property)
-    if (!activeMor || !activeMor.mor_date) return null
-    const morDate = parseDate(activeMor.mor_date)!
-    const dateStr = formatDate(activeMor.mor_date)
-    const now = new Date()
-    const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
-    if (morDate.getTime() >= todayUTC) {
-      return { label: `📋 Scheduled - ${dateStr}`, classes: 'bg-blue-100 text-blue-700' }
+  // One unified status for a property's active MOR, following the lifecycle:
+  //   next MOR due -> MOR scheduled -> awaiting report -> response due ->
+  //   response sent -> (follow-up) follow-up due -> follow-up sent.
+  // Returns a single { stage, date, label, classes }.
+  const getMorStatus = (property: any) => {
+    const mor = getActiveMor(property)
+    const daysTo = (d: Date) => Math.ceil((d.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+    const dueCell = (d: Date, prefix: string) => {
+      const n = daysTo(d)
+      const label = n < 0 ? `⚠️ ${prefix} overdue by ${Math.abs(n)} days` : `📝 ${prefix}: ${formatDateObj(d)} (${n} days)`
+      return { label, classes: urgencyClasses(getResponseUrgency(d)) }
     }
-    if (!activeMor.response_due_date) {
-      return { label: `⏳ Awaiting Report - ${dateStr}`, classes: 'bg-orange-100 text-orange-700' }
-    }
-    return { label: `📋 MOR Date - ${dateStr}`, classes: 'bg-green-100 text-green-700' }
-  }
 
-  const getMorCell = (property: any) => {
-    const activeLabel = getActiveMorLabel(property)
-    if (activeLabel) return activeLabel
+    // Follow-up stages (only when the follow-up checkbox is on).
+    if (mor?.follow_up) {
+      const fuSent = mor.follow_up_response_submitted_date ? parseDate(mor.follow_up_response_submitted_date) : null
+      if (fuSent) return { stage: 'followup_sent', date: fuSent, label: `✅ Follow-up Sent: ${formatDateObj(fuSent)}`, classes: 'bg-green-100 text-green-700' }
+      const fuDue = mor.follow_up_response_due_date ? parseDate(mor.follow_up_response_due_date) : null
+      if (fuDue) return { stage: 'followup_due', date: fuDue, ...dueCell(fuDue, 'Follow-up Response Due') }
+    }
+
+    // Response sent / due.
+    const sent = getResponseSubmittedDate(property)
+    if (sent) return { stage: 'response_sent', date: sent, label: `✅ Response Sent: ${formatDateObj(sent)}`, classes: 'bg-green-100 text-green-700' }
+    const due = getResponseDueDate(property)
+    if (due) return { stage: 'response_due', date: due, ...dueCell(due, 'Response Due') }
+
+    // MOR scheduled / awaiting report.
+    const morDate = getActiveMorDate(property)
+    if (morDate) {
+      const now = new Date()
+      const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+      if (morDate.getTime() >= todayUTC) return { stage: 'scheduled', date: morDate, label: `📋 MOR Scheduled: ${formatDateObj(morDate)}`, classes: 'bg-blue-100 text-blue-700' }
+      return { stage: 'awaiting_report', date: morDate, label: `⏳ Awaiting Report: ${formatDateObj(morDate)}`, classes: 'bg-orange-100 text-orange-700' }
+    }
+
+    // Next MOR due (calculated, including the management-change window).
     const nextMor = getNextMorDate(property)
-    if (!nextMor) return { label: 'No MOR date recorded', classes: 'bg-gray-100 text-gray-400' }
-    const daysUntil = Math.ceil((nextMor.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+    if (!nextMor) return { stage: 'none', date: null as Date | null, label: 'No MOR date recorded', classes: 'bg-gray-100 text-gray-400' }
+    const n = daysTo(nextMor)
     if (property.management_change && property.management_change_date) {
-      return { label: `📅 Mgmt Change - MOR Due: ${formatDateObj(nextMor)} (${daysUntil} days)`, classes: 'bg-orange-100 text-orange-700' }
+      return { stage: 'next_mor', date: nextMor, label: `📅 Mgmt Change - MOR Due: ${formatDateObj(nextMor)} (${n} days)`, classes: 'bg-orange-100 text-orange-700' }
     }
     const urgency = getMorUrgency(nextMor)
-    const label = urgency === 'overdue'
-      ? `⚠️ MOR overdue by ${Math.abs(daysUntil)} days`
-      : `📅 Next MOR due: ${formatDateObj(nextMor)} (${daysUntil} days)`
-    return { label, classes: urgencyClasses(urgency) }
-  }
-
-  const getResponseCell = (property: any) => {
-    const submitted = getResponseSubmittedDate(property)
-    // A newer (follow-up) due date takes priority over the "Response Sent" state.
-    if (submitted && !hasOpenResponseDeadline(property)) {
-      return { label: `✅ Response Sent: ${formatDateObj(submitted)}`, classes: 'bg-green-100 text-green-700' }
-    }
-    const responseDue = getResponseDueDate(property)
-    if (!responseDue) return { label: 'No response due date set', classes: 'bg-gray-100 text-gray-500' }
-    const urgency = getResponseUrgency(responseDue)
-    const daysUntil = Math.ceil((responseDue.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
-    const label = urgency === 'overdue'
-      ? `⚠️ Response overdue by ${Math.abs(daysUntil)} days`
-      : `📝 Response Due: ${formatDateObj(responseDue)} (${daysUntil} days)`
-    return { label, classes: urgencyClasses(urgency) }
+    const label = urgency === 'overdue' ? `⚠️ MOR overdue by ${Math.abs(n)} days` : `📅 Next MOR due: ${formatDateObj(nextMor)} (${n} days)`
+    return { stage: 'next_mor', date: nextMor, label, classes: urgencyClasses(urgency) }
   }
 
   const deleteProperty = async (property: any) => {
@@ -550,53 +537,31 @@ export default function Dashboard() {
     toast(`Company deleted. ${companyProperties.length} properties removed. ${userCount} users will need to be reassigned.`, 'success')
   }
 
-  const getEffectiveMorDate = (property: any) => getActiveMorDate(property) || getNextMorDate(property)
-
   // --- Needs Attention helpers ---
   const daysUntil = (d: Date | null) =>
     d ? Math.ceil((d.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : null
 
-  // Overdue response: an Active MOR with an outstanding deadline that has passed.
-  // A submission resolves it unless a newer (follow-up) due date was set after.
+  // All attention buckets derive from the single unified status stage.
   const isOverdueResponse = (p: any) => {
-    if (!hasOpenResponseDeadline(p)) return false
-    const due = getResponseDueDate(p)
-    return due != null && (daysUntil(due) as number) < 0
+    const s = getMorStatus(p)
+    return (s.stage === 'response_due' || s.stage === 'followup_due') && s.date != null && (daysUntil(s.date) as number) < 0
   }
-  // Response due within the next 14 days (resolved once submitted, unless a
-  // newer follow-up due date was set after the submission).
   const isResponseDueSoon = (p: any) => {
-    if (!hasOpenResponseDeadline(p)) return false
-    const due = getResponseDueDate(p)
-    if (!due) return false
-    const d = daysUntil(due) as number
+    const s = getMorStatus(p)
+    if (s.stage !== 'response_due' && s.stage !== 'followup_due') return false
+    const d = daysUntil(s.date) as number
     return d >= 0 && d <= 14
   }
-  // A scheduled MOR date within the next 90 days
   const isMorScheduledSoon = (p: any) => {
-    const m = getActiveMorDate(p)
-    if (!m) return false
-    const d = daysUntil(m) as number
+    const s = getMorStatus(p)
+    if (s.stage !== 'scheduled') return false
+    const d = daysUntil(s.date) as number
     return d >= 0 && d <= 90
   }
-  // Management change where the 6-month MOR window falls within 90 days
-  const isMgmtChangeDue = (p: any) => {
-    if (!p.management_change || !p.management_change_date) return false
-    const window = addMonthsUTC(parseDate(p.management_change_date)!, 6)
-    return (daysUntil(window) as number) <= 90
-  }
-  // Awaiting Report: active MOR whose scheduled date has passed with no response
-  // due date yet (mirrors the "Awaiting Report" card label).
-  const isAwaitingReport = (p: any) => {
-    const label = getActiveMorLabel(p)
-    return !!label && label.label.startsWith('⏳ Awaiting Report')
-  }
-  // Next MOR due within 90 days: either the regular calculated next MOR date or
-  // the management-change next MOR date (mirrors getNextMorDate / isMgmtChangeDue).
+  const isAwaitingReport = (p: any) => getMorStatus(p).stage === 'awaiting_report'
   const isNextMorDue = (p: any) => {
-    const next = getNextMorDate(p)
-    const regularDue = next != null && (daysUntil(next) as number) <= 90
-    return regularDue || isMgmtChangeDue(p)
+    const s = getMorStatus(p)
+    return s.stage === 'next_mor' && (daysUntil(s.date) as number) <= 90
   }
 
   const attentionPredicates: Record<string, (p: any) => boolean> = {
@@ -631,13 +596,9 @@ export default function Dashboard() {
     let aVal: any, bVal: any
     if (sortBy === 'name') { aVal = (a.name || '').toLowerCase(); bVal = (b.name || '').toLowerCase() }
     else if (sortBy === 'company') { aVal = (a.companies?.name || '').toLowerCase(); bVal = (b.companies?.name || '').toLowerCase() }
-    else if (sortBy === 'next_mor') {
-      aVal = getNextMorDate(a)?.getTime() ?? Infinity
-      bVal = getNextMorDate(b)?.getTime() ?? Infinity
-    }
-    else if (sortBy === 'response_due') {
-      aVal = getResponseDueDate(a)?.getTime() ?? Infinity
-      bVal = getResponseDueDate(b)?.getTime() ?? Infinity
+    else if (sortBy === 'status') {
+      aVal = getMorStatus(a).date?.getTime() ?? Infinity
+      bVal = getMorStatus(b).date?.getTime() ?? Infinity
     }
     else if (sortBy === 'rating') {
       aVal = ratingRank[a.last_mor_rating] ?? 0
@@ -647,10 +608,6 @@ export default function Dashboard() {
     else if (sortBy === 'risk') {
       aVal = riskRank[a.risk_classification] ?? 0
       bVal = riskRank[b.risk_classification] ?? 0
-    }
-    else if (sortBy === 'mor_date') {
-      aVal = getEffectiveMorDate(a)?.getTime() ?? Infinity
-      bVal = getEffectiveMorDate(b)?.getTime() ?? Infinity
     }
     if (aVal < bVal) return sortAsc ? -1 : 1
     if (aVal > bVal) return sortAsc ? 1 : -1
@@ -853,8 +810,7 @@ export default function Dashboard() {
           {[
             { key: 'name', label: 'Property Name' },
             { key: 'company', label: 'Company' },
-            { key: 'next_mor', label: 'Next MOR Date' },
-            { key: 'response_due', label: 'Response Due By' },
+            { key: 'status', label: 'Status Date' },
             { key: 'rating', label: 'Last MOR Rating' },
           ].map(({ key, label }) => (
             <button
@@ -904,8 +860,7 @@ export default function Dashboard() {
                     { key: 'contract', label: 'Contract Type' },
                     { key: 'risk', label: 'Risk Classification' },
                     { key: 'rating', label: 'Last MOR Rating' },
-                    { key: 'mor_date', label: 'MOR Date' },
-                    { key: 'response_due', label: 'Response Due By' },
+                    { key: 'status', label: 'Status' },
                   ].map(({ key, label }) => (
                     <th
                       key={key}
@@ -920,8 +875,7 @@ export default function Dashboard() {
               </thead>
               <tbody className="divide-y">
                 {filtered.map(property => {
-                  const mor = getMorCell(property)
-                  const resp = getResponseCell(property)
+                  const status = getMorStatus(property)
                   return (
                     <tr key={property.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 align-top">
@@ -948,10 +902,7 @@ export default function Dashboard() {
                           : <span className="text-gray-400">—</span>}
                       </td>
                       <td className="px-4 py-3 align-top">
-                        <span className={`text-xs px-2 py-1 rounded whitespace-nowrap ${mor.classes}`}>{mor.label}</span>
-                      </td>
-                      <td className="px-4 py-3 align-top">
-                        <span className={`text-xs px-2 py-1 rounded whitespace-nowrap ${resp.classes}`}>{resp.label}</span>
+                        <span className={`text-xs px-2 py-1 rounded whitespace-nowrap ${status.classes}`}>{status.label}</span>
                       </td>
                       {userRole === 'super_admin' && (
                         <td className="px-4 py-3 align-top text-right">
@@ -1010,64 +961,10 @@ export default function Dashboard() {
               </div>
 
               {(() => {
-                const activeLabel = getActiveMorLabel(property)
-                if (activeLabel) return (
-                  <div className={`mt-3 text-xs px-2 py-1 rounded ${activeLabel.classes}`}>
-                    {activeLabel.label}
-                  </div>
-                )
-                const nextMor = getNextMorDate(property)
-                if (!nextMor) return (
-                  <p className="text-xs text-gray-400 mt-3">No MOR date recorded</p>
-                )
-                const daysUntil = Math.ceil((nextMor.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
-                if (property.management_change && property.management_change_date) return (
-                  <div className="mt-3 text-xs px-2 py-1 rounded bg-orange-100 text-orange-700">
-                    📅 Mgmt Change - MOR Due: {formatDateObj(nextMor)} ({daysUntil} days)
-                  </div>
-                )
-                const urgency = getMorUrgency(nextMor)
+                const status = getMorStatus(property)
                 return (
-                  <div className={`mt-3 text-xs px-2 py-1 rounded ${
-                    urgency === 'overdue' ? 'bg-red-100 text-red-700' :
-                    urgency === 'urgent' ? 'bg-orange-100 text-orange-700' :
-                    urgency === 'warning' ? 'bg-yellow-100 text-yellow-700' :
-                    'bg-green-100 text-green-700'
-                  }`}>
-                    {urgency === 'overdue'
-                      ? `⚠️ MOR overdue by ${Math.abs(daysUntil)} days`
-                      : `📅 Next MOR due: ${formatDateObj(nextMor)} (${daysUntil} days)`
-                    }
-                  </div>
-                )
-              })()}
-
-              {(() => {
-                const submitted = getResponseSubmittedDate(property)
-                if (submitted && !hasOpenResponseDeadline(property)) return (
-                  <div className="mt-2 text-xs px-2 py-1 rounded bg-green-100 text-green-700">
-                    ✅ Response Sent: {formatDateObj(submitted)}
-                  </div>
-                )
-                const responseDue = getResponseDueDate(property)
-                const urgency = getResponseUrgency(responseDue)
-                if (!responseDue) return (
-                  <div className="mt-2 text-xs px-2 py-1 rounded bg-gray-100 text-gray-500">
-                    No response due date set
-                  </div>
-                )
-                const daysUntil = Math.ceil((responseDue.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
-                return (
-                  <div className={`mt-2 text-xs px-2 py-1 rounded ${
-                    urgency === 'overdue' ? 'bg-red-100 text-red-700' :
-                    urgency === 'urgent' ? 'bg-orange-100 text-orange-700' :
-                    urgency === 'warning' ? 'bg-yellow-100 text-yellow-700' :
-                    'bg-green-100 text-green-700'
-                  }`}>
-                    {urgency === 'overdue'
-                      ? `⚠️ Response overdue by ${Math.abs(daysUntil)} days`
-                      : `📝 Response Due: ${formatDateObj(responseDue)} (${daysUntil} days)`
-                    }
+                  <div className={`mt-3 text-xs px-2 py-1 rounded ${status.classes}`}>
+                    {status.label}
                   </div>
                 )
               })()}
