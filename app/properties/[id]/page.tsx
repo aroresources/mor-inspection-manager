@@ -702,6 +702,7 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
   const [signatoryName, setSignatoryName] = useState('')
   const [showReportSettings, setShowReportSettings] = useState(false)
   const [extracting, setExtracting] = useState(false)
+  const [extractProgress, setExtractProgress] = useState('')
   const [extractedFindings, setExtractedFindings] = useState<any[]>([])
   const [showExtracted, setShowExtracted] = useState(false)
   const [morRating, setMorRating] = useState(currentMor?.rating || '')
@@ -897,6 +898,7 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
     const file = e.target.files[0]
     if (!file) return
     setExtracting(true)
+    setExtractProgress('Reading the report…')
 
     try {
       // Convert PDF to base64
@@ -909,25 +911,53 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
         reader.readAsDataURL(file)
       })
 
-      // Send to our API route
       const { data: { session } } = await supabase.auth.getSession()
-      const response = await fetch('/api/extract-findings', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session?.access_token || ''}`
-        },
-        body: JSON.stringify({ base64PDF: base64 })
+      const authHeader = `Bearer ${session?.access_token || ''}`
+      const callApi = async (body: any) => {
+        const r = await fetch('/api/extract-findings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: authHeader },
+          body: JSON.stringify(body)
+        })
+        const d = await r.json()
+        if (d.error) throw new Error(d.error)
+        return d
+      }
+
+      // Pass 1 — index every finding that requires a response (small, fast).
+      setExtractProgress('Finding the items that need a response…')
+      const { index } = await callApi({ base64PDF: base64, mode: 'index' })
+      if (!index || index.length === 0) {
+        toast('No findings requiring a response were found in this report.', 'warning')
+        setExtracting(false); setExtractProgress(''); return
+      }
+
+      // Pass 2 — pull the full verbatim text in small batches, in parallel.
+      // Each call's output is bounded so it stays well under the time limit.
+      const BATCH = 5
+      const batches: any[][] = []
+      for (let i = 0; i < index.length; i += BATCH) batches.push(index.slice(i, i + BATCH))
+      setExtractProgress(`Extracting ${index.length} ${index.length === 1 ? 'finding' : 'findings'}…`)
+      const results = await Promise.all(
+        batches.map((b) => callApi({ base64PDF: base64, mode: 'extract', targets: b }))
+      )
+
+      // Zip extracted text back onto the index entries (keeps order + due dates).
+      const all: any[] = []
+      results.forEach((res: any, bi: number) => {
+        const got = res.findings || []
+        batches[bi].forEach((t: any, j: number) => {
+          all.push({ item: t.item, finding: got[j]?.finding || '', due_date: t.due_date || null })
+        })
       })
 
-      const data = await response.json()
-      if (data.error) throw new Error(data.error)
-      setExtractedFindings(data.findings)
+      setExtractedFindings(all)
       setShowExtracted(true)
     } catch (err: any) {
       toast(err?.message ? `Error extracting findings: ${err.message}` : 'Error extracting findings. Please try again.', 'error')
       console.error(err)
     }
+    setExtractProgress('')
     setExtracting(false)
   }
         
@@ -1543,7 +1573,8 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 text-center">
             <p className="text-lg font-medium">🤖 Extracting findings...</p>
-            <p className="text-sm text-gray-500 mt-2">Claude is reading your MOR report</p>
+            <p className="text-sm text-gray-500 mt-2">{extractProgress || 'Claude is reading your MOR report'}</p>
+            <p className="text-xs text-gray-400 mt-1">Large reports can take a minute or two — please keep this tab open.</p>
           </div>
         </div>
       )}
