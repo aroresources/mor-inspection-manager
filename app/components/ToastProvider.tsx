@@ -49,7 +49,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const toast = useCallback((message: string, type: ToastType = 'success') => {
     const id = nextId++
     setToasts((ts) => [...ts, { id, message, type }])
-    setTimeout(() => removeToast(id), 4000)
+    // Errors stay until dismissed (so they can be read/acted on);
+    // success/warning auto-dismiss.
+    if (type === 'success') setTimeout(() => removeToast(id), 4000)
+    else if (type === 'warning') setTimeout(() => removeToast(id), 8000)
   }, [removeToast])
 
   const confirm = useCallback((options: ConfirmOptions | string) => {
