@@ -44,12 +44,12 @@ const INDEX_PROMPT = `You are indexing the findings in a HUD Management & Occupa
 
 ${RULES}
 
-Output a short INDEX ONLY — do NOT include the finding body text. Return ONLY a JSON array, one object per finding requiring a response, in the order they appear, with keys:
+Output a short INDEX ONLY — do NOT include the finding body text. Provide a "findings" list, one entry per finding requiring a response, in the order they appear, each with these keys:
 - "item": the Item Number it falls under (e.g. "A.1", "C.6", "E.22").
 - "title": a short label identifying this specific finding — use the "Finding: ..." name if present (e.g. "Screening Non-Compliance"), otherwise a 3-6 word description (e.g. "General Appearance items to correct").
 - "due_date": "YYYY-MM-DD" or null. If stated relative to the report (e.g. "30 days from the date of this letter" or "Within 30 days from the date of the report"), compute it from the "Date of Report" on the summary page. If "N/A" or blank, null.
 
-Return [] if none.`
+If there are none, return an empty list.`
 
 function buildExtractPrompt(targets: { item: string; title: string }[]) {
   const list = targets.map((t, i) => `${i + 1}. ${t.item} — ${t.title}`).join('\n')
@@ -62,7 +62,49 @@ For each, copy that finding's text VERBATIM with only these changes: (1) remove 
 Findings to extract (in this exact order):
 ${list}
 
-Return ONLY a JSON array of objects with keys "item" and "finding" (the verbatim text), in the same order as listed above.`
+Provide a "findings" list with one object per requested finding (keys "item" and "finding", the verbatim text), in the same order as listed above.`
+}
+
+// JSON Schemas for structured outputs — the API guarantees the reply matches.
+const INDEX_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['findings'],
+  properties: {
+    findings: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['item', 'title', 'due_date'],
+        properties: {
+          item: { type: 'string' },
+          title: { type: 'string' },
+          due_date: { type: ['string', 'null'] }
+        }
+      }
+    }
+  }
+}
+
+const EXTRACT_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['findings'],
+  properties: {
+    findings: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['item', 'finding'],
+        properties: {
+          item: { type: 'string' },
+          finding: { type: 'string' }
+        }
+      }
+    }
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -99,10 +141,14 @@ export async function POST(request: NextRequest) {
     }
 
     const promptText = isExtract ? buildExtractPrompt(targets) : INDEX_PROMPT
+    const schema = isExtract ? EXTRACT_SCHEMA : INDEX_SCHEMA
 
     const response = await client.messages.create({
       model: 'claude-sonnet-4-5',
       max_tokens: isExtract ? 8000 : 4000,
+      // Structured outputs: the reply is guaranteed to be valid JSON matching the
+      // schema, so verbatim finding text (with line breaks) can't break parsing.
+      output_config: { format: { type: 'json_schema', schema } },
       messages: [
         {
           role: 'user',
@@ -132,18 +178,18 @@ export async function POST(request: NextRequest) {
 
     const textBlock = response.content.find((b: any) => b.type === 'text')
     const text = textBlock && textBlock.type === 'text' ? textBlock.text : ''
-    const clean = text.replace(/```json|```/g, '').trim()
 
-    let parsed
+    let parsed: any
     try {
-      parsed = JSON.parse(clean)
+      parsed = JSON.parse(text.trim())
     } catch {
       return NextResponse.json({ error: 'Could not parse the AI response (not valid JSON). Please try again.' }, { status: 502 })
     }
+    const list = Array.isArray(parsed) ? parsed : (parsed?.findings ?? [])
 
     return isExtract
-      ? NextResponse.json({ findings: parsed })
-      : NextResponse.json({ index: parsed })
+      ? NextResponse.json({ findings: list })
+      : NextResponse.json({ index: list })
   } catch (error: any) {
     console.error('extract-findings error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
