@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@supabase/supabase-js'
 
+// Reading a multi-page PDF can take longer than the default serverless timeout.
+export const runtime = 'nodejs'
+export const maxDuration = 60
+
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY
 })
@@ -30,6 +34,26 @@ function isRateLimited(userId: string) {
   return false
 }
 
+const EXTRACTION_PROMPT = `You are extracting findings from a HUD Management & Occupancy Review (MOR) report on form HUD-9834. The findings are in a table — "Item Number" | "Finding" | "Target Completion Date" — that runs across many pages. Different reviewers (PBCAs) format these reports differently, so read the content, not a fixed layout.
+
+Extract ONE finding for EVERY corrective action / required response in the report. A "required response" is anything the owner/agent must act on. Recognize them by ANY of these signals:
+- A block labeled "Finding:" or "Repeat Finding:" that has a corrective action. The corrective-action label varies — it may read "Corrective Action:", "Corrective Action Required:", "Correct Action Required:", or "Corrective Action Plan:".
+- A narrative item with NO corrective-action label that still asks for a response — for example, one that ends with wording like "Please forward completed work orders and/or target completion dates with your response."
+
+CRITICAL: a single Item Number can contain MANY separate findings. For example, one "Summary of Tenant File Review" item (e.g. "E.22") may list a dozen or more "Finding: ... Non-Compliance" blocks — output EACH one as its own finding, all sharing that same Item Number. Conversely, keep all the sub-issues, bullet points, and unit-by-unit lists WITHIN a single Finding block together as ONE finding — do not split those.
+
+SKIP (do not create findings for):
+- Blocks labeled "Comment:" (informational).
+- Blocks labeled "Observation:" or "Recommendation:" that have no corrective action.
+- Informational or compliant items (e.g. "all Severe and Life-Threatening findings had been completed", "no issues observed", "residents were complimentary"), general notes, and training recommendations.
+
+For each finding, output an object with exactly these keys:
+- "item": the Item Number it falls under, exactly as printed (e.g. "A.1", "C.6", "E.14.g", "E.22").
+- "finding": the text of that finding, copied VERBATIM, with only these changes: (1) remove the standalone "Criteria:", "Cause:", and "Effect:" sections entirely (including any "Overall Cause:" / "Overall Effect:") — but if a section is labeled "Condition and Criteria:", KEEP it (do not remove a combined Condition-and-Criteria section); (2) drop the repeating page header/footer that appears mid-finding ("Management Review for Multifamily Housing Projects", "U.S. Department of Housing and Urban Development", "Office of Housing", "OMB Approval No. ...", "form HUD-9834 ...", "Ref. HUD Handbook ...", "Summary", "Page X / Y"). Keep the "Finding:" / "Repeat Finding:" heading when present, the Condition text, every bullet point and unit-by-unit detail, and the corrective-action text including its heading. Do NOT summarize, reword, shorten, paraphrase, or invent anything.
+- "due_date": the Target Completion Date as "YYYY-MM-DD", or null. If it is stated relative to the report (e.g. "30 days from the date of this letter" or "Within 30 days from the date of the report"), compute it by adding that many days to the "Date of Report" shown on the summary page. If it says "N/A" or is blank, use null.
+
+Return ONLY a valid JSON array of these objects, with no surrounding text or explanation. If nothing requires a response, return [].`
+
 export async function POST(request: NextRequest) {
   try {
     // --- Authenticate caller ---
@@ -50,10 +74,13 @@ export async function POST(request: NextRequest) {
     }
 
     const { base64PDF } = await request.json()
+    if (!base64PDF) {
+      return NextResponse.json({ error: 'No PDF provided.' }, { status: 400 })
+    }
 
     const response = await client.messages.create({
       model: 'claude-sonnet-4-5',
-      max_tokens: 8000,
+      max_tokens: 16000,
       messages: [
         {
           role: 'user',
@@ -68,7 +95,7 @@ export async function POST(request: NextRequest) {
             },
             {
               type: 'text',
-             text: 'You are analyzing a HUD MOR report. Extract ONLY findings requiring corrective action (marked C with a Target Completion Date). Do NOT include comments, observations, or recommendations. For findings with multiple issues, create a separate finding for each issue. Return ONLY a JSON array, no other text. Each item must have: item (item number like E.14.g), title (a short title of the finding), condition (the condition/problem description), corrective_action (the required corrective action), due_date (YYYY-MM-DD or null). Do NOT include criteria, cause, or effect. Example: [{"item":"E.14.g","title":"Tenant Selection Plan income limits","condition":"The TSP does not properly address income limits.","corrective_action":"Please revise pages 1 and 7 of the TSP.","due_date":"2025-07-06"}]'
+              text: EXTRACTION_PROMPT
             }
           ]
         }
@@ -92,7 +119,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ findings })
   } catch (error: any) {
-    console.error('Error:', error)
+    console.error('extract-findings error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }

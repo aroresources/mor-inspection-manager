@@ -819,6 +819,27 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
     if (e1 || e2) toast('Error reordering findings: ' + (e1 || e2)!.message, 'error')
   }
 
+  const moveFindingTo = async (index: any, position: 'top' | 'bottom') => {
+    if (index < 0 || index >= findings.length) return
+    if ((position === 'top' && index === 0) || (position === 'bottom' && index === findings.length - 1)) return
+    const newFindings = [...findings]
+    const [moved] = newFindings.splice(index, 1)
+    if (position === 'top') newFindings.unshift(moved)
+    else newFindings.push(moved)
+    const updated = newFindings.map((f: any, i: number) => ({ ...f, sort_order: i }))
+    setFindings(updated)
+    // Persist only the rows whose sort_order actually changed.
+    const changed = updated.filter((f: any) => {
+      const prev = findings.find((p: any) => p.id === f.id)
+      return !prev || prev.sort_order !== f.sort_order
+    })
+    const results = await Promise.all(
+      changed.map((f: any) => supabase.from('findings').update({ sort_order: f.sort_order }).eq('id', f.id))
+    )
+    const err = results.map((r: any) => r.error).find(Boolean)
+    if (err) toast('Error reordering findings: ' + err.message, 'error')
+  }
+
   const deleteFinding = async (id: any) => {
     const { error } = await supabase.from('findings').delete().eq('id', id)
     if (error) { toast('Error deleting finding: ' + error.message, 'error'); return }
@@ -913,14 +934,10 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
 
   const importFindings = async () => {
     let order = findings.length
+    let imported = 0
     for (const f of extractedFindings) {
-      const findingText = `${f.item}: ${f.title || ''}
-
-Condition: ${f.condition || ''}
-
-Corrective Action: ${f.corrective_action || ''}`
-
-      await supabase.from('findings').insert([{
+      const findingText = [f.item, f.finding].filter(Boolean).join('\n\n')
+      const { error } = await supabase.from('findings').insert([{
         property_id: propertyId,
         mor_id: morId,
         finding: findingText,
@@ -928,10 +945,13 @@ Corrective Action: ${f.corrective_action || ''}`
         status: 'Open',
         sort_order: order++
       }])
+      if (error) { toast('Error importing a finding: ' + error.message, 'error'); break }
+      imported++
     }
     setShowExtracted(false)
     setExtractedFindings([])
     fetchFindings()
+    if (imported > 0) toast(`Imported ${imported} finding${imported === 1 ? '' : 's'}.`, 'success')
   }
 
   const readyCount = () => findings.filter((f: any) => f.status === 'Ready').length
@@ -1420,8 +1440,10 @@ Corrective Action: ${f.corrective_action || ''}`
             <div key={finding.id} className="bg-white rounded-lg shadow p-5">
               <div className="flex items-start gap-3">
                 <div className="flex flex-col gap-1 mt-1">
-                  <button onClick={() => moveFinding(index, -1)} className="text-gray-400 hover:text-gray-600 text-xs leading-none">▲</button>
-                  <button onClick={() => moveFinding(index, 1)} className="text-gray-400 hover:text-gray-600 text-xs leading-none">▼</button>
+                  <button onClick={() => moveFindingTo(index, 'top')} title="Move to top" className="text-gray-400 hover:text-gray-600 text-xs leading-none">⤒</button>
+                  <button onClick={() => moveFinding(index, -1)} title="Move up" className="text-gray-400 hover:text-gray-600 text-xs leading-none">▲</button>
+                  <button onClick={() => moveFinding(index, 1)} title="Move down" className="text-gray-400 hover:text-gray-600 text-xs leading-none">▼</button>
+                  <button onClick={() => moveFindingTo(index, 'bottom')} title="Move to bottom" className="text-gray-400 hover:text-gray-600 text-xs leading-none">⤓</button>
                 </div>
                 <div className="flex-1">
               <div className="flex justify-between items-start mb-3">
@@ -1531,19 +1553,14 @@ Corrective Action: ${f.corrective_action || ''}`
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
             <h3 className="text-lg font-bold mb-2">Extracted Findings</h3>
-            <p className="text-sm text-gray-500 mb-4">{extractedFindings.length} findings found. Review before importing.</p>
+            <p className="text-sm text-gray-500 mb-4">{extractedFindings.length} {extractedFindings.length === 1 ? 'finding' : 'findings'} requiring a response. Review before importing.</p>
             <div className="space-y-3">
               {extractedFindings.map((f: any, i: number) => (
                 <div key={i} className="p-3 border border-gray-200 rounded">
-                  <p className="text-xs font-bold text-blue-600">{f.item}{f.title ? `: ${f.title}` : ''}</p>
-                  {f.condition && <p className="text-sm text-gray-800 mt-1"><span className="font-bold">Condition:</span> {f.condition}</p>}
-                  {f.corrective_action && (
-                    <div className="mt-2">
-                      <p className="text-xs font-bold text-gray-700">Corrective Action:</p>
-                      <p className="text-sm text-gray-800">{f.corrective_action}</p>
-                    </div>
-                  )}
-                  {f.due_date && <p className="text-xs text-gray-500 mt-1">Due: {f.due_date}</p>}
+                  <p className="text-xs font-bold text-blue-600">
+                    {f.item}{f.due_date ? ` · Due ${f.due_date}` : ''}
+                  </p>
+                  {f.finding && <p className="text-sm text-gray-800 mt-1 whitespace-pre-wrap">{f.finding}</p>}
                 </div>
               ))}
             </div>
