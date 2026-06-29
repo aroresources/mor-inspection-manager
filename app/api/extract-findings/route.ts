@@ -6,10 +6,6 @@ import { createClient } from '@supabase/supabase-js'
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY
-})
-
 const supabaseAuth = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -72,6 +68,13 @@ export async function POST(request: NextRequest) {
     if (isRateLimited(user.id)) {
       return NextResponse.json({ error: 'Rate limit exceeded. Maximum 10 requests per hour.' }, { status: 429 })
     }
+
+    // Build the Anthropic client here (not at module load) so a missing key
+    // returns a clean message instead of crashing the whole function.
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return NextResponse.json({ error: 'The server is missing its ANTHROPIC_API_KEY. Add it to the deployment environment variables and redeploy.' }, { status: 500 })
+    }
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
     const { base64PDF } = await request.json()
     if (!base64PDF) {
