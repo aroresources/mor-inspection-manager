@@ -704,7 +704,7 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
   const [extracting, setExtracting] = useState(false)
   const [extractedFindings, setExtractedFindings] = useState<any[]>([])
   const [showExtracted, setShowExtracted] = useState(false)
-  const [morRating, setMorRating] = useState('')
+  const [morRating, setMorRating] = useState(currentMor?.rating || '')
   const [responseDueDate, setResponseDueDate] = useState(currentMor?.response_due_date || '')
   const [responseSubmittedDate, setResponseSubmittedDate] = useState(currentMor?.response_submitted_date || '')
   const [followUp, setFollowUp] = useState(!!currentMor?.follow_up)
@@ -722,6 +722,7 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
   useEffect(() => {
     setResponseDueDate(currentMor?.response_due_date || '')
     setResponseSubmittedDate(currentMor?.response_submitted_date || '')
+    setMorRating(currentMor?.rating || '')
     setFollowUp(!!currentMor?.follow_up)
     setFollowUpDueDate(currentMor?.follow_up_response_due_date || '')
     setFollowUpSubmittedDate(currentMor?.follow_up_response_submitted_date || '')
@@ -903,7 +904,7 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
       setExtractedFindings(data.findings)
       setShowExtracted(true)
     } catch (err: any) {
-      toast('Error extracting findings. Please try again.', 'error')
+      toast(err?.message ? `Error extracting findings: ${err.message}` : 'Error extracting findings. Please try again.', 'error')
       console.error(err)
     }
     setExtracting(false)
@@ -1214,7 +1215,15 @@ Corrective Action: ${f.corrective_action || ''}`
             <label className="block text-xs text-gray-500 mb-1">MOR Rating</label>
             <select
               value={morRating}
-              onChange={(e: any) => setMorRating(e.target.value)}
+              onChange={async (e: any) => {
+                const value = e.target.value
+                setMorRating(value)
+                if (!morId) return
+                const { error } = await supabase.from('mors').update({ rating: value || null }).eq('id', morId)
+                if (error) { toast('Error saving rating: ' + error.message, 'error'); return }
+                if (onUpdateMor) onUpdateMor()
+                if (value) toast('MOR rating saved.', 'success')
+              }}
               className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
             >
               <option value="">Select Rating</option>

@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
 
     const response = await client.messages.create({
       model: 'claude-sonnet-4-5',
-      max_tokens: 4000,
+      max_tokens: 8000,
       messages: [
         {
           role: 'user',
@@ -75,9 +75,20 @@ export async function POST(request: NextRequest) {
       ]
     })
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : ''
+    if (response.stop_reason === 'max_tokens') {
+      return NextResponse.json({ error: 'The report was too long to extract in one pass. Try a shorter PDF or split it into sections.' }, { status: 502 })
+    }
+
+    const textBlock = response.content.find((b: any) => b.type === 'text')
+    const text = textBlock && textBlock.type === 'text' ? textBlock.text : ''
     const clean = text.replace(/```json|```/g, '').trim()
-    const findings = JSON.parse(clean)
+
+    let findings
+    try {
+      findings = JSON.parse(clean)
+    } catch {
+      return NextResponse.json({ error: 'Could not parse findings from the report — the AI response was not valid JSON. Please try again.' }, { status: 502 })
+    }
 
     return NextResponse.json({ findings })
   } catch (error: any) {

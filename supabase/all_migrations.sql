@@ -29,6 +29,9 @@ alter table mors add column if not exists follow_up boolean not null default fal
 alter table mors add column if not exists follow_up_response_due_date date;
 alter table mors add column if not exists follow_up_response_submitted_date date;
 
+-- MOR rating saved per-MOR as it is selected (copied to properties.last_mor_rating on completion)
+alter table mors add column if not exists rating text;
+
 -- Tasks: per-task notes, attachments, ordering; template ordering;
 -- MOR Scheduling Email notes -------------------------------------------------
 alter table tasks          add column if not exists notes text;
