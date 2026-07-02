@@ -876,6 +876,7 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
   }
 
   const completeMor = async () => {
+    console.log('[completeMor] start', { morId, propertyId: property?.id, morRating, mor_date: currentMor?.mor_date })
     if (!morRating) { toast('Please select an MOR rating before completing.', 'warning'); return }
     if (!morId) { toast('No MOR is selected to complete.', 'error'); return }
     const ok = await confirm({
@@ -886,11 +887,17 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
     if (!ok) return
     setCompleting(true)
 
-    const { error: propErr } = await supabase.from('properties').update({
+    const { data: propUpdated, error: propErr } = await supabase.from('properties').update({
       last_mor_date: currentMor?.mor_date || null,
       last_mor_rating: morRating
-    }).eq('id', property.id)
+    }).eq('id', property.id).select()
+    console.log('[completeMor] property update', { propUpdated, propErr })
     if (propErr) { setCompleting(false); toast('Error updating property: ' + propErr.message, 'error'); return }
+    if (!propUpdated || propUpdated.length === 0) {
+      setCompleting(false)
+      toast('Could not update the property (0 rows — likely a permissions/RLS issue).', 'error')
+      return
+    }
 
     // .select() so we can confirm a row was actually updated (0 rows = RLS/no match).
     const { data: updated, error: morErr } = await supabase
@@ -898,6 +905,7 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
       .update({ status: 'Completed', mor_date: null })
       .eq('id', morId)
       .select()
+    console.log('[completeMor] mor update', { updated, morErr })
     setCompleting(false)
     if (morErr) { toast('Error completing MOR: ' + morErr.message, 'error'); return }
     if (!updated || updated.length === 0) {
