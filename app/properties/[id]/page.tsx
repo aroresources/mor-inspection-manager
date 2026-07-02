@@ -876,7 +876,6 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
   }
 
   const completeMor = async () => {
-    console.log('[completeMor] start', { morId, propertyId: property?.id, morRating, mor_date: currentMor?.mor_date })
     if (!morRating) { toast('Please select an MOR rating before completing.', 'warning'); return }
     if (!morId) { toast('No MOR is selected to complete.', 'error'); return }
     const ok = await confirm({
@@ -891,7 +890,6 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
       last_mor_date: currentMor?.mor_date || null,
       last_mor_rating: morRating
     }).eq('id', property.id).select()
-    console.log('[completeMor] property update', { propUpdated, propErr })
     if (propErr) { setCompleting(false); toast('Error updating property: ' + propErr.message, 'error'); return }
     if (!propUpdated || propUpdated.length === 0) {
       setCompleting(false)
@@ -899,13 +897,13 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
       return
     }
 
-    // .select() so we can confirm a row was actually updated (0 rows = RLS/no match).
+    // Keep the MOR's scheduled date so completed MORs still show their date in
+    // the selector; the 'Completed' status excludes it from active-status logic.
     const { data: updated, error: morErr } = await supabase
       .from('mors')
-      .update({ status: 'Completed', mor_date: null })
+      .update({ status: 'Completed' })
       .eq('id', morId)
       .select()
-    console.log('[completeMor] mor update', { updated, morErr })
     setCompleting(false)
     if (morErr) { toast('Error completing MOR: ' + morErr.message, 'error'); return }
     if (!updated || updated.length === 0) {
