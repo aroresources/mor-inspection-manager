@@ -585,6 +585,12 @@ export default function Dashboard() {
     next_mor_due: companyFiltered.filter(isNextMorDue).length,
   }
 
+  // Only offer companies the user actually has properties in. Super admins keep
+  // the full list so they can still rename/delete companies with no properties.
+  const visibleCompanies = userRole === 'super_admin'
+    ? companies
+    : companies.filter((c: any) => properties.some((p: any) => p.company_id === c.id))
+
   const searchTerm = searchQuery.trim().toLowerCase()
 
   const filtered = [...companyFiltered]
@@ -724,7 +730,7 @@ export default function Dashboard() {
             className="border border-gray-300 rounded px-3 py-2 text-sm"
           >
             <option value="all">All Companies</option>
-            {companies.map((c: any) => (
+            {visibleCompanies.map((c: any) => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>

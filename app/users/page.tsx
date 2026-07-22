@@ -117,6 +117,12 @@ const inviteUser = async (e: any) => {
     }
   }
 
+  // When the user is assigned to a company, only offer that company's
+  // properties. Anything already granted stays listed so it can be revoked.
+  const accessProperties = selectedUser?.company_id
+    ? properties.filter((p: any) => p.company_id === selectedUser.company_id || userProperties.includes(p.id))
+    : properties
+
   const getRoleBadge = (role: any) => {
     const styles: any = {
       super_admin: 'bg-red-100 text-red-700',
@@ -292,9 +298,16 @@ const inviteUser = async (e: any) => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[80vh] overflow-y-auto">
             <h3 className="text-lg font-bold mb-1">Property Access</h3>
-            <p className="text-sm text-gray-500 mb-4">{selectedUser.full_name || selectedUser.email}</p>
+            <p className="text-sm text-gray-500 mb-1">{selectedUser.full_name || selectedUser.email}</p>
+            {selectedUser.company_id && (
+              <p className="text-xs text-gray-400 mb-3">
+                Showing properties for {selectedUser.companies?.name || 'their assigned company'}.
+              </p>
+            )}
             <div className="space-y-2">
-              {properties.map(property => (
+              {accessProperties.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-4">No properties in this company yet.</p>
+              ) : accessProperties.map(property => (
                 <label key={property.id} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded cursor-pointer">
                   <input
                     type="checkbox"
