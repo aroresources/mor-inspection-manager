@@ -1539,6 +1539,8 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
               <div className="flex justify-between items-start mb-3">
                 <div className="flex items-center gap-2">
                   <input type="checkbox" checked={selectedFindingIds.includes(finding.id)} onChange={() => toggleSelectFinding(finding.id)} title="Select for bulk status change" />
+                  {/* Positional number: always 1..N top to bottom, never travels with a reordered finding. */}
+                  <span className="text-sm font-semibold text-gray-700 whitespace-nowrap">Finding {index + 1}</span>
                   <select value={finding.status} onChange={(e: any) => updateFinding(finding.id, { status: e.target.value })} className={`text-xs px-2 py-1 rounded border ${statusClasses(finding.status)}`}>
                     {findingStatuses.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
