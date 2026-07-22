@@ -33,6 +33,40 @@ const attachmentFileName = (url: string): string => {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Private-bucket file access.
+// Stored values are Supabase "public" URLs, which double as a stable
+// bucket+path reference. The bucket itself is private, so files are opened via
+// a short-lived signed URL that Supabase only issues if the user's storage RLS
+// policy allows reading that object.
+// ---------------------------------------------------------------------------
+const STORAGE_BUCKET = 'mor-documents'
+
+const storagePathFromUrl = (url: string): string | null => {
+  const marker = `/object/public/${STORAGE_BUCKET}/`
+  const i = url.indexOf(marker)
+  if (i !== -1) return decodeURIComponent(url.slice(i + marker.length).split('?')[0])
+  // Already a bare storage path (no host), e.g. "propertyId/findings/…".
+  return url.startsWith('http') ? null : url
+}
+
+// Opens a stored file in a new tab via a signed URL. Returns an error message,
+// or null on success. The tab is opened synchronously so popup blockers don't
+// reject it after the async signing step.
+const openStoredFile = async (url: string): Promise<string | null> => {
+  const win = typeof window !== 'undefined' ? window.open('', '_blank') : null
+  const path = storagePathFromUrl(url)
+  if (!path) { win?.close(); return 'Could not determine the file location.' }
+  const { data, error } = await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(path, 300)
+  if (error || !data?.signedUrl) {
+    win?.close()
+    return error?.message || 'Could not open the file.'
+  }
+  if (win) win.location.href = data.signedUrl
+  else window.open(data.signedUrl, '_blank', 'noopener')
+  return null
+}
+
 function DocumentsTab({ propertyId, morId }: any) {
   const { toast } = useToast()
   const [documents, setDocuments] = useState<any[]>([])
@@ -277,7 +311,7 @@ function DocumentsTab({ propertyId, morId }: any) {
                   <div className="mt-2 ml-6 flex flex-wrap items-center gap-3">
                     {parseAttachmentUrls(doc.file_url).map((url: string, i: number) => (
                       <span key={i} className="flex items-center gap-1">
-                        <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">📎 {attachmentFileName(url)}</a>
+                        <button onClick={async () => { const err = await openStoredFile(url); if (err) toast(err, 'error') }} className="text-xs text-blue-600 hover:underline">📎 {attachmentFileName(url)}</button>
                         <button onClick={() => removeDocFile(doc, url)} className="text-xs text-red-400 hover:text-red-600" title="Remove file">✕</button>
                       </span>
                     ))}
@@ -310,7 +344,7 @@ function DocumentsTab({ propertyId, morId }: any) {
                     </div>
                     <div className="flex flex-col items-end gap-1 ml-3">
                       {parseAttachmentUrls(doc.file_url).map((url: string, i: number) => (
-                        <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">📎 {attachmentFileName(url)}</a>
+                        <button key={i} onClick={async () => { const err = await openStoredFile(url); if (err) toast(err, 'error') }} className="text-xs text-blue-600 hover:underline text-right">📎 {attachmentFileName(url)}</button>
                       ))}
                     </div>
                   </div>
@@ -505,7 +539,7 @@ function TasksTab({ propertyId, morId }: any) {
                     <div className="mt-2 flex flex-wrap items-center gap-3">
                       {parseAttachmentUrls(task.document_url).map((url: string, i: number) => (
                         <span key={i} className="flex items-center gap-1">
-                          <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">📎 {attachmentFileName(url)}</a>
+                          <button onClick={async () => { const err = await openStoredFile(url); if (err) toast(err, 'error') }} className="text-xs text-blue-600 hover:underline">📎 {attachmentFileName(url)}</button>
                           <button onClick={() => removeTaskFile(task, url)} className="text-xs text-red-400 hover:text-red-600" title="Remove file">✕</button>
                         </span>
                       ))}
@@ -1245,8 +1279,12 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
       for (let j = 0; j < urls.length; j++) {
         const url = urls[j]
         try {
-          const response = await fetch(url)
-          const blob = await response.blob()
+          // The bucket is private, so download through the authenticated client
+          // rather than fetching a public URL.
+          const path = storagePathFromUrl(url)
+          if (!path) { console.error(`Could not resolve storage path for finding ${i + 1}`); continue }
+          const { data: blob, error: dlErr } = await supabase.storage.from(STORAGE_BUCKET).download(path)
+          if (dlErr || !blob) { console.error(`Failed to download attachment ${j + 1} for finding ${i + 1}`, dlErr); continue }
           const originalExt = (url.split('.').pop() || 'bin').split('?')[0]
           const shortDesc = finding.finding ? finding.finding.substring(0, 30).replace(/[^a-zA-Z0-9]/g, '_') : 'attachment'
           const suffix = urls.length > 1 ? `_${j + 1}` : ''
@@ -1531,7 +1569,7 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
                   <div className="mt-1 flex flex-wrap items-center gap-3">
                     {parseAttachmentUrls(finding.document_url).map((url: string, i: number) => (
                       <span key={i} className="flex items-center gap-1">
-                        <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">📎 {attachmentFileName(url)}</a>
+                        <button onClick={async () => { const err = await openStoredFile(url); if (err) toast(err, 'error') }} className="text-xs text-blue-600 hover:underline">📎 {attachmentFileName(url)}</button>
                         <button onClick={() => removeFindingFile(finding, url)} className="text-xs text-red-400 hover:text-red-600" title="Remove file">✕</button>
                       </span>
                     ))}
@@ -2056,9 +2094,12 @@ const fetchMors = async () => {
               <div className="space-y-2">
                 {(property.overview_files || []).map((file: any, i: number) => (
                   <div key={i} className="flex items-center justify-between p-2 border border-gray-200 rounded">
-                    <a href={file.url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline">
+                    <button
+                      onClick={async () => { const err = await openStoredFile(file.url); if (err) toast(err, 'error') }}
+                      className="text-sm text-blue-600 hover:underline text-left"
+                    >
                       📎 {file.name}
-                    </a>
+                    </button>
                     <button
                       onClick={async () => {
                         const updated = (property.overview_files || []).filter((_: any, idx: number) => idx !== i)
