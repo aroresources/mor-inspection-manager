@@ -6,19 +6,29 @@
 --   asset_manager     -> access limited to properties in their profiles.company_id
 --   property_manager  -> access limited to properties listed in property_access
 --
--- Review carefully, then run in the Supabase SQL Editor.
 -- This script is idempotent: it drops the policies it creates (by name) before
 -- recreating them, and uses CREATE OR REPLACE for helper functions.
 --
--- IMPORTANT: Enabling RLS denies all access by default until a policy grants it.
--- Make sure at least one profiles row has role = 'super_admin' BEFORE running,
--- or you can lock yourself out of writes. The Supabase SQL Editor itself runs as
--- a privileged role that bypasses RLS, so you can always fix policies there.
+-- ⚠️ STOP — RUN STEP 0 FIRST ⚠️
+-- Enabling RLS denies everything by default until a policy grants access. If
+-- your own profile is not role = 'super_admin', you will lose access in the app
+-- the moment this runs. (You can always fix it from the Supabase SQL Editor,
+-- which runs as a privileged role that bypasses RLS.)
+--
+-- A ROLLBACK script is at the bottom of this file.
 -- ============================================================================
 
 
 -- ----------------------------------------------------------------------------
--- 0) Helper functions (SECURITY DEFINER so they bypass RLS and avoid recursion)
+-- 0) PRE-FLIGHT — run this line ALONE first and confirm your account is listed.
+--    If it returns no rows, STOP and set your role before continuing:
+--      update public.profiles set role = 'super_admin' where email = 'you@example.com';
+-- ----------------------------------------------------------------------------
+-- select id, email, role from public.profiles where role = 'super_admin';
+
+
+-- ----------------------------------------------------------------------------
+-- 1) Helper functions (SECURITY DEFINER so they bypass RLS and avoid recursion)
 --    In Supabase these are owned by a role with BYPASSRLS, so reading profiles
 --    inside them does NOT re-trigger profiles policies (prevents infinite loops).
 -- ----------------------------------------------------------------------------
@@ -83,7 +93,7 @@ $$;
 
 
 -- ----------------------------------------------------------------------------
--- 1) profiles
+-- 2) profiles
 --    - read own profile (super_admin can read all)
 --    - users may update their own profile but CANNOT change their own role
 --    - super_admin can insert/update/delete any profile
@@ -111,9 +121,7 @@ create policy profiles_admin_all on public.profiles
 
 
 -- ----------------------------------------------------------------------------
--- 2) companies
---    - all authenticated users can read
---    - only super_admin can insert/update/delete
+-- 3) companies — all authenticated read, super_admin writes
 -- ----------------------------------------------------------------------------
 alter table public.companies enable row level security;
 
@@ -130,9 +138,7 @@ create policy companies_admin_all on public.companies
 
 
 -- ----------------------------------------------------------------------------
--- 3) property_access
---    - super_admin manages everything
---    - a user may read their own access rows
+-- 4) property_access — super_admin manages; users read their own rows
 -- ----------------------------------------------------------------------------
 alter table public.property_access enable row level security;
 
@@ -149,9 +155,9 @@ create policy property_access_read_own on public.property_access
 
 
 -- ----------------------------------------------------------------------------
--- 4) properties
+-- 5) properties
 --    - read/update/delete: rows the caller can access (role-based)
---    - insert: super_admin, or asset_manager creating a property for their company
+--    - insert: super_admin, or asset_manager creating one for their company
 -- ----------------------------------------------------------------------------
 alter table public.properties enable row level security;
 
@@ -185,10 +191,8 @@ create policy properties_insert on public.properties
 
 
 -- ----------------------------------------------------------------------------
--- 5) Child tables keyed by property_id: mors, documents, tasks, meetings, findings
---    Same rule for read + write: caller must be able to access the property.
---    can_access_property(property_id) works on INSERT/UPDATE because the parent
---    property row already exists.
+-- 6) Child tables keyed by property_id: mors, documents, tasks, meetings,
+--    findings. Same rule for read + write: caller must access the property.
 -- ----------------------------------------------------------------------------
 alter table public.mors enable row level security;
 drop policy if exists mors_access on public.mors;
@@ -227,9 +231,7 @@ create policy findings_access on public.findings
 
 
 -- ----------------------------------------------------------------------------
--- 6) Templates: document_templates, task_templates
---    - all authenticated users can read
---    - only super_admin can insert/update/delete
+-- 7) Templates — all authenticated read, super_admin writes
 -- ----------------------------------------------------------------------------
 alter table public.document_templates enable row level security;
 
@@ -257,6 +259,32 @@ create policy task_templates_admin_all on public.task_templates
   using (public.is_super_admin())
   with check (public.is_super_admin());
 
+
+-- ----------------------------------------------------------------------------
+-- 8) sent_reminders — written only by the daily reminder cron, which uses the
+--    service-role key and therefore bypasses RLS entirely. No browser user can
+--    write it; super admins may read the history.
+-- ----------------------------------------------------------------------------
+alter table public.sent_reminders enable row level security;
+
+drop policy if exists sent_reminders_admin_read on public.sent_reminders;
+create policy sent_reminders_admin_read on public.sent_reminders
+  for select to authenticated
+  using (public.is_super_admin());
+
+
 -- ============================================================================
--- End of policies
+-- ROLLBACK — if the app breaks, run these to disable RLS and restore access.
 -- ============================================================================
+-- alter table public.profiles           disable row level security;
+-- alter table public.companies          disable row level security;
+-- alter table public.property_access    disable row level security;
+-- alter table public.properties         disable row level security;
+-- alter table public.mors               disable row level security;
+-- alter table public.documents          disable row level security;
+-- alter table public.tasks              disable row level security;
+-- alter table public.meetings           disable row level security;
+-- alter table public.findings           disable row level security;
+-- alter table public.document_templates disable row level security;
+-- alter table public.task_templates     disable row level security;
+-- alter table public.sent_reminders     disable row level security;
