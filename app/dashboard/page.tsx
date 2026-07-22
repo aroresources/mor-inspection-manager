@@ -546,11 +546,12 @@ export default function Dashboard() {
     const s = getMorStatus(p)
     return (s.stage === 'response_due' || s.stage === 'followup_due') && s.date != null && (daysUntil(s.date) as number) < 0
   }
+  // Every MOR still awaiting a response (a response/follow-up due date that
+  // hasn't passed). Overdue ones are counted by the Overdue Response chip.
   const isResponseDueSoon = (p: any) => {
     const s = getMorStatus(p)
     if (s.stage !== 'response_due' && s.stage !== 'followup_due') return false
-    const d = daysUntil(s.date) as number
-    return d >= 0 && d <= 14
+    return (daysUntil(s.date) as number) >= 0
   }
   const isMorScheduledSoon = (p: any) => {
     const s = getMorStatus(p)

@@ -1724,7 +1724,11 @@ const fetchMors = async () => {
   // scheduled -> awaiting report -> response due -> response sent ->
   // (follow-up) follow-up due -> follow-up sent. Returns null when not Active.
   const getCurrentMorStatus = () => {
-    if (!currentMor || currentMor.status !== 'Active') return null
+    if (!currentMor) return null
+    if (currentMor.status === 'Completed') {
+      return { label: `✅ Completed${currentMor.mor_date ? ' - ' + formatDate(currentMor.mor_date) : ''}`, classes: 'bg-green-100 text-green-700' }
+    }
+    if (currentMor.status !== 'Active') return null
     const fmt = (s: string) => formatDate(s)
     if (currentMor.follow_up) {
       if (currentMor.follow_up_response_submitted_date)
@@ -1846,6 +1850,17 @@ const fetchMors = async () => {
             + New MOR
           </button>
         </div>
+
+        {currentMor?.status === 'Completed' && (
+          <div className="mt-3 rounded-lg bg-green-50 border border-green-200 px-4 py-2.5 flex items-center gap-2">
+            <span className="text-lg">✅</span>
+            <span className="text-sm font-medium text-green-800">
+              This MOR is completed
+              {currentMor.mor_date ? ` (${formatDate(currentMor.mor_date)})` : ''}
+              {currentMor.rating ? ` — Rating: ${currentMor.rating}` : ''}.
+            </span>
+          </div>
+        )}
 
         <div className="flex gap-6">
           {tabs.map(tab => (
