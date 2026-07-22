@@ -197,6 +197,7 @@ function DocumentsTab({ propertyId, morId }: any) {
       property_id: propertyId,
       mor_id: morId,
       status: 'Not Started',
+      is_required: true,
       is_custom: true,
       sort_order: documents.length
     }
@@ -213,17 +214,18 @@ function DocumentsTab({ propertyId, morId }: any) {
     }
   }
 
-  // Crossed-off items (unchecked = not required) are hidden by default and
-  // excluded from progress, since they aren't part of this MOR's packet.
-  const crossedOffCount = documents.filter((d: any) => !d.is_required).length
-  const requiredDocs = documents.filter((d: any) => d.is_required)
+  // Only items explicitly unchecked (is_required === false) count as crossed
+  // off. A null/undefined is_required means "never set", so it stays visible.
+  const isCrossedOff = (d: any) => d.is_required === false
+  const crossedOffCount = documents.filter(isCrossedOff).length
+  const requiredDocs = documents.filter((d: any) => !isCrossedOff(d))
   const completed = requiredDocs.filter((d: any) => d.status === 'Submitted').length
   const total = requiredDocs.length
   const assignees = ['all', ...Array.from(new Set(documents.map((d: any) => d.assigned_to).filter(Boolean)))]
 
   const filteredDocs = documents.filter((d: any) => {
-    if (!d.is_required && !showCrossedOff) return false
-    const statusMatch = filterStatus === 'all' ? true : filterStatus === 'required' ? d.is_required : d.status === filterStatus
+    if (isCrossedOff(d) && !showCrossedOff) return false
+    const statusMatch = filterStatus === 'all' ? true : filterStatus === 'required' ? !isCrossedOff(d) : d.status === filterStatus
     const assigneeMatch = filterAssignee === 'all' ? true : d.assigned_to === filterAssignee
     return statusMatch && assigneeMatch
   })
@@ -310,8 +312,8 @@ function DocumentsTab({ propertyId, morId }: any) {
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <input type="checkbox" checked={doc.is_required} onChange={(e: any) => updateDoc(doc.id, { is_required: e.target.checked })} className="mt-1" />
-                    <span className={`text-sm ${!doc.is_required ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
+                    <input type="checkbox" checked={doc.is_required !== false} onChange={(e: any) => updateDoc(doc.id, { is_required: e.target.checked })} title="Uncheck to cross this item off the list" className="mt-1" />
+                    <span className={`text-sm ${doc.is_required === false ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
                       {doc.name}
                       {doc.is_custom && <span className="ml-2 text-xs bg-purple-100 text-purple-700 px-1 rounded">Custom</span>}
                     </span>
