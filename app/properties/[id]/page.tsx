@@ -77,6 +77,7 @@ function DocumentsTab({ propertyId, morId }: any) {
   const [customDoc, setCustomDoc] = useState<any>({ name: '', assigned_to: '', due_date: '', notes: '' })
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterAssignee, setFilterAssignee] = useState('all')
+  const [showCrossedOff, setShowCrossedOff] = useState(false)
 
   useEffect(() => {
     if (morId) fetchDocuments()
@@ -212,17 +213,27 @@ function DocumentsTab({ propertyId, morId }: any) {
     }
   }
 
-  const completed = documents.filter((d: any) => d.status === 'Submitted').length
-  const total = documents.length
+  // Crossed-off items (unchecked = not required) are hidden by default and
+  // excluded from progress, since they aren't part of this MOR's packet.
+  const crossedOffCount = documents.filter((d: any) => !d.is_required).length
+  const requiredDocs = documents.filter((d: any) => d.is_required)
+  const completed = requiredDocs.filter((d: any) => d.status === 'Submitted').length
+  const total = requiredDocs.length
   const assignees = ['all', ...Array.from(new Set(documents.map((d: any) => d.assigned_to).filter(Boolean)))]
-  
+
   const filteredDocs = documents.filter((d: any) => {
+    if (!d.is_required && !showCrossedOff) return false
     const statusMatch = filterStatus === 'all' ? true : filterStatus === 'required' ? d.is_required : d.status === filterStatus
     const assigneeMatch = filterAssignee === 'all' ? true : d.assigned_to === filterAssignee
     return statusMatch && assigneeMatch
   })
-  
-  const indexedDocs = filteredDocs.map((doc: any, index: number) => ({ ...doc, globalIndex: index }))
+
+  // globalIndex must be the position in the full list, otherwise reordering
+  // while filtered would swap the wrong rows.
+  const indexedDocs = filteredDocs.map((doc: any) => ({
+    ...doc,
+    globalIndex: documents.findIndex((d: any) => d.id === doc.id),
+  }))
   if (loading) return <div className="bg-white rounded-lg shadow p-6 text-gray-500">Loading documents...</div>
 
   return (
@@ -278,6 +289,14 @@ function DocumentsTab({ propertyId, morId }: any) {
             </button>
           ))}
         </div>
+        {crossedOffCount > 0 && (
+          <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
+            <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer">
+              <input type="checkbox" checked={showCrossedOff} onChange={(e: any) => setShowCrossedOff(e.target.checked)} />
+              Show {crossedOffCount} crossed-off item{crossedOffCount === 1 ? '' : 's'}
+            </label>
+          </div>
+        )}
       </div>
 
       <div className="bg-white rounded-lg shadow overflow-hidden">
