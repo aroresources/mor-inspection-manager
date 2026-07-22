@@ -177,29 +177,48 @@ create policy properties_delete on public.properties
   for delete to authenticated
   using (public.can_access_property(id));
 
+-- Only super admins may create properties.
 drop policy if exists properties_insert on public.properties;
 create policy properties_insert on public.properties
   for insert to authenticated
-  with check (
-    public.is_super_admin()
-    or (
-      public.current_user_role() = 'asset_manager'
-      and company_id is not null
-      and company_id = public.current_user_company()
-    )
-  );
+  with check (public.is_super_admin());
 
 
 -- ----------------------------------------------------------------------------
 -- 6) Child tables keyed by property_id: mors, documents, tasks, meetings,
 --    findings. Same rule for read + write: caller must access the property.
 -- ----------------------------------------------------------------------------
+-- MORs: anyone with property access can read and edit them, but only super
+-- admins and asset managers may create or delete a MOR.
 alter table public.mors enable row level security;
 drop policy if exists mors_access on public.mors;
-create policy mors_access on public.mors
-  for all to authenticated
+
+drop policy if exists mors_select on public.mors;
+create policy mors_select on public.mors
+  for select to authenticated
+  using (public.can_access_property(property_id));
+
+drop policy if exists mors_update on public.mors;
+create policy mors_update on public.mors
+  for update to authenticated
   using (public.can_access_property(property_id))
   with check (public.can_access_property(property_id));
+
+drop policy if exists mors_insert on public.mors;
+create policy mors_insert on public.mors
+  for insert to authenticated
+  with check (
+    public.can_access_property(property_id)
+    and (public.is_super_admin() or public.current_user_role() = 'asset_manager')
+  );
+
+drop policy if exists mors_delete on public.mors;
+create policy mors_delete on public.mors
+  for delete to authenticated
+  using (
+    public.can_access_property(property_id)
+    and (public.is_super_admin() or public.current_user_role() = 'asset_manager')
+  );
 
 alter table public.documents enable row level security;
 drop policy if exists documents_access on public.documents;

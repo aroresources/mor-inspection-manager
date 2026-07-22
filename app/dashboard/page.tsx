@@ -682,37 +682,44 @@ export default function Dashboard() {
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-gray-800">Properties</h2>
           <div className="flex gap-3">
-            <button
-              onClick={() => setShowAddCompany(true)}
-              className="bg-gray-600 text-white px-4 py-2 rounded font-medium hover:bg-gray-700 text-sm"
-            >
-              + Add Company
-            </button>
-            <input
-              ref={importInputRef}
-              type="file"
-              accept=".xlsx,.xls"
-              className="hidden"
-              onChange={handleImportFile}
-            />
-            <button
-              onClick={() => importInputRef.current?.click()}
-              className="bg-green-600 text-white px-4 py-2 rounded font-medium hover:bg-green-700 text-sm"
-            >
-              ⬆ Import Properties
-            </button>
+            {/* Creating companies/properties is super_admin only. */}
+            {userRole === 'super_admin' && (
+              <>
+                <button
+                  onClick={() => setShowAddCompany(true)}
+                  className="bg-gray-600 text-white px-4 py-2 rounded font-medium hover:bg-gray-700 text-sm"
+                >
+                  + Add Company
+                </button>
+                <input
+                  ref={importInputRef}
+                  type="file"
+                  accept=".xlsx,.xls"
+                  className="hidden"
+                  onChange={handleImportFile}
+                />
+                <button
+                  onClick={() => importInputRef.current?.click()}
+                  className="bg-green-600 text-white px-4 py-2 rounded font-medium hover:bg-green-700 text-sm"
+                >
+                  ⬆ Import Properties
+                </button>
+              </>
+            )}
             <button
               onClick={exportToExcel}
               className="bg-indigo-600 text-white px-4 py-2 rounded font-medium hover:bg-indigo-700 text-sm"
             >
               ⬇ Export
             </button>
-            <button
-              onClick={() => setShowAddProperty(true)}
-              className="bg-blue-600 text-white px-4 py-2 rounded font-medium hover:bg-blue-700 text-sm"
-            >
-              + Add Property
-            </button>
+            {userRole === 'super_admin' && (
+              <button
+                onClick={() => setShowAddProperty(true)}
+                className="bg-blue-600 text-white px-4 py-2 rounded font-medium hover:bg-blue-700 text-sm"
+              >
+                + Add Property
+              </button>
+            )}
           </div>
         </div>
 

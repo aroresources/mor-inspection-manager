@@ -1705,11 +1705,17 @@ export default function PropertyPage() {
   const [showEditMorDate, setShowEditMorDate] = useState(false)
   const [editMorDate, setEditMorDate] = useState('')
   const [companies, setCompanies] = useState<any[]>([])
+  const [userRole, setUserRole] = useState('')
+
+  // Only super admins and asset managers may create or delete a MOR.
+  const canManageMors = userRole === 'super_admin' || userRole === 'asset_manager'
 
   useEffect(() => {
     const getUser = async () => {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) router.push('/')
+      if (!user) { router.push('/'); return }
+      const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+      if (profile) setUserRole(profile.role)
     }
     getUser()
     fetchProperty()
@@ -1894,7 +1900,7 @@ const fetchMors = async () => {
                 <span className={`text-xs px-2 py-1 rounded ${status.classes}`}>{status.label}</span>
               ) : null
             })()}
-            {currentMorId && (
+            {currentMorId && canManageMors && (
               <button
                 onClick={() => deleteMor(currentMorId)}
                 title="Delete this MOR and all its documents, tasks, meetings, and findings"
@@ -1904,12 +1910,14 @@ const fetchMors = async () => {
               </button>
             )}
           </div>
-          <button
-            onClick={() => setShowNewMor(true)}
-            className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
-          >
-            + New MOR
-          </button>
+          {canManageMors && (
+            <button
+              onClick={() => setShowNewMor(true)}
+              className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+            >
+              + New MOR
+            </button>
+          )}
         </div>
 
         {currentMor?.status === 'Completed' && (
