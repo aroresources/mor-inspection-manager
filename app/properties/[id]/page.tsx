@@ -9,8 +9,15 @@ import { useToast } from '../../components/ToastProvider'
 import { parseDate, formatDate, formatDateObj } from '../../../lib/dateUtils'
 import {
   MorEvent, MorEventType, EVENT_LABELS, newEventId, synthesizeLog,
-  mirrorColumnsFromLog, deriveWorkflow, isDueStage,
+  mirrorColumnsFromLog, deriveWorkflow, isDueStage, isDueType, isSubmitType,
 } from '../../../lib/morWorkflow'
+
+// The submitted-event type that clears each open due-type event.
+const SUBMIT_FOR: Record<string, MorEventType> = {
+  response_due: 'response_submitted',
+  follow_up_due: 'follow_up_submitted',
+  extension_due: 'extension_submitted',
+}
 
 // File-attachment URLs are stored in a single text column as either a legacy
 // plain URL string or a JSON-encoded array of URLs. These helpers bridge both
@@ -831,12 +838,29 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
     setActionModal(null)
   }
 
-  const sortedLog = [...log].sort((a: MorEvent, b: MorEvent) => {
+  const byDateAsc = (a: MorEvent, b: MorEvent) => {
     const da = a.date || '9999-12-31'
     const db = b.date || '9999-12-31'
     return da < db ? -1 : da > db ? 1 : 0
-  })
+  }
+  const sortedLog = [...log].sort(byDateAsc)
   const responseDueDate = log.find((e: MorEvent) => e.type === 'response_due')?.date || ''
+
+  // The earliest still-open due date (response / follow-up / extension): the
+  // one after accounting for however many submissions have been logged. This is
+  // the row that gets an inline "Date sent" field.
+  const datedDues = log.filter((e: MorEvent) => isDueType(e.type) && e.date).sort(byDateAsc)
+  const submitCount = log.filter((e: MorEvent) => isSubmitType(e.type) && e.date).length
+  const openDueEvent: MorEvent | undefined = datedDues[submitCount]
+
+  // Record the date a due item's response was actually sent, which clears the
+  // open deadline (the due row stays in the log as history).
+  const markSent = (dueEv: MorEvent, date: string) => {
+    if (!date) return
+    const type = SUBMIT_FOR[dueEv.type]
+    if (!type) return
+    saveLog([...log, { id: newEventId(), type, date }])
+  }
 
   const fetchFindings = async () => {
     setLoading(true)
@@ -1496,6 +1520,17 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
                   />
                 ) : (
                   <span className="text-sm text-gray-800 flex-1 min-w-0">{EVENT_LABELS[ev.type]}</span>
+                )}
+                {openDueEvent && ev.id === openDueEvent.id && (
+                  <label className="flex items-center gap-1 text-xs text-green-700 whitespace-nowrap" title="Enter the date you actually sent the response — this clears the deadline">
+                    Date sent:
+                    <input
+                      type="date"
+                      value=""
+                      onChange={(e: any) => markSent(ev, e.target.value)}
+                      className="border border-green-300 rounded px-2 py-1 text-xs w-36"
+                    />
+                  </label>
                 )}
                 <input
                   type="text"
