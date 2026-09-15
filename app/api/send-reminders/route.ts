@@ -20,6 +20,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Resend } from 'resend'
 import { createClient } from '@supabase/supabase-js'
+import { deriveWorkflow, isDueStage } from '../../../lib/morWorkflow'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -41,12 +42,6 @@ function easternDateString(offsetDays = 0): string {
   const m = String(eastern.getMonth() + 1).padStart(2, '0')
   const d = String(eastern.getDate()).padStart(2, '0')
   return `${y}-${m}-${d}`
-}
-
-// Normalize a date/timestamp column value to a YYYY-MM-DD string (or null).
-function toDateOnly(value: unknown): string | null {
-  if (!value || typeof value !== 'string') return null
-  return value.slice(0, 10)
 }
 
 // Human-friendly date, e.g. "June 17, 2026".
@@ -160,10 +155,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ message: 'No super_admin recipients found.', sent: 0 })
     }
 
-    // All active MORs, with their property and company names.
+    // All active MORs, with their property and company names. The activity log
+    // (plus the legacy date columns as a fallback) drives the current deadline.
     const { data: mors, error: morsError } = await supabaseAdmin
       .from('mors')
-      .select('id, status, mor_date, response_due_date, property_id, properties(id, name, companies(name))')
+      .select('id, status, mor_date, response_due_date, response_submitted_date, follow_up, follow_up_response_due_date, follow_up_response_submitted_date, activity_log, property_id, properties(id, name, companies(name))')
       .eq('status', 'Active')
 
     if (morsError) {
@@ -190,61 +186,66 @@ export async function GET(request: NextRequest) {
       const propertyName: string = property.name || 'Unnamed Property'
       const companyName: string = company?.name || 'Unknown Company'
 
-      const responseDue = toDateOnly((mor as any).response_due_date)
-      const morDate = toDateOnly((mor as any).mor_date)
-
-      // Range-based checks (YYYY-MM-DD strings compare correctly with </<=).
-      const isOverdue = responseDue !== null && responseDue < today
-      const responseDueSoon = responseDue !== null && responseDue >= today && responseDue <= in7Days
-      const scheduledSoon = morDate !== null && morDate >= today && morDate <= in30Days
-
-      console.log('[send-reminders] Checking MOR:', {
-        morId: (mor as any).id,
-        property: propertyName,
-        responseDue,
-        morDate,
-        isOverdue,
-        responseDueSoon,
-        scheduledSoon,
-      })
-
       const morId: string = (mor as any).id
 
-      // Response deadline reminders.
-      if (isOverdue) {
-        reminders.push({
-          morId,
-          reminderType: 'response_overdue',
-          propertyId,
-          propertyName,
-          companyName,
-          deadlineLabel: 'MOR response is OVERDUE',
-          date: responseDue!,
-        })
-      } else if (responseDueSoon) {
-        reminders.push({
-          morId,
-          reminderType: 'response_due_soon',
-          propertyId,
-          propertyName,
-          companyName,
-          deadlineLabel: 'MOR response is due within 7 days',
-          date: responseDue!,
-        })
-      }
+      // Current stage + date from the activity log. Once a response/follow-up/
+      // extension has been submitted, the stage is no longer a "due" stage, so
+      // no deadline email is sent.
+      const wf = deriveWorkflow(mor)
+      const dueStr = wf.dateStr
 
-      // Scheduled MOR reminder (any MOR scheduled within the next 30 days).
-      if (scheduledSoon) {
-        reminders.push({
-          morId,
-          reminderType: 'mor_scheduled_soon',
-          propertyId,
-          propertyName,
-          companyName,
-          deadlineLabel: 'MOR is scheduled within 30 days',
-          date: morDate!,
-        })
+      console.log('[send-reminders] Checking MOR:', {
+        morId,
+        property: propertyName,
+        stage: wf.stage,
+        date: dueStr,
+      })
+
+      if (!wf.stage || !dueStr) continue
+
+      if (isDueStage(wf.stage)) {
+        // Open deadline: response, follow-up, or extension.
+        const kind = wf.stage === 'follow_up_due' ? 'followup' : wf.stage === 'extension_due' ? 'extension' : 'response'
+        const noun = kind === 'followup' ? 'follow-up response' : kind === 'extension' ? 'extension response' : 'response'
+        const isOverdue = dueStr < today
+        const dueSoon = dueStr >= today && dueStr <= in7Days
+        if (isOverdue) {
+          reminders.push({
+            morId,
+            reminderType: `${kind}_overdue`,
+            propertyId,
+            propertyName,
+            companyName,
+            deadlineLabel: `MOR ${noun} is OVERDUE`,
+            date: dueStr,
+          })
+        } else if (dueSoon) {
+          reminders.push({
+            morId,
+            reminderType: `${kind}_due_soon`,
+            propertyId,
+            propertyName,
+            companyName,
+            deadlineLabel: `MOR ${noun} is due within 7 days`,
+            date: dueStr,
+          })
+        }
+      } else if (wf.stage === 'scheduled') {
+        // Scheduled MOR reminder (any MOR scheduled within the next 30 days).
+        if (dueStr >= today && dueStr <= in30Days) {
+          reminders.push({
+            morId,
+            reminderType: 'mor_scheduled_soon',
+            propertyId,
+            propertyName,
+            companyName,
+            deadlineLabel: 'MOR is scheduled within 30 days',
+            date: dueStr,
+          })
+        }
       }
+      // Sent stages (response/follow-up/extension submitted) and awaiting_report
+      // produce no reminder.
     }
 
     // Send one email per reminder to all super_admins, skipping any reminder of
