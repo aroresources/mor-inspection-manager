@@ -7,6 +7,10 @@ import { saveAs } from 'file-saver'
 import { Document, Packer, Paragraph, TextRun, AlignmentType, BorderStyle } from 'docx'
 import { useToast } from '../../components/ToastProvider'
 import { parseDate, formatDate, formatDateObj } from '../../../lib/dateUtils'
+import {
+  MorEvent, MorEventType, EVENT_LABELS, newEventId, synthesizeLog,
+  mirrorColumnsFromLog, deriveWorkflow, isDueStage,
+} from '../../../lib/morWorkflow'
 
 // File-attachment URLs are stored in a single text column as either a legacy
 // plain URL string or a JSON-encoded array of URLs. These helpers bridge both
@@ -752,7 +756,7 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
   const [selectedFindingIds, setSelectedFindingIds] = useState<string[]>([])
   const [bulkStatus, setBulkStatus] = useState('')
   const [showAddFinding, setShowAddFinding] = useState(false)
-  const [newFinding, setNewFinding] = useState<any>({ finding: '', assigned_to: '', response: '', due_date: '' })
+  const [newFinding, setNewFinding] = useState<any>({ finding: '', assigned_to: '', response: '' })
   const [introText, setIntroText] = useState('Below is our response to the Management and Occupancy Review above:')
   const [signatoryName, setSignatoryName] = useState('')
   const [showReportSettings, setShowReportSettings] = useState(false)
@@ -761,11 +765,8 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
   const [extractedFindings, setExtractedFindings] = useState<any[]>([])
   const [showExtracted, setShowExtracted] = useState(false)
   const [morRating, setMorRating] = useState(currentMor?.rating || '')
-  const [responseDueDate, setResponseDueDate] = useState(currentMor?.response_due_date || '')
-  const [responseSubmittedDate, setResponseSubmittedDate] = useState(currentMor?.response_submitted_date || '')
-  const [followUp, setFollowUp] = useState(!!currentMor?.follow_up)
-  const [followUpDueDate, setFollowUpDueDate] = useState(currentMor?.follow_up_response_due_date || '')
-  const [followUpSubmittedDate, setFollowUpSubmittedDate] = useState(currentMor?.follow_up_response_submitted_date || '')
+  const [log, setLog] = useState<MorEvent[]>([])
+  const [actionModal, setActionModal] = useState<any>(null)
   const [completing, setCompleting] = useState(false)
   // Tracks the latest typed response per finding id, including values not yet
   // persisted by the debounced save, so reports can use the most current text.
@@ -776,13 +777,66 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
   }, [propertyId, morId])
 
   useEffect(() => {
-    setResponseDueDate(currentMor?.response_due_date || '')
-    setResponseSubmittedDate(currentMor?.response_submitted_date || '')
     setMorRating(currentMor?.rating || '')
-    setFollowUp(!!currentMor?.follow_up)
-    setFollowUpDueDate(currentMor?.follow_up_response_due_date || '')
-    setFollowUpSubmittedDate(currentMor?.follow_up_response_submitted_date || '')
+    // The activity log is the source of truth. If a MOR hasn't been seeded yet,
+    // build the log from its legacy date columns; it is persisted on first edit.
+    const raw = currentMor?.activity_log
+    const arr: MorEvent[] = Array.isArray(raw) && raw.length ? raw : synthesizeLog(currentMor)
+    setLog(arr)
   }, [currentMor])
+
+  // Persist the activity log and keep the legacy date columns mirrored so other
+  // readers (the reminder cron, the dashboard fallback) keep working.
+  const saveLog = async (next: MorEvent[]) => {
+    setLog(next)
+    if (!morId) return
+    const mirror = mirrorColumnsFromLog(next)
+    const update: any = {
+      activity_log: next,
+      response_due_date: mirror.response_due_date,
+      response_submitted_date: mirror.response_submitted_date,
+      follow_up: mirror.follow_up,
+      follow_up_response_due_date: mirror.follow_up_response_due_date,
+      follow_up_response_submitted_date: mirror.follow_up_response_submitted_date,
+    }
+    // Never null out the canonical MOR date from the log; only sync it forward.
+    if (mirror.mor_date) update.mor_date = mirror.mor_date
+    const { error } = await supabase.from('mors').update(update).eq('id', morId)
+    if (error) {
+      toast('Could not save the activity log — make sure the mor_activity_log.sql migration has been run. (' + error.message + ')', 'error')
+      return
+    }
+    if (onUpdateMor) onUpdateMor()
+  }
+
+  // --- Activity log mutators ---
+  const upsertSingle = (type: MorEventType, date: string) => {
+    const others = log.filter((e: MorEvent) => e.type !== type)
+    saveLog(date ? [...others, { id: newEventId(), type, date }] : others)
+  }
+  const updateEvent = (id: string, patch: Partial<MorEvent>) =>
+    saveLog(log.map((e: MorEvent) => (e.id === id ? { ...e, ...patch } : e)))
+  const removeEvent = (id: string) => saveLog(log.filter((e: MorEvent) => e.id !== id))
+  const addCustomEvent = () =>
+    saveLog([...log, { id: newEventId(), type: 'custom', date: null, label: '' }])
+
+  const saveActionModal = () => {
+    const m = actionModal
+    if (!m) return
+    const additions: MorEvent[] = []
+    if (m.dueType && m.dueDate) additions.push({ id: newEventId(), type: m.dueType, date: m.dueDate })
+    if (m.submittedType && m.submittedDate) additions.push({ id: newEventId(), type: m.submittedType, date: m.submittedDate })
+    if (additions.length === 0) { toast('Please enter at least one date.', 'warning'); return }
+    saveLog([...log, ...additions])
+    setActionModal(null)
+  }
+
+  const sortedLog = [...log].sort((a: MorEvent, b: MorEvent) => {
+    const da = a.date || '9999-12-31'
+    const db = b.date || '9999-12-31'
+    return da < db ? -1 : da > db ? 1 : 0
+  })
+  const responseDueDate = log.find((e: MorEvent) => e.type === 'response_due')?.date || ''
 
   const fetchFindings = async () => {
     setLoading(true)
@@ -811,14 +865,13 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
       finding: newFinding.finding,
       assigned_to: newFinding.assigned_to || null,
       response: newFinding.response || null,
-      due_date: newFinding.due_date || null,
       status: 'Open',
       sort_order: findings.length
     }]).select()
     if (error) { toast('Error saving finding: ' + error.message, 'error'); return }
     if (data) {
       setFindings([...findings, ...data])
-      setNewFinding({ finding: '', assigned_to: '', response: '', due_date: '' })
+      setNewFinding({ finding: '', assigned_to: '', response: '' })
       setShowAddFinding(false)
       toast('Finding saved.', 'success')
     }
@@ -903,7 +956,11 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
     toast('Finding deleted.', 'success')
   }
 
-  const deadline = parseDate(responseDueDate)
+  // The active deadline banner reflects the earliest open due date from the log
+  // (response, follow-up, or extension), not a per-finding date.
+  const wf = deriveWorkflow(currentMor ? { ...currentMor, activity_log: log, status: currentMor.status } : null)
+  const deadline = isDueStage(wf.stage) ? wf.date : null
+  const deadlineLabel = wf.stage === 'follow_up_due' ? 'Follow-up response' : wf.stage === 'extension_due' ? 'Extension response' : 'Response'
   const daysLeft = deadline ? Math.ceil((deadline.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : null
   const open = findings.filter((f: any) => f.status !== 'Submitted' && f.status !== 'Closed').length
   const total = findings.length
@@ -931,12 +988,12 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
   }
 
   const completeMor = async () => {
-    if (!morRating) { toast('Please select an MOR rating before completing.', 'warning'); return }
-    if (!morId) { toast('No MOR is selected to complete.', 'error'); return }
+    if (!morRating) { toast('Please select an MOR rating before closing out.', 'warning'); return }
+    if (!morId) { toast('No MOR is selected to close out.', 'error'); return }
     const ok = await confirm({
-      title: 'Complete MOR?',
-      message: 'Mark this MOR as Completed? This will update the Last MOR Date and Rating on the property.',
-      confirmLabel: 'Complete MOR',
+      title: 'Close out MOR?',
+      message: 'Close out this MOR? This will update the Last MOR Date and Rating on the property and add a "MOR Closed Out" entry to the activity log.',
+      confirmLabel: 'Close out MOR',
     })
     if (!ok) return
     setCompleting(true)
@@ -952,21 +1009,25 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
       return
     }
 
-    // Keep the MOR's scheduled date so completed MORs still show their date in
-    // the selector; the 'Completed' status excludes it from active-status logic.
+    // Record the close-out in the activity log and mark the MOR Completed. The
+    // MOR's scheduled date is kept so completed MORs still show their date in the
+    // selector; the 'Completed' status excludes it from active-status logic.
+    const today = new Date().toISOString().slice(0, 10)
+    const nextLog: MorEvent[] = [...log, { id: newEventId(), type: 'closed', date: today }]
     const { data: updated, error: morErr } = await supabase
       .from('mors')
-      .update({ status: 'Completed' })
+      .update({ status: 'Completed', activity_log: nextLog })
       .eq('id', morId)
       .select()
     setCompleting(false)
-    if (morErr) { toast('Error completing MOR: ' + morErr.message, 'error'); return }
+    if (morErr) { toast('Error closing out MOR: ' + morErr.message, 'error'); return }
     if (!updated || updated.length === 0) {
-      toast('Could not complete the MOR — the update affected no rows (likely a permissions/RLS issue).', 'error')
+      toast('Could not close out the MOR — the update affected no rows (likely a permissions/RLS issue).', 'error')
       return
     }
 
-    toast('MOR marked as Completed.', 'success')
+    setLog(nextLog)
+    toast('MOR closed out.', 'success')
     if (onCompleteMor) onCompleteMor()
   }
 
@@ -1048,7 +1109,6 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
         property_id: propertyId,
         mor_id: morId,
         finding: findingText,
-        due_date: f.due_date || null,
         status: 'Open',
         sort_order: order++
       }])
@@ -1333,12 +1393,7 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
             <input
               type="date"
               value={responseDueDate}
-              onChange={(e: any) => setResponseDueDate(e.target.value)}
-              onBlur={async (e: any) => {
-                if (!morId) return
-                await supabase.from('mors').update({ response_due_date: e.target.value || null }).eq('id', morId)
-                if (onUpdateMor) onUpdateMor()
-              }}
+              onChange={(e: any) => upsertSingle('response_due', e.target.value)}
               className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
             />
           </div>
@@ -1366,99 +1421,104 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
             </select>
           </div>
         </div>
-        <div className="flex justify-end mt-3">
-          <button
-            onClick={completeMor}
-            disabled={completing}
-            className="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700 disabled:opacity-50"
-          >
-            {completing ? 'Completing...' : '✓ Complete MOR'}
-          </button>
+      </div>
+
+      {/* MOR Notes */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <label className="block text-xs text-gray-500 mb-1 font-medium">Notes</label>
+        <textarea
+          key={morId}
+          defaultValue={currentMor?.notes || ''}
+          onBlur={async (e: any) => {
+            if (!morId) return
+            if (e.target.value === (currentMor?.notes || '')) return
+            const { error } = await supabase.from('mors').update({ notes: e.target.value || null }).eq('id', morId)
+            if (error) { toast('Could not save notes — make sure the mor_activity_log.sql migration has been run. (' + error.message + ')', 'error'); return }
+            if (onUpdateMor) onUpdateMor()
+          }}
+          rows={3}
+          placeholder="Notes about this MOR..."
+          className="w-full border border-gray-200 rounded px-3 py-2 text-sm"
+        />
+      </div>
+
+      {/* Activity Log */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <div className="flex justify-between items-center mb-3 flex-wrap gap-2">
+          <h3 className="text-sm font-bold text-gray-800">Activity Log</h3>
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={() => setActionModal({ kind: 'response', title: 'Record Response Submitted', submittedLabel: 'Date submitted to CA', submittedType: 'response_submitted', submittedDate: new Date().toISOString().slice(0, 10), dueDate: '' })}
+              className="bg-green-600 text-white px-3 py-1 rounded text-xs hover:bg-green-700"
+            >
+              ✓ Response Submitted
+            </button>
+            <button
+              onClick={() => setActionModal({ kind: 'follow_up', title: 'Follow-up Needed', dueLabel: 'Follow-up response due date', dueType: 'follow_up_due', submittedLabel: 'Date follow-up submitted (optional)', submittedType: 'follow_up_submitted', dueDate: '', submittedDate: '' })}
+              className="bg-orange-500 text-white px-3 py-1 rounded text-xs hover:bg-orange-600"
+            >
+              ↻ Follow-up Needed
+            </button>
+            <button
+              onClick={() => setActionModal({ kind: 'extension', title: 'Ask for an Extension', dueLabel: 'Extension due date', dueType: 'extension_due', submittedLabel: 'Date you sent the response (optional)', submittedType: 'extension_submitted', dueDate: '', submittedDate: '' })}
+              className="bg-purple-600 text-white px-3 py-1 rounded text-xs hover:bg-purple-700"
+            >
+              ⏱ Ask for Extension
+            </button>
+            <button
+              onClick={completeMor}
+              disabled={completing}
+              className="bg-gray-800 text-white px-3 py-1 rounded text-xs hover:bg-gray-900 disabled:opacity-50"
+            >
+              {completing ? 'Closing…' : '✔ Close out MOR'}
+            </button>
+          </div>
         </div>
+        {sortedLog.length === 0 ? (
+          <p className="text-sm text-gray-500 py-2">No activity yet. Set a Response Due Date above, or use the buttons to log events.</p>
+        ) : (
+          <div className="divide-y">
+            {sortedLog.map((ev: MorEvent) => (
+              <div key={ev.id} className="flex items-center gap-2 py-2">
+                <input
+                  type="date"
+                  value={ev.date || ''}
+                  onChange={(e: any) => updateEvent(ev.id, { date: e.target.value || null })}
+                  className="border border-gray-200 rounded px-2 py-1 text-xs w-36"
+                />
+                {ev.type === 'custom' ? (
+                  <input
+                    type="text"
+                    value={ev.label || ''}
+                    placeholder="Description"
+                    onChange={(e: any) => updateEvent(ev.id, { label: e.target.value })}
+                    className="border border-gray-200 rounded px-2 py-1 text-xs flex-1 min-w-0"
+                  />
+                ) : (
+                  <span className="text-sm text-gray-800 flex-1 min-w-0">{EVENT_LABELS[ev.type]}</span>
+                )}
+                <input
+                  type="text"
+                  value={ev.note || ''}
+                  placeholder="Note (optional)"
+                  onChange={(e: any) => updateEvent(ev.id, { note: e.target.value })}
+                  className="border border-gray-200 rounded px-2 py-1 text-xs w-40"
+                />
+                <button onClick={() => removeEvent(ev.id)} className="text-red-400 hover:text-red-600 text-xs" title="Delete entry">✕</button>
+              </div>
+            ))}
+          </div>
+        )}
+        <button onClick={addCustomEvent} className="mt-3 text-xs text-blue-600 hover:underline">+ Add log entry</button>
       </div>
 
       {deadline && (
         <div className={`rounded-lg p-4 ${daysLeft !== null && daysLeft < 0 ? 'bg-red-50 border border-red-200' : daysLeft !== null && daysLeft <= 7 ? 'bg-yellow-50 border border-yellow-200' : 'bg-blue-50 border border-blue-200'}`}>
           <p className={`text-sm font-medium ${daysLeft !== null && daysLeft < 0 ? 'text-red-700' : daysLeft !== null && daysLeft <= 7 ? 'text-yellow-700' : 'text-blue-700'}`}>
-            {daysLeft !== null && daysLeft < 0 ? `⚠️ Response deadline was ${Math.abs(daysLeft)} days ago!` : daysLeft === 0 ? '⚠️ Response due today!' : `📅 Response deadline: ${formatDateObj(deadline)} (${daysLeft} days remaining)`}
+            {daysLeft !== null && daysLeft < 0 ? `⚠️ ${deadlineLabel} deadline was ${Math.abs(daysLeft)} days ago!` : daysLeft === 0 ? `⚠️ ${deadlineLabel} due today!` : `📅 ${deadlineLabel} deadline: ${formatDateObj(deadline)} (${daysLeft} days remaining)`}
           </p>
         </div>
       )}
-
-      {/* Response Submitted to CA */}
-      <div className={`rounded-lg p-4 ${responseSubmittedDate ? 'bg-green-50 border border-green-200' : 'bg-white shadow'}`}>
-        <label className="block text-xs text-gray-500 mb-1">Response Submitted to CA:</label>
-        <input
-          type="date"
-          value={responseSubmittedDate}
-          onChange={(e: any) => setResponseSubmittedDate(e.target.value)}
-          onBlur={async (e: any) => {
-            if (!morId) return
-            await supabase.from('mors').update({ response_submitted_date: e.target.value || null }).eq('id', morId)
-            if (onUpdateMor) onUpdateMor()
-          }}
-          className={`border rounded px-3 py-2 text-sm ${responseSubmittedDate ? 'border-green-300 bg-white text-green-700 font-medium' : 'border-gray-300'}`}
-        />
-        {responseSubmittedDate && (
-          <p className="mt-2 text-sm font-medium text-green-700">✅ Response Sent: {formatDate(responseSubmittedDate)}</p>
-        )}
-      </div>
-
-      {/* Follow-up (after CA review/rejection) */}
-      <div className="bg-white rounded-lg shadow p-4">
-        <label className="flex items-center gap-2 text-sm text-gray-700">
-          <input
-            type="checkbox"
-            checked={followUp}
-            onChange={async (e: any) => {
-              const checked = e.target.checked
-              setFollowUp(checked)
-              if (!morId) return
-              const { error } = await supabase.from('mors').update({ follow_up: checked }).eq('id', morId)
-              if (error) { toast('Could not save follow-up — run the mor_followup_fields.sql migration in Supabase. (' + error.message + ')', 'error'); return }
-              if (onUpdateMor) onUpdateMor()
-            }}
-          />
-          Follow-up needed (CA rejected one or more responses)
-        </label>
-        {followUp && (
-          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Follow-up Response Due Date:</label>
-              <input
-                type="date"
-                value={followUpDueDate}
-                onChange={(e: any) => setFollowUpDueDate(e.target.value)}
-                onBlur={async (e: any) => {
-                  if (!morId) return
-                  const { error } = await supabase.from('mors').update({ follow_up_response_due_date: e.target.value || null }).eq('id', morId)
-                  if (error) { toast('Could not save follow-up date: ' + error.message, 'error'); return }
-                  if (onUpdateMor) onUpdateMor()
-                }}
-                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Follow-up Response Submitted to CA:</label>
-              <input
-                type="date"
-                value={followUpSubmittedDate}
-                onChange={(e: any) => setFollowUpSubmittedDate(e.target.value)}
-                onBlur={async (e: any) => {
-                  if (!morId) return
-                  const { error } = await supabase.from('mors').update({ follow_up_response_submitted_date: e.target.value || null }).eq('id', morId)
-                  if (error) { toast('Could not save follow-up date: ' + error.message, 'error'); return }
-                  if (onUpdateMor) onUpdateMor()
-                }}
-                className={`w-full border rounded px-3 py-2 text-sm ${followUpSubmittedDate ? 'border-green-300 text-green-700 font-medium' : 'border-gray-300'}`}
-              />
-            </div>
-          </div>
-        )}
-        {followUp && followUpSubmittedDate && (
-          <p className="mt-2 text-sm font-medium text-green-700">✅ Follow-up Sent: {formatDate(followUpSubmittedDate)}</p>
-        )}
-      </div>
 
       <div className="flex justify-between items-center">
         <h2 className="text-lg font-bold text-gray-800">
@@ -1573,15 +1633,9 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
                   <label className="text-xs text-gray-500">Finding</label>
                   <FindingTextarea value={finding.finding} onSave={(v: string) => updateFinding(finding.id, { finding: v })} rows={12} className="w-full mt-1 border border-gray-200 rounded px-3 py-2 text-sm resize-y" />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs text-gray-500">Assigned To</label>
-                    <input type="text" value={finding.assigned_to || ''} onChange={(e: any) => updateFinding(finding.id, { assigned_to: e.target.value })} className="w-full mt-1 border border-gray-200 rounded px-3 py-2 text-sm" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-500">Due Date</label>
-                    <input type="date" value={finding.due_date || ''} onChange={(e: any) => updateFinding(finding.id, { due_date: e.target.value || null })} className="w-full mt-1 border border-gray-200 rounded px-3 py-2 text-sm" />
-                  </div>
+                <div>
+                  <label className="text-xs text-gray-500">Assigned To</label>
+                  <input type="text" value={finding.assigned_to || ''} onChange={(e: any) => updateFinding(finding.id, { assigned_to: e.target.value })} className="w-full mt-1 border border-gray-200 rounded px-3 py-2 text-sm" />
                 </div>
                 <div>
                   <label className="text-xs text-gray-500">Written Response</label>
@@ -1618,12 +1672,48 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
             <div className="space-y-3">
               <textarea placeholder="Finding description *" value={newFinding.finding} onChange={(e: any) => setNewFinding({...newFinding, finding: e.target.value})} rows={3} className="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
               <input type="text" placeholder="Assigned to" value={newFinding.assigned_to} onChange={(e: any) => setNewFinding({...newFinding, assigned_to: e.target.value})} className="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
-              <input type="date" value={newFinding.due_date} onChange={(e: any) => setNewFinding({...newFinding, due_date: e.target.value})} className="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
               <textarea placeholder="Initial response (optional)" value={newFinding.response} onChange={(e: any) => setNewFinding({...newFinding, response: e.target.value})} rows={3} className="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
             </div>
             <div className="flex gap-3 justify-end mt-4">
               <button onClick={() => setShowAddFinding(false)} className="px-4 py-2 text-sm text-gray-600">Cancel</button>
               <button onClick={addFinding} className="bg-blue-600 text-white px-4 py-2 rounded text-sm">Add Finding</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Workflow action modal (Response Submitted / Follow-up / Extension) */}
+      {actionModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-bold mb-4">{actionModal.title}</h3>
+            <div className="space-y-3">
+              {actionModal.dueType && (
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">{actionModal.dueLabel}</label>
+                  <input
+                    type="date"
+                    value={actionModal.dueDate}
+                    onChange={(e: any) => setActionModal({ ...actionModal, dueDate: e.target.value })}
+                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                  />
+                </div>
+              )}
+              {actionModal.submittedType && (
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">{actionModal.submittedLabel}</label>
+                  <input
+                    type="date"
+                    value={actionModal.submittedDate}
+                    onChange={(e: any) => setActionModal({ ...actionModal, submittedDate: e.target.value })}
+                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                  />
+                </div>
+              )}
+            </div>
+            <div className="flex gap-3 justify-end mt-4">
+              <button onClick={() => setActionModal(null)} className="px-4 py-2 text-sm text-gray-600">Cancel</button>
+              <button onClick={saveActionModal} className="bg-blue-600 text-white px-4 py-2 rounded text-sm">Save</button>
             </div>
           </div>
         </div>
@@ -1672,7 +1762,7 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
               {extractedFindings.map((f: any, i: number) => (
                 <div key={i} className="p-3 border border-gray-200 rounded">
                   <p className="text-xs font-bold text-blue-600">
-                    {f.item}{f.due_date ? ` · Due ${f.due_date}` : ''}
+                    {f.item}
                   </p>
                   {f.finding && <p className="text-sm text-gray-800 mt-1 whitespace-pre-wrap">{f.finding}</p>}
                 </div>
@@ -1787,33 +1877,29 @@ const fetchMors = async () => {
     }
   }
 
-  // Single lifecycle status for the currently selected Active MOR:
-  // scheduled -> awaiting report -> response due -> response sent ->
-  // (follow-up) follow-up due -> follow-up sent. Returns null when not Active.
+  // Single lifecycle status for the currently selected MOR, derived from its
+  // activity log: scheduled -> awaiting report -> response due -> response sent
+  // -> follow-up due -> follow-up sent -> extension due -> extension sent ->
+  // closed. Returns null when there is nothing to show.
   const getCurrentMorStatus = () => {
     if (!currentMor) return null
     if (currentMor.status === 'Completed') {
-      return { label: `✅ Completed${currentMor.mor_date ? ' - ' + formatDate(currentMor.mor_date) : ''}`, classes: 'bg-green-100 text-green-700' }
+      return { label: `✅ Closed Out${currentMor.mor_date ? ' - ' + formatDate(currentMor.mor_date) : ''}`, classes: 'bg-green-100 text-green-700' }
     }
-    if (currentMor.status !== 'Active') return null
-    const fmt = (s: string) => formatDate(s)
-    if (currentMor.follow_up) {
-      if (currentMor.follow_up_response_submitted_date)
-        return { label: `✅ Follow-up Sent - ${fmt(currentMor.follow_up_response_submitted_date)}`, classes: 'bg-green-100 text-green-700' }
-      if (currentMor.follow_up_response_due_date)
-        return { label: `📝 Follow-up Response Due - ${fmt(currentMor.follow_up_response_due_date)}`, classes: 'bg-orange-100 text-orange-700' }
+    const wf = deriveWorkflow(currentMor)
+    if (!wf.stage || !wf.dateStr) return null
+    const d = formatDate(wf.dateStr)
+    switch (wf.stage) {
+      case 'scheduled': return { label: `📋 Scheduled - ${d}`, classes: 'bg-blue-100 text-blue-700' }
+      case 'awaiting_report': return { label: `⏳ Awaiting Report - ${d}`, classes: 'bg-orange-100 text-orange-700' }
+      case 'response_due': return { label: `📝 Response Due - ${d}`, classes: 'bg-orange-100 text-orange-700' }
+      case 'follow_up_due': return { label: `📝 Follow-up Due - ${d}`, classes: 'bg-orange-100 text-orange-700' }
+      case 'extension_due': return { label: `📝 Extension Due - ${d}`, classes: 'bg-orange-100 text-orange-700' }
+      case 'response_sent': return { label: `✅ Response Sent - ${d}`, classes: 'bg-green-100 text-green-700' }
+      case 'follow_up_sent': return { label: `✅ Follow-up Sent - ${d}`, classes: 'bg-green-100 text-green-700' }
+      case 'extension_sent': return { label: `✅ Response Sent - ${d}`, classes: 'bg-green-100 text-green-700' }
+      default: return null
     }
-    if (currentMor.response_submitted_date)
-      return { label: `✅ Response Sent - ${fmt(currentMor.response_submitted_date)}`, classes: 'bg-green-100 text-green-700' }
-    if (currentMor.response_due_date)
-      return { label: `📝 Response Due - ${fmt(currentMor.response_due_date)}`, classes: 'bg-orange-100 text-orange-700' }
-    if (!currentMor.mor_date) return null
-    const morDate = parseDate(currentMor.mor_date)!
-    const now = new Date()
-    const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
-    if (morDate.getTime() >= todayUTC)
-      return { label: `📋 Scheduled - ${fmt(currentMor.mor_date)}`, classes: 'bg-blue-100 text-blue-700' }
-    return { label: `⏳ Awaiting Report - ${fmt(currentMor.mor_date)}`, classes: 'bg-orange-100 text-orange-700' }
   }
 
   const saveMorDate = async () => {
@@ -1924,7 +2010,7 @@ const fetchMors = async () => {
           <div className="mt-3 rounded-lg bg-green-50 border border-green-200 px-4 py-2.5 flex items-center gap-2">
             <span className="text-lg">✅</span>
             <span className="text-sm font-medium text-green-800">
-              This MOR is completed
+              This MOR is closed out
               {currentMor.mor_date ? ` (${formatDate(currentMor.mor_date)})` : ''}
               {currentMor.rating ? ` — Rating: ${currentMor.rating}` : ''}.
             </span>

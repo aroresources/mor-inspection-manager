@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx'
 import { supabase } from '../../lib/supabase'
 import { useToast } from '../components/ToastProvider'
 import { parseDate, formatDateObj } from '../../lib/dateUtils'
+import { deriveWorkflow, isDueStage } from '../../lib/morWorkflow'
 
 // Add `months` months to a UTC date without timezone drift, clamping the day to
 // the target month's length (e.g. Jan 31 + 1 month -> Feb 28, not Mar 3).
@@ -431,27 +432,23 @@ export default function Dashboard() {
       return { label, classes: urgencyClasses(getResponseUrgency(d)) }
     }
 
-    // Follow-up stages (only when the follow-up checkbox is on).
-    if (mor?.follow_up) {
-      const fuSent = mor.follow_up_response_submitted_date ? parseDate(mor.follow_up_response_submitted_date) : null
-      if (fuSent) return { stage: 'followup_sent', date: fuSent, label: `✅ Follow-up Sent: ${formatDateObj(fuSent)}`, classes: 'bg-green-100 text-green-700' }
-      const fuDue = mor.follow_up_response_due_date ? parseDate(mor.follow_up_response_due_date) : null
-      if (fuDue) return { stage: 'followup_due', date: fuDue, ...dueCell(fuDue, 'Follow-up Response Due') }
-    }
-
-    // Response sent / due.
-    const sent = getResponseSubmittedDate(property)
-    if (sent) return { stage: 'response_sent', date: sent, label: `✅ Response Sent: ${formatDateObj(sent)}`, classes: 'bg-green-100 text-green-700' }
-    const due = getResponseDueDate(property)
-    if (due) return { stage: 'response_due', date: due, ...dueCell(due, 'Response Due') }
-
-    // MOR scheduled / awaiting report.
-    const morDate = getActiveMorDate(property)
-    if (morDate) {
-      const now = new Date()
-      const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
-      if (morDate.getTime() >= todayUTC) return { stage: 'scheduled', date: morDate, label: `📋 MOR Scheduled: ${formatDateObj(morDate)}`, classes: 'bg-blue-100 text-blue-700' }
-      return { stage: 'awaiting_report', date: morDate, label: `⏳ Awaiting Report: ${formatDateObj(morDate)}`, classes: 'bg-orange-100 text-orange-700' }
+    // Active-MOR stage from the activity log: the earliest open due date across
+    // response / follow-up / extension, else the last submission, else the
+    // scheduled MOR date.
+    if (mor) {
+      const wf = deriveWorkflow(mor)
+      if (wf.stage && wf.date) {
+        switch (wf.stage) {
+          case 'response_due': return { stage: 'response_due', date: wf.date, ...dueCell(wf.date, 'Response Due') }
+          case 'follow_up_due': return { stage: 'follow_up_due', date: wf.date, ...dueCell(wf.date, 'Follow-up Due') }
+          case 'extension_due': return { stage: 'extension_due', date: wf.date, ...dueCell(wf.date, 'Extension Due') }
+          case 'response_sent': return { stage: 'response_sent', date: wf.date, label: `✅ Response Sent: ${formatDateObj(wf.date)}`, classes: 'bg-green-100 text-green-700' }
+          case 'follow_up_sent': return { stage: 'follow_up_sent', date: wf.date, label: `✅ Follow-up Sent: ${formatDateObj(wf.date)}`, classes: 'bg-green-100 text-green-700' }
+          case 'extension_sent': return { stage: 'extension_sent', date: wf.date, label: `✅ Response Sent: ${formatDateObj(wf.date)}`, classes: 'bg-green-100 text-green-700' }
+          case 'scheduled': return { stage: 'scheduled', date: wf.date, label: `📋 MOR Scheduled: ${formatDateObj(wf.date)}`, classes: 'bg-blue-100 text-blue-700' }
+          case 'awaiting_report': return { stage: 'awaiting_report', date: wf.date, label: `⏳ Awaiting Report: ${formatDateObj(wf.date)}`, classes: 'bg-orange-100 text-orange-700' }
+        }
+      }
     }
 
     // Next MOR due (calculated, including the management-change window).
@@ -541,16 +538,17 @@ export default function Dashboard() {
   const daysUntil = (d: Date | null) =>
     d ? Math.ceil((d.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : null
 
-  // All attention buckets derive from the single unified status stage.
+  // All attention buckets derive from the single unified status stage. A "due"
+  // stage is any open deadline: response, follow-up, or extension.
   const isOverdueResponse = (p: any) => {
     const s = getMorStatus(p)
-    return (s.stage === 'response_due' || s.stage === 'followup_due') && s.date != null && (daysUntil(s.date) as number) < 0
+    return isDueStage(s.stage as any) && s.date != null && (daysUntil(s.date) as number) < 0
   }
-  // Every MOR still awaiting a response (a response/follow-up due date that
-  // hasn't passed). Overdue ones are counted by the Overdue Response chip.
+  // Every MOR still awaiting a response (a response/follow-up/extension due date
+  // that hasn't passed). Overdue ones are counted by the Overdue Response chip.
   const isResponseDueSoon = (p: any) => {
     const s = getMorStatus(p)
-    if (s.stage !== 'response_due' && s.stage !== 'followup_due') return false
+    if (!isDueStage(s.stage as any)) return false
     return (daysUntil(s.date) as number) >= 0
   }
   const isMorScheduledSoon = (p: any) => {

@@ -32,6 +32,11 @@ alter table mors add column if not exists follow_up_response_submitted_date date
 -- MOR rating saved per-MOR as it is selected (copied to properties.last_mor_rating on completion)
 alter table mors add column if not exists rating text;
 
+-- MOR activity log (source of truth for the response/follow-up/extension/close
+-- workflow) + per-MOR notes. activity_log is a JSON array of dated events.
+alter table mors add column if not exists activity_log jsonb not null default '[]'::jsonb;
+alter table mors add column if not exists notes text;
+
 -- Tasks: per-task notes, attachments, ordering; template ordering;
 -- MOR Scheduling Email notes -------------------------------------------------
 alter table tasks          add column if not exists notes text;
