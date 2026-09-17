@@ -18,6 +18,7 @@ export type MorEventType =
   | 'follow_up_submitted'
   | 'extension_due'
   | 'extension_submitted'
+  | 'extension'
   | 'closed'
   | 'custom'
 
@@ -27,6 +28,7 @@ export interface MorEvent {
   date: string | null // YYYY-MM-DD
   note?: string
   label?: string // free-text label, used for 'custom' entries
+  original_date?: string | null // a due event's pre-extension date, if extended
 }
 
 // Default label shown for each event type in the activity log.
@@ -38,6 +40,7 @@ export const EVENT_LABELS: Record<MorEventType, string> = {
   follow_up_submitted: 'Follow-up Submitted',
   extension_due: 'Extension Requested (due)',
   extension_submitted: 'Response Submitted (after extension)',
+  extension: 'Extension requested',
   closed: 'MOR Closed Out',
   custom: 'Note',
 }
