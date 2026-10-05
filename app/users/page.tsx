@@ -143,8 +143,8 @@ const inviteUser = async (e: any) => {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <nav className="bg-white shadow-sm px-6 py-4 flex justify-between items-center">
-        <div className="flex items-center gap-4">
+      <nav className="bg-white shadow-sm px-4 sm:px-6 py-4 flex flex-wrap justify-between items-center gap-x-4 gap-y-2">
+        <div className="flex items-center flex-wrap gap-x-4 gap-y-1">
           <button onClick={() => router.push('/dashboard')} className="text-sm text-blue-600 hover:underline">
             ← Back to Dashboard
           </button>
@@ -158,8 +158,8 @@ const inviteUser = async (e: any) => {
         </button>
       </nav>
 
-      <main className="max-w-5xl mx-auto px-6 py-8">
-        <div className="flex justify-between items-center mb-6">
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
+        <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
           <div>
             <h2 className="text-lg font-bold text-gray-800">Team Members</h2>
             <p className="text-sm text-gray-500">Manage access and roles for your team.</p>
@@ -197,7 +197,7 @@ const inviteUser = async (e: any) => {
                       {getRoleBadge(user.role)}
                     </div>
                   </div>
-                  <div className="mt-3 grid grid-cols-2 gap-3">
+                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="text-xs text-gray-500">Role</label>
                       <select
@@ -247,7 +247,7 @@ const inviteUser = async (e: any) => {
 
       {/* Invite User Modal */}
       {showInvite && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <h3 className="text-lg font-bold mb-4">Invite Team Member</h3>
             <div className="space-y-3">
@@ -295,7 +295,7 @@ const inviteUser = async (e: any) => {
 
       {/* Property Access Modal */}
       {showPropertyAccess && selectedUser && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[80vh] overflow-y-auto">
             <h3 className="text-lg font-bold mb-1">Property Access</h3>
             <p className="text-sm text-gray-500 mb-1">{selectedUser.full_name || selectedUser.email}</p>

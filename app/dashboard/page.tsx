@@ -49,7 +49,9 @@ export default function Dashboard() {
 
   useEffect(() => {
     const saved = localStorage.getItem('dashboardViewMode')
-    if (saved === 'grid' || saved === 'list') setViewMode(saved)
+    if (saved === 'grid' || saved === 'list') { setViewMode(saved); return }
+    // On phones, default to the card view (the table reads poorly on a narrow screen).
+    if (typeof window !== 'undefined' && window.innerWidth < 640) setViewMode('grid')
   }, [])
 
   const changeViewMode = (mode: 'grid' | 'list') => {
@@ -642,9 +644,9 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <nav className="bg-white shadow-sm px-6 py-4 flex justify-between items-center">
-        <h1 className="text-xl font-bold text-gray-800">MOR Inspection Manager</h1>
-        <div className="flex items-center gap-4">
+      <nav className="bg-white shadow-sm px-4 sm:px-6 py-4 flex flex-wrap justify-between items-center gap-x-4 gap-y-2">
+        <h1 className="text-lg sm:text-xl font-bold text-gray-800">MOR Inspection Manager</h1>
+        <div className="flex items-center flex-wrap gap-x-4 gap-y-2">
           {userRole === 'super_admin' && (
             <button
               onClick={testReminders}
@@ -676,10 +678,10 @@ export default function Dashboard() {
           </div>
         </nav>
 
-      <main className="max-w-7xl mx-auto px-6 py-8">
-        <div className="flex justify-between items-center mb-6">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
           <h2 className="text-2xl font-bold text-gray-800">Properties</h2>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-2 sm:gap-3">
             {/* Creating companies/properties is super_admin only. */}
             {userRole === 'super_admin' && (
               <>
@@ -988,7 +990,7 @@ export default function Dashboard() {
 
         {/* Import Preview Modal */}
         {showImportPreview && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg p-6 w-full max-w-5xl max-h-[85vh] flex flex-col">
               <h3 className="text-lg font-bold mb-1">Import Properties</h3>
               <p className="text-sm text-gray-500 mb-4">{importRows.length} {importRows.length === 1 ? 'property' : 'properties'} ready to import. Review before confirming.</p>
@@ -1046,7 +1048,7 @@ export default function Dashboard() {
 
         {/* Delete Company Warning Modal */}
         {deleteCompanyModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[85vh] flex flex-col">
               <h3 className="text-lg font-bold mb-2 text-red-700">Delete {deleteCompanyModal.name}?</h3>
               {deleteCompanyModal.properties.length > 0 ? (
@@ -1077,7 +1079,7 @@ export default function Dashboard() {
 
         {/* Add Company Modal */}
         {showAddCompany && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg p-6 w-full max-w-md">
               <h3 className="text-lg font-bold mb-4">Add Company</h3>
               <input
@@ -1097,7 +1099,7 @@ export default function Dashboard() {
 
         {/* Add Property Modal */}
         {showAddProperty && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg p-6 w-full max-w-md">
               <h3 className="text-lg font-bold mb-4">Add Property</h3>
               <div className="space-y-3">

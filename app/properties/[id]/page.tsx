@@ -252,9 +252,9 @@ function DocumentsTab({ propertyId, morId }: any) {
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-lg shadow p-4">
-        <div className="flex justify-between items-center mb-2">
+        <div className="flex flex-wrap justify-between items-center gap-2 mb-2">
           <span className="text-sm font-medium text-gray-700">Progress: {completed} of {total} submitted</span>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <button onClick={() => setShowPacket(true)} className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700">
               📦 Submission Packet
             </button>
@@ -329,7 +329,7 @@ function DocumentsTab({ propertyId, morId }: any) {
                       {doc.is_custom && <span className="ml-2 text-xs bg-purple-100 text-purple-700 px-1 rounded">Custom</span>}
                     </span>
                   </div>
-                  <div className="mt-2 grid grid-cols-3 gap-2 ml-6">
+                  <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2 ml-6">
                     <input type="text" placeholder="Assigned to" value={doc.assigned_to || ''} onChange={(e: any) => updateDoc(doc.id, { assigned_to: e.target.value })} className="border border-gray-200 rounded px-2 py-1 text-xs" />
                     <input type="date" value={doc.due_date || ''} onChange={(e: any) => updateDoc(doc.id, { due_date: e.target.value })} className="border border-gray-200 rounded px-2 py-1 text-xs" />
                     <select value={doc.status || 'Not Started'} onChange={(e: any) => updateDoc(doc.id, { status: e.target.value })} className="border border-gray-200 rounded px-2 py-1 text-xs">
@@ -360,7 +360,7 @@ function DocumentsTab({ propertyId, morId }: any) {
       </div>
 
       {showPacket && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto">
             <h3 className="text-lg font-bold mb-2">Submission Packet</h3>
             <p className="text-sm text-gray-500 mb-4">All uploaded documents for this property.</p>
@@ -394,7 +394,7 @@ function DocumentsTab({ propertyId, morId }: any) {
       )}
 
       {showAddCustom && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <h3 className="text-lg font-bold mb-4">Add Custom Document</h3>
             <div className="space-y-3">
@@ -530,7 +530,7 @@ function TasksTab({ propertyId, morId }: any) {
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-lg shadow p-4">
-        <div className="flex justify-between items-center mb-2">
+        <div className="flex flex-wrap justify-between items-center gap-2 mb-2">
           <span className="text-sm font-medium text-gray-700">Progress: {completed} of {total} completed</span>
           <button onClick={() => setShowAddTask(true)} className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700">+ Add Task</button>
         </div>
@@ -553,7 +553,7 @@ function TasksTab({ propertyId, morId }: any) {
                       {task.title}
                       {task.is_custom && <span className="ml-2 text-xs bg-purple-100 text-purple-700 px-1 rounded">Custom</span>}
                     </span>
-                    <div className="mt-2 grid grid-cols-2 gap-2">
+                    <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <input type="text" placeholder="Assigned to" value={task.assigned_to || ''} onChange={(e: any) => updateTask(task.id, { assigned_to: e.target.value })} className="border border-gray-200 rounded px-2 py-1 text-xs" />
                       <input type="date" value={task.due_date || ''} onChange={(e: any) => updateTask(task.id, { due_date: e.target.value })} className="border border-gray-200 rounded px-2 py-1 text-xs" />
                     </div>
@@ -589,7 +589,7 @@ function TasksTab({ propertyId, morId }: any) {
       </div>
 
       {showAddTask && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <h3 className="text-lg font-bold mb-4">Add Task</h3>
             <div className="space-y-3">
@@ -698,7 +698,7 @@ function MeetingsTab({ propertyId, morId }: any) {
       )}
 
       {showAddMeeting && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-lg">
             <h3 className="text-lg font-bold mb-4">Log Meeting</h3>
             <div className="space-y-3">
@@ -1611,12 +1611,12 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
         )}
       </div>
 
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
         <h2 className="text-lg font-bold text-gray-800">
           Findings & Response
           {total > 0 && <span className="ml-2 text-sm font-normal text-gray-500">({open} open of {total})</span>}
         </h2>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <label className="bg-yellow-500 text-white px-3 py-1 rounded text-sm hover:bg-yellow-600 cursor-pointer">
             🤖 Extract Findings from PDF
             <input type="file" accept=".pdf" className="hidden" onChange={extractFindingsFromPDF} />
@@ -1757,7 +1757,7 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
       )}
 
       {showAddFinding && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-lg">
             <h3 className="text-lg font-bold mb-4">Add Finding</h3>
             <div className="space-y-3">
@@ -1775,7 +1775,7 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
 
       {/* Generic single-date prompt (mark sent / extend / start follow-up / set due) */}
       {dateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <h3 className="text-lg font-bold mb-4">{dateModal.title}</h3>
             <div>
@@ -1805,7 +1805,7 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
       )}
 
       {showReportSettings && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-lg">
             <h3 className="text-lg font-bold mb-4">Report Settings</h3>
             <div className="space-y-4">
@@ -1828,7 +1828,7 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
 
       {/* Extracting indicator */}
       {extracting && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 text-center">
             <p className="text-lg font-medium">🤖 Extracting findings...</p>
             <p className="text-sm text-gray-500 mt-2">{extractProgress || 'Claude is reading your MOR report'}</p>
@@ -1839,7 +1839,7 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
 
       {/* Extracted Findings Preview */}
       {showExtracted && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
             <h3 className="text-lg font-bold mb-2">Extracted Findings</h3>
             <p className="text-sm text-gray-500 mb-4">{extractedFindings.length} {extractedFindings.length === 1 ? 'finding' : 'findings'} requiring a response. Review before importing.</p>
@@ -2024,12 +2024,12 @@ const fetchMors = async () => {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <nav className="bg-white shadow-sm px-6 py-4 flex justify-between items-center">
-        <div className="flex items-center gap-4">
-          <button onClick={() => router.push('/dashboard')} className="text-sm text-blue-600 hover:underline">
+      <nav className="bg-white shadow-sm px-4 sm:px-6 py-4 flex flex-wrap justify-between items-center gap-x-4 gap-y-2">
+        <div className="flex items-center flex-wrap gap-x-4 gap-y-1 min-w-0">
+          <button onClick={() => router.push('/dashboard')} className="text-sm text-blue-600 hover:underline whitespace-nowrap">
             ← Back to Dashboard
           </button>
-          <h1 className="text-xl font-bold text-gray-800">{property.name}</h1>
+          <h1 className="text-lg sm:text-xl font-bold text-gray-800 truncate max-w-full">{property.name}</h1>
           <span className="text-sm text-gray-500">{property.companies?.name}</span>
         </div>
         <button onClick={async () => { await supabase.auth.signOut(); window.location.href = '/' }} className="text-sm text-gray-500 hover:text-gray-700">
@@ -2037,10 +2037,10 @@ const fetchMors = async () => {
         </button>
       </nav>
 
-      <div className="bg-white border-b px-6">
+      <div className="bg-white border-b px-4 sm:px-6">
         {/* MOR Selector */}
-        <div className="flex items-center justify-between py-3 border-b">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 py-3 border-b">
+          <div className="flex items-center flex-wrap gap-2 sm:gap-3">
             <span className="text-sm font-medium text-gray-600">MOR:</span>
             <select
               value={currentMorId || ''}
@@ -2102,12 +2102,12 @@ const fetchMors = async () => {
           </div>
         )}
 
-        <div className="flex gap-6">
+        <div className="flex gap-4 sm:gap-6 overflow-x-auto">
           {tabs.map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab.toLowerCase())}
-              className={`py-4 text-sm font-medium border-b-2 transition ${activeTab === tab.toLowerCase() ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+              className={`py-4 text-sm font-medium border-b-2 transition whitespace-nowrap ${activeTab === tab.toLowerCase() ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
             >
               {tab}
             </button>
@@ -2115,7 +2115,7 @@ const fetchMors = async () => {
         </div>
       </div>
 
-      <main className="max-w-5xl mx-auto px-6 py-8">
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
         {activeTab === 'overview' && (
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex justify-between items-center mb-6">
@@ -2363,7 +2363,7 @@ const fetchMors = async () => {
         )}
       {/* New MOR Modal */}
         {showNewMor && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg p-6 w-full max-w-md">
               <h3 className="text-lg font-bold mb-4">Create New MOR</h3>
               <div className="space-y-3">
@@ -2416,7 +2416,7 @@ const fetchMors = async () => {
         )}
 
         {showEditMorDate && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg p-6 w-full max-w-md">
               <h3 className="text-lg font-bold mb-4">Edit MOR Date</h3>
               <div className="space-y-3">
