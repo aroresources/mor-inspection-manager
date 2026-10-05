@@ -867,7 +867,20 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
     saveLog([...log, { id: newEventId(), type: 'follow_up_due', date: newDate }])
   }
 
+  // The "Extension" action — set a new due date, whatever the current state:
+  //   • a deadline is open      -> move that due date (logged as an extension)
+  //   • a response was already due/sent -> open a new round at the new date
+  //   • nothing due yet         -> set the first response due date
+  const applyExtension = (newDate: string) => {
+    if (!newDate) return
+    if (openDueEvent) { extendDue(openDueEvent, newDate); return }
+    if (log.some((e: MorEvent) => e.type === 'response_due')) startFollowUp(newDate)
+    else upsertSingle('response_due', newDate)
+  }
+
   const openDateModal = (cfg: any) => setDateModal({ value: '', ...cfg })
+  const openExtensionModal = () =>
+    openDateModal({ title: 'Extension', label: 'Enter the new due date', value: openDueEvent?.date || '', onSave: applyExtension })
 
   // --- Current-step state machine (drives the tracker card) ---
   // rounds are the due events in date order: index 0 = Response, 1+ = Follow-up #n.
@@ -1494,7 +1507,7 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
                 )}
                 <div className="flex gap-2 flex-wrap mt-3">
                   <button onClick={() => openDateModal({ title: `${tracker.label} sent`, label: 'Date you sent the response to CA', value: todayStr, onSave: (d: string) => markSent(tracker.dueEvent, d) })} className="bg-green-600 text-white px-3 py-1.5 rounded text-sm hover:bg-green-700">✓ Mark sent</button>
-                  <button onClick={() => openDateModal({ title: 'Request an extension', label: 'New due date', value: tracker.date, onSave: (d: string) => extendDue(tracker.dueEvent, d) })} className="bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded text-sm hover:bg-gray-50">⏱ Request extension</button>
+                  <button onClick={openExtensionModal} className="bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded text-sm hover:bg-gray-50">⏱ Extension</button>
                   <button onClick={completeMor} disabled={completing} className="bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded text-sm hover:bg-gray-50 disabled:opacity-50">{completing ? 'Closing…' : '🏁 Close out MOR'}</button>
                 </div>
               </>
@@ -1507,6 +1520,7 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
                 <div className="flex gap-2 flex-wrap mt-3">
                   <button onClick={completeMor} disabled={completing} className="bg-green-600 text-white px-3 py-1.5 rounded text-sm hover:bg-green-700 disabled:opacity-50">{completing ? 'Closing…' : '✓ CA accepted — close out'}</button>
                   <button onClick={() => openDateModal({ title: 'Start a follow-up', label: 'Follow-up response due date', value: '', onSave: (d: string) => startFollowUp(d) })} className="bg-orange-500 text-white px-3 py-1.5 rounded text-sm hover:bg-orange-600">↻ CA rejected — start follow-up</button>
+                  <button onClick={openExtensionModal} className="bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded text-sm hover:bg-gray-50">⏱ Extension</button>
                 </div>
               </>
             )}
