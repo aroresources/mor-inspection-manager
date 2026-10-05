@@ -1038,6 +1038,14 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
     status === 'Follow Up' ? 'bg-orange-100 text-orange-700 border-orange-200' :
     status === 'In Progress' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
     'bg-red-100 text-red-700 border-red-200'
+  // Colored left-accent bar per status, so each finding card reads distinctly.
+  const statusAccent = (status: string) =>
+    status === 'Submitted' ? 'border-l-green-500' :
+    status === 'Closed' ? 'border-l-gray-400' :
+    status === 'Ready' ? 'border-l-blue-500' :
+    status === 'Follow Up' ? 'border-l-orange-500' :
+    status === 'In Progress' ? 'border-l-yellow-500' :
+    'border-l-red-500'
   const visibleFindings = statusFilter === 'all' ? findings : findings.filter((f: any) => f.status === statusFilter)
 
   const toggleSelectFinding = (id: string) =>
@@ -1709,11 +1717,11 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
       ) : visibleFindings.length === 0 ? (
         <div className="bg-white rounded-lg shadow p-6 text-center text-gray-500 text-sm">No findings with status &quot;{statusFilter}&quot;.</div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-5">
           {visibleFindings.map((finding: any) => {
             const index = findings.findIndex((f: any) => f.id === finding.id)
             return (
-            <div key={finding.id} className="bg-white rounded-lg shadow p-5">
+            <div key={finding.id} className={`bg-white rounded-lg shadow-md border border-gray-300 border-l-4 ${statusAccent(finding.status)} p-5`}>
               <div className="flex items-start gap-3">
                 <div className="flex flex-col gap-1 mt-1">
                   <button onClick={() => moveFindingTo(index, 'top')} title="Move to top" className="text-gray-400 hover:text-gray-600 text-xs leading-none">⤒</button>
@@ -1722,11 +1730,11 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
                   <button onClick={() => moveFindingTo(index, 'bottom')} title="Move to bottom" className="text-gray-400 hover:text-gray-600 text-xs leading-none">⤓</button>
                 </div>
                 <div className="flex-1">
-              <div className="flex justify-between items-start mb-3">
-                <div className="flex items-center gap-2">
+              <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-200">
+                <div className="flex items-center gap-3">
                   <input type="checkbox" checked={selectedFindingIds.includes(finding.id)} onChange={() => toggleSelectFinding(finding.id)} title="Select for bulk status change" />
                   {/* Positional number: always 1..N top to bottom, never travels with a reordered finding. */}
-                  <span className="text-sm font-semibold text-gray-700 whitespace-nowrap">Finding {index + 1}</span>
+                  <span className="text-base font-bold text-gray-800 whitespace-nowrap">Finding {index + 1}</span>
                   <select value={finding.status} onChange={(e: any) => updateFinding(finding.id, { status: e.target.value })} className={`text-xs px-2 py-1 rounded border ${statusClasses(finding.status)}`}>
                     {findingStatuses.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
