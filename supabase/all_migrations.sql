@@ -45,6 +45,9 @@ alter table tasks          add column if not exists sort_order int not null defa
 alter table task_templates add column if not exists sort_order int not null default 0;
 alter table properties     add column if not exists mor_scheduling_email_notes text;
 
+-- Preventive Maintenance Plan (one per property, JSON).
+alter table properties     add column if not exists pm_plan jsonb not null default '{"items":[]}'::jsonb;
+
 
 -- ============================================================================
 -- 2) DATA: document checklist order (Addendum C) + VAWA consolidation

@@ -6,6 +6,7 @@ import JSZip from 'jszip'
 import { saveAs } from 'file-saver'
 import { Document, Packer, Paragraph, TextRun, AlignmentType, BorderStyle } from 'docx'
 import { useToast } from '../../components/ToastProvider'
+import PreventiveMaintenanceTab from './PreventiveMaintenanceTab'
 import { parseDate, formatDate } from '../../../lib/dateUtils'
 import {
   MorEvent, MorEventType, EVENT_LABELS, newEventId, synthesizeLog,
@@ -2042,7 +2043,7 @@ const fetchMors = async () => {
     </div>
   )
 
-  const tabs = ['Overview', ...(mors.length > 0 ? ['MOR Binder', 'Tasks', 'Meetings', 'Findings'] : [])]
+  const tabs = ['Overview', 'Preventive Maintenance Plan', ...(mors.length > 0 ? ['MOR Binder', 'Tasks', 'Meetings', 'Findings'] : [])]
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -2290,6 +2291,10 @@ const fetchMors = async () => {
               )}
             </div>
           </div>
+        )}
+
+        {activeTab === 'preventive maintenance plan' && (
+          <PreventiveMaintenanceTab propertyId={id} property={property} onSaved={fetchProperty} />
         )}
 
         {activeTab === 'mor binder' && (
