@@ -48,6 +48,13 @@ alter table properties     add column if not exists mor_scheduling_email_notes t
 -- Preventive Maintenance Plan (one per property, JSON).
 alter table properties     add column if not exists pm_plan jsonb not null default '{"items":[]}'::jsonb;
 
+-- Prep tab: categories + descriptions + per-template document.
+alter table tasks          add column if not exists category text;
+alter table tasks          add column if not exists description text;
+alter table task_templates add column if not exists category text;
+alter table task_templates add column if not exists description text;
+alter table task_templates add column if not exists document_url text;
+
 
 -- ============================================================================
 -- 2) DATA: document checklist order (Addendum C) + VAWA consolidation
@@ -150,36 +157,41 @@ update documents d set sort_order = r.rn from ranked r where d.id = r.id;
 
 
 -- ============================================================================
--- 3) DATA: tasks checklist (Last MOR first, Last NSPIRE second)
+-- 3) DATA: Prep checklist templates (categorized). Idempotent: inserts each
+--    standard item only when a template with that title doesn't already exist,
+--    so re-running won't wipe custom items. For a clean reset to exactly this
+--    list, run supabase/prep_tasks.sql instead.
 -- ============================================================================
 
--- Default task templates.
-delete from task_templates where title ilike '%review last mor%';
-update task_templates set title = 'Last NSPIRE' where title ilike '%nspire%';
-insert into task_templates (title, sort_order)
-select 'Last MOR', 0 where not exists (select 1 from task_templates where title = 'Last MOR');
-update task_templates set sort_order = 0 where title = 'Last MOR';
-update task_templates set sort_order = 1 where title = 'Last NSPIRE';
-with ranked as (
-  select id, 2 + (row_number() over (order by sort_order, created_at)) - 1 as rn
-  from task_templates where title not in ('Last MOR', 'Last NSPIRE')
-)
-update task_templates t set sort_order = r.rn from ranked r where t.id = r.id;
+-- Retire the old defaults.
+delete from task_templates where title ilike '%review last mor%' or title = 'Last MOR' or title ilike '%nspire%';
 
--- Existing per-MOR task checklists.
-delete from tasks where title ilike '%review last mor%';
-update tasks set title = 'Last NSPIRE' where title ilike '%nspire%';
-insert into tasks (property_id, mor_id, title, completed, is_custom, sort_order)
-select m.property_id, m.mor_id, 'Last MOR', false, false, 0
-from (select distinct property_id, mor_id from tasks) m
-where not exists (select 1 from tasks t where t.mor_id = m.mor_id and t.title = 'Last MOR');
-update tasks set sort_order = 0 where title = 'Last MOR';
-update tasks set sort_order = 1 where title = 'Last NSPIRE';
-with ranked as (
-  select id, 2 + (row_number() over (partition by mor_id order by sort_order, created_at)) - 1 as rn
-  from tasks where title not in ('Last MOR', 'Last NSPIRE')
+with prep(category, title, ord) as (values
+  ('General Prep',  'Review Previous MOR',                       0),
+  ('General Prep',  'Review Previous NSPIRE',                    1),
+  ('General Prep',  'Review EIV Users',                          2),
+  ('General Prep',  'Request Coordinator Report from CA',        3),
+  ('General Prep',  'Review Under/Over Housed',                  4),
+  ('General Prep',  'Sent Notice to Tenants',                    5),
+  ('Property Prep', 'Fair Housing Logo on Each Property Sign',   6),
+  ('Property Prep', 'Property Clean (Inside and Outside)',       7),
+  ('Office Prep',   'Files Secured',                             8),
+  ('Office Prep',   'Office Clearly Marked',                     9),
+  ('Office Prep',   'Emergency Phone Number Posted',            10),
+  ('Office Prep',   'Office Hours Posted',                      11),
+  ('Office Prep',   'Fair Housing Poster',                      12),
+  ('Office Prep',   'PBCA Contact Info',                        13),
+  ('Office Prep',   'Grievance Policy Posted',                  14),
+  ('Office Prep',   'Rent Collection Policy Posted',            15),
+  ('Office Prep',   'Income Limits Posted',                     16),
+  ('Office Prep',   'Rent Schedule Posted',                     17),
+  ('Day of',        'Place for the Inspector to Park',          18),
+  ('Day of',        'Place for the Inspector to Work',          19),
+  ('Day of',        'Coffee/Donuts',                            20)
 )
-update tasks t set sort_order = r.rn from ranked r where t.id = r.id;
+insert into task_templates (category, title, sort_order)
+select p.category, p.title, p.ord from prep p
+where not exists (select 1 from task_templates t where t.title = p.title);
 
 
 -- ============================================================================

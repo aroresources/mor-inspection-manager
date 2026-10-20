@@ -426,11 +426,10 @@ function DocumentsTab({ propertyId, morId }: any) {
   )
 }
 function TasksTab({ propertyId, morId }: any) {
-  const { toast } = useToast()
+  const { toast, confirm } = useToast()
   const [tasks, setTasks] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [showAddTask, setShowAddTask] = useState(false)
-  const [newTask, setNewTask] = useState<any>({ title: '', assigned_to: '', due_date: '' })
+  const [addModal, setAddModal] = useState<any>(null) // { category, title, description, addToTemplate, newCategory }
 
   useEffect(() => {
     fetchTasks()
@@ -455,22 +454,29 @@ function TasksTab({ propertyId, morId }: any) {
     setLoading(false)
   }
 
+  // Seed a MOR's Prep list from the templates, copying the category, the default
+  // description, and any template document so it appears on every new MOR.
   const loadFromTemplates = async () => {
-    const { data: tmpl } = await supabase.from('task_templates').select('*').order('created_at')
+    const { data: tmpl } = await supabase.from('task_templates').select('*').order('sort_order')
     if (tmpl && tmpl.length > 0) {
       const ordered = sortTasks(tmpl)
-      const tasks = ordered.map((t: any, i: number) => ({
+      const rows = ordered.map((t: any, i: number) => ({
         property_id: propertyId,
         mor_id: morId,
+        category: t.category || 'Other',
         title: t.title,
+        description: t.description || null,
+        document_url: t.document_url || null,
         assigned_to: '',
         due_date: null,
         completed: false,
         is_custom: false,
-        sort_order: t.sort_order ?? i
+        sort_order: t.sort_order ?? i,
       }))
-      const { data: inserted } = await supabase.from('tasks').insert(tasks).select()
+      const { data: inserted } = await supabase.from('tasks').insert(rows).select()
       if (inserted) setTasks(sortTasks(inserted))
+    } else {
+      setTasks([])
     }
   }
 
@@ -479,6 +485,31 @@ function TasksTab({ propertyId, morId }: any) {
     if (error) { toast('Error saving task: ' + error.message, 'error'); return }
     setTasks(tasks => tasks.map((t: any) => t.id === id ? { ...t, ...updates } : t))
     if (updates.completed === true) toast('Task completed.', 'success')
+  }
+
+  const removeTask = async (id: any) => {
+    const { error } = await supabase.from('tasks').delete().eq('id', id)
+    if (error) { toast('Error removing item: ' + error.message, 'error'); return }
+    setTasks(tasks => tasks.filter((t: any) => t.id !== id))
+  }
+
+  const removeCategory = async (category: string) => {
+    const ids = tasks.filter((t: any) => (t.category || 'Other') === category).map((t: any) => t.id)
+    if (!ids.length) return
+    const ok = await confirm({ title: 'Remove category?', message: `Remove "${category}" and its ${ids.length} item${ids.length === 1 ? '' : 's'} from this MOR?`, confirmLabel: 'Remove', danger: true })
+    if (!ok) return
+    const { error } = await supabase.from('tasks').delete().in('id', ids)
+    if (error) { toast('Error removing category: ' + error.message, 'error'); return }
+    setTasks(tasks => tasks.filter((t: any) => !ids.includes(t.id)))
+  }
+
+  const resetToTemplate = async () => {
+    const ok = await confirm({ title: 'Reset Prep list?', message: 'Delete this MOR’s current Prep items and reload them from the templates? Notes, dates, and uploads on the current items will be lost.', confirmLabel: 'Reset', danger: true })
+    if (!ok) return
+    await supabase.from('tasks').delete().eq('property_id', propertyId).eq('mor_id', morId)
+    setTasks([])
+    await loadFromTemplates()
+    toast('Prep list reset from templates.', 'success')
   }
 
   // Upload one or more documents for a checklist task, appending to existing ones.
@@ -504,114 +535,154 @@ function TasksTab({ propertyId, morId }: any) {
     await updateTask(task.id, { document_url: serializeAttachmentUrls(remaining) })
   }
 
-  const addTask = async (e: any) => {
-    if (e) e.preventDefault()
-    if (!newTask.title) return
+  const saveAddModal = async () => {
+    const m = addModal
+    if (!m) return
+    const category = (m.newCategory ? m.category?.trim() : m.category) || 'Other'
+    if (!m.title?.trim()) { toast('Enter an item name.', 'warning'); return }
     const taskData = {
-      title: newTask.title,
-      assigned_to: newTask.assigned_to || null,
-      due_date: newTask.due_date || null,
-      property_id: propertyId,
-      mor_id: morId,
-      completed: false,
-      is_custom: true,
-      sort_order: tasks.length
+      category,
+      title: m.title.trim(),
+      description: m.description?.trim() || null,
+      assigned_to: null, due_date: null, completed: false,
+      property_id: propertyId, mor_id: morId, is_custom: true,
+      sort_order: tasks.length,
     }
     const { data, error } = await supabase.from('tasks').insert([taskData]).select()
-    if (error) { toast('Error adding task: ' + error.message, 'error'); return }
-    if (data) {
-      if (newTask.addToTemplate) {
-        await supabase.from('task_templates').insert([{ title: newTask.title }])
-      }
-      setTasks(sortTasks([...tasks, ...data]))
-      setNewTask({ title: '', assigned_to: '', due_date: '' })
-      setShowAddTask(false)
-      toast('Task added.', 'success')
+    if (error) { toast('Error adding item: ' + error.message, 'error'); return }
+    if (m.addToTemplate) {
+      const { data: last } = await supabase.from('task_templates').select('sort_order').order('sort_order', { ascending: false }).limit(1)
+      const nextOrder = (last && last[0]?.sort_order != null ? last[0].sort_order : tasks.length) + 1
+      await supabase.from('task_templates').insert([{ category, title: taskData.title, description: taskData.description, sort_order: nextOrder }])
     }
+    if (data) setTasks(sortTasks([...tasks, ...data]))
+    setAddModal(null)
+    toast('Item added.', 'success')
   }
 
   const completed = tasks.filter((t: any) => t.completed).length
   const total = tasks.length
 
-  if (loading) return <div className="bg-white rounded-lg shadow p-6 text-gray-500">Loading tasks...</div>
+  // Group by category, preserving the order categories first appear in.
+  const sorted = sortTasks(tasks)
+  const categories: string[] = []
+  for (const t of sorted) { const c = t.category || 'Other'; if (!categories.includes(c)) categories.push(c) }
+
+  if (loading) return <div className="bg-white rounded-lg shadow p-6 text-gray-500">Loading prep list...</div>
 
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-lg shadow p-4">
         <div className="flex flex-wrap justify-between items-center gap-2 mb-2">
           <span className="text-sm font-medium text-gray-700">Progress: {completed} of {total} completed</span>
-          <button onClick={() => setShowAddTask(true)} className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700">+ Add Task</button>
+          <div className="flex gap-2 flex-wrap">
+            <button onClick={resetToTemplate} className="text-gray-600 border border-gray-300 px-3 py-1 rounded text-sm hover:bg-gray-50">↻ Reset to template</button>
+            <button onClick={() => setAddModal({ category: categories[0] || '', title: '', description: '', addToTemplate: false, newCategory: !categories.length })} className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700">+ Add Prep Item</button>
+          </div>
         </div>
         <div className="w-full bg-gray-200 rounded-full h-2">
           <div className="bg-green-500 h-2 rounded-full transition-all" style={{ width: total > 0 ? `${(completed / total) * 100}%` : '0%' }} />
         </div>
       </div>
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        {tasks.length === 0 ? (
-          <div className="p-6 text-center text-gray-500 text-sm">No tasks yet. Click "+ Add Task" to get started.</div>
-        ) : (
-          <div className="divide-y">
-            {tasks.map((task: any) => (
-              <div key={task.id} className={`p-4 ${task.completed ? 'bg-gray-50' : ''}`}>
-                <div className="flex items-start gap-3">
-                  <input type="checkbox" checked={task.completed} onChange={(e: any) => updateTask(task.id, { completed: e.target.checked })} className="mt-1" />
-                  <div className="flex-1">
-                    <span className={`text-sm ${task.completed ? 'line-through text-gray-400' : 'text-gray-800'}`}>
-                      {task.title}
-                      {task.is_custom && <span className="ml-2 text-xs bg-purple-100 text-purple-700 px-1 rounded">Custom</span>}
-                    </span>
-                    <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <input type="text" placeholder="Assigned to" value={task.assigned_to || ''} onChange={(e: any) => updateTask(task.id, { assigned_to: e.target.value })} className="border border-gray-200 rounded px-2 py-1 text-xs" />
-                      <input type="date" value={task.due_date || ''} onChange={(e: any) => updateTask(task.id, { due_date: e.target.value })} className="border border-gray-200 rounded px-2 py-1 text-xs" />
-                    </div>
-                    <div className="mt-2">
-                      <label className="text-xs text-gray-500">Notes</label>
+      {total === 0 ? (
+        <div className="bg-white rounded-lg shadow p-6 text-center text-gray-500 text-sm">No prep items yet. Click "+ Add Prep Item", or "Reset to template" to load the standard list.</div>
+      ) : categories.map((cat) => {
+        const items = sorted.filter((t: any) => (t.category || 'Other') === cat)
+        return (
+          <div key={cat} className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">{cat}</h3>
+              <div className="flex gap-3">
+                <button onClick={() => setAddModal({ category: cat, title: '', description: '', addToTemplate: false, newCategory: false })} className="text-xs text-blue-600 hover:underline">+ Add item</button>
+                <button onClick={() => removeCategory(cat)} className="text-xs text-red-400 hover:text-red-600">Remove category</button>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
+              {items.map((task: any) => (
+                <div key={task.id} className={`bg-white rounded-lg border border-gray-300 border-l-4 ${task.completed ? 'border-l-green-500' : 'border-l-gray-400'} shadow-sm p-3`}>
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" checked={task.completed} onChange={(e: any) => updateTask(task.id, { completed: e.target.checked })} className="mt-1" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className={`text-sm font-medium leading-snug ${task.completed ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+                          {task.title}
+                          {task.is_custom && <span className="ml-1 text-xs bg-purple-100 text-purple-700 px-1 rounded">Custom</span>}
+                        </span>
+                        <button onClick={() => removeTask(task.id)} className="shrink-0 text-red-400 hover:text-red-600 text-xs" title="Remove item">✕</button>
+                      </div>
                       <textarea
-                        key={task.id}
+                        key={task.id + '-desc'}
+                        defaultValue={task.description || ''}
+                        onBlur={(e: any) => { if (e.target.value !== (task.description || '')) updateTask(task.id, { description: e.target.value || null }) }}
+                        rows={2}
+                        placeholder="Description / instructions…"
+                        className="w-full mt-2 border border-gray-200 rounded px-2 py-1 text-xs"
+                      />
+                      <div className="mt-2 grid grid-cols-2 gap-2">
+                        <input type="text" placeholder="Assigned to" value={task.assigned_to || ''} onChange={(e: any) => updateTask(task.id, { assigned_to: e.target.value })} className="border border-gray-200 rounded px-2 py-1 text-xs min-w-0" />
+                        <input type="date" value={task.due_date || ''} onChange={(e: any) => updateTask(task.id, { due_date: e.target.value })} className="border border-gray-200 rounded px-2 py-1 text-xs min-w-0" />
+                      </div>
+                      <input
+                        type="text"
+                        key={task.id + '-notes'}
                         defaultValue={task.notes || ''}
                         onBlur={(e: any) => { if (e.target.value !== (task.notes || '')) updateTask(task.id, { notes: e.target.value || null }) }}
-                        rows={2}
-                        placeholder="Notes..."
-                        className="w-full mt-1 border border-gray-200 rounded px-2 py-1 text-xs"
+                        placeholder="Notes"
+                        className="w-full mt-2 border border-gray-200 rounded px-2 py-1 text-xs"
                       />
-                    </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-3">
-                      {parseAttachmentUrls(task.document_url).map((url: string, i: number) => (
-                        <span key={i} className="flex items-center gap-1">
-                          <button onClick={async () => { const err = await openStoredFile(url); if (err) toast(err, 'error') }} className="text-xs text-blue-600 hover:underline">📎 {attachmentFileName(url)}</button>
-                          <button onClick={() => removeTaskFile(task, url)} className="text-xs text-red-400 hover:text-red-600" title="Remove file">✕</button>
-                        </span>
-                      ))}
-                      <label className="cursor-pointer text-xs text-blue-600 hover:underline">
-                        📎 Upload Document(s)
-                        <input type="file" multiple className="hidden" onChange={async (e: any) => { await uploadTaskFiles(task, e.target.files); e.target.value = '' }} />
-                      </label>
+                      <div className="mt-2 flex flex-wrap items-center gap-3">
+                        {parseAttachmentUrls(task.document_url).map((url: string, i: number) => (
+                          <span key={i} className="flex items-center gap-1">
+                            <button onClick={async () => { const err = await openStoredFile(url); if (err) toast(err, 'error') }} className="text-xs text-blue-600 hover:underline">📎 {attachmentFileName(url)}</button>
+                            <button onClick={() => removeTaskFile(task, url)} className="text-xs text-red-400 hover:text-red-600" title="Remove file">✕</button>
+                          </span>
+                        ))}
+                        <label className="cursor-pointer text-xs text-blue-600 hover:underline">
+                          📎 Upload Document(s)
+                          <input type="file" multiple className="hidden" onChange={async (e: any) => { await uploadTaskFiles(task, e.target.files); e.target.value = '' }} />
+                        </label>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        )}
-      </div>
+        )
+      })}
 
-      {showAddTask && (
+      {addModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-bold mb-4">Add Task</h3>
+            <h3 className="text-lg font-bold mb-4">Add Prep Item</h3>
             <div className="space-y-3">
-              <input type="text" placeholder="Task title *" value={newTask.title} onChange={(e: any) => setNewTask({...newTask, title: e.target.value})} className="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
-              <input type="text" placeholder="Assigned to" value={newTask.assigned_to} onChange={(e: any) => setNewTask({...newTask, assigned_to: e.target.value})} className="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
-              <input type="date" value={newTask.due_date || ''} onChange={(e: any) => setNewTask({...newTask, due_date: e.target.value || null})} className="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Category</label>
+                {addModal.newCategory ? (
+                  <div className="flex gap-2">
+                    <input type="text" autoFocus placeholder="New category name" value={addModal.category} onChange={(e: any) => setAddModal({ ...addModal, category: e.target.value })} className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm" />
+                    {categories.length > 0 && <button onClick={() => setAddModal({ ...addModal, newCategory: false, category: categories[0] })} className="text-xs text-gray-500 px-2">Pick existing</button>}
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <select value={addModal.category} onChange={(e: any) => setAddModal({ ...addModal, category: e.target.value })} className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm">
+                      {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <button onClick={() => setAddModal({ ...addModal, newCategory: true, category: '' })} className="text-xs text-blue-600 px-2">+ New</button>
+                  </div>
+                )}
+              </div>
+              <input type="text" placeholder="Item name *" value={addModal.title} onChange={(e: any) => setAddModal({ ...addModal, title: e.target.value })} className="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
+              <textarea placeholder="Description (optional)" value={addModal.description} onChange={(e: any) => setAddModal({ ...addModal, description: e.target.value })} rows={2} className="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
               <label className="flex items-center gap-2 text-sm text-gray-600">
-                <input type="checkbox" checked={newTask.addToTemplate || false} onChange={(e: any) => setNewTask({...newTask, addToTemplate: e.target.checked})} />
-                Add to template (include on all future properties)
+                <input type="checkbox" checked={addModal.addToTemplate} onChange={(e: any) => setAddModal({ ...addModal, addToTemplate: e.target.checked })} />
+                Save to template (include on every new MOR)
               </label>
             </div>
             <div className="flex gap-3 justify-end mt-4">
-              <button onClick={() => setShowAddTask(false)} className="px-4 py-2 text-sm text-gray-600">Cancel</button>
-              <button onClick={addTask} className="bg-blue-600 text-white px-4 py-2 rounded text-sm">Add Task</button>
+              <button onClick={() => setAddModal(null)} className="px-4 py-2 text-sm text-gray-600">Cancel</button>
+              <button onClick={saveAddModal} className="bg-blue-600 text-white px-4 py-2 rounded text-sm">Add Item</button>
             </div>
           </div>
         </div>
@@ -2050,7 +2121,7 @@ const fetchMors = async () => {
     </div>
   )
 
-  const tabs = ['Overview', 'Preventive Maintenance Plan', ...(mors.length > 0 ? ['MOR Binder', 'Tasks', 'Meetings', 'Findings'] : [])]
+  const tabs = ['Overview', 'Preventive Maintenance Plan', ...(mors.length > 0 ? ['MOR Binder', 'Prep', 'Meetings', 'Findings'] : [])]
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -2308,7 +2379,7 @@ const fetchMors = async () => {
           <DocumentsTab propertyId={id} morId={currentMorId} />
         )}
 
-        {activeTab === 'tasks' && (
+        {activeTab === 'prep' && (
           <div className="space-y-4">
             {/* MOR Scheduling Email — standalone info block at the very top (not a checklist item). */}
             <div className="bg-white rounded-lg shadow p-4">
