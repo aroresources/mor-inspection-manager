@@ -226,6 +226,16 @@ function DocumentsTab({ propertyId, morId }: any) {
     }
   }
 
+  const DOC_STATUSES = ['Not Started', 'In Progress', 'Uploaded', 'Submitted', 'Property']
+  // Colored left-accent bar per status, so each binder item reads distinctly.
+  const docAccent = (status: string, crossed: boolean) =>
+    crossed ? 'border-l-gray-300' :
+    status === 'Submitted' ? 'border-l-green-500' :
+    status === 'Uploaded' ? 'border-l-blue-500' :
+    status === 'Property' ? 'border-l-purple-500' :
+    status === 'In Progress' ? 'border-l-yellow-500' :
+    'border-l-gray-400'
+
   // Only items explicitly unchecked (is_required === false) count as crossed
   // off. A null/undefined is_required means "never set", so it stays visible.
   const isCrossedOff = (d: any) => d.is_required === false
@@ -273,7 +283,7 @@ function DocumentsTab({ propertyId, morId }: any) {
       <div className="bg-white rounded-lg shadow p-3 space-y-2">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs text-gray-500 font-medium w-16">Status:</span>
-          {['all', 'Not Started', 'In Progress', 'Uploaded', 'Submitted', 'required'].map(status => (
+          {['all', 'Not Started', 'In Progress', 'Uploaded', 'Submitted', 'Property', 'required'].map(status => (
             <button
               key={status}
               onClick={() => setFilterStatus(status)}
@@ -313,51 +323,46 @@ function DocumentsTab({ propertyId, morId }: any) {
         )}
       </div>
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="divide-y">
-          {indexedDocs.map((doc: any) => (
-            <div key={doc.id} className="p-4">
-              <div className="flex items-start gap-2">
-                <div className="flex flex-col gap-1 mt-1">
-                  <button onClick={() => moveDoc(doc.globalIndex, -1)} className="text-gray-400 hover:text-gray-600 text-xs leading-none">▲</button>
-                  <button onClick={() => moveDoc(doc.globalIndex, 1)} className="text-gray-400 hover:text-gray-600 text-xs leading-none">▼</button>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
+        {indexedDocs.map((doc: any) => (
+          <div key={doc.id} className={`bg-white rounded-lg border border-gray-300 border-l-4 ${docAccent(doc.status || 'Not Started', doc.is_required === false)} shadow-sm p-3`}>
+            <div className="flex items-start gap-2">
+              <div className="flex flex-col gap-0.5 mt-0.5">
+                <button onClick={() => moveDoc(doc.globalIndex, -1)} className="text-gray-400 hover:text-gray-600 text-xs leading-none">▲</button>
+                <button onClick={() => moveDoc(doc.globalIndex, 1)} className="text-gray-400 hover:text-gray-600 text-xs leading-none">▼</button>
+              </div>
+              <input type="checkbox" checked={doc.is_required !== false} onChange={(e: any) => updateDoc(doc.id, { is_required: e.target.checked })} title="Uncheck to cross this item off the list" className="mt-1" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-2">
+                  <span className={`text-sm leading-snug ${doc.is_required === false ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
+                    {doc.name}
+                    {doc.is_custom && <span className="ml-1 text-xs bg-purple-100 text-purple-700 px-1 rounded">Custom</span>}
+                  </span>
+                  <select value={doc.status || 'Not Started'} onChange={(e: any) => updateDoc(doc.id, { status: e.target.value })} className="shrink-0 border border-gray-200 rounded px-1.5 py-1 text-xs">
+                    {DOC_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
                 </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <input type="checkbox" checked={doc.is_required !== false} onChange={(e: any) => updateDoc(doc.id, { is_required: e.target.checked })} title="Uncheck to cross this item off the list" className="mt-1" />
-                    <span className={`text-sm ${doc.is_required === false ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
-                      {doc.name}
-                      {doc.is_custom && <span className="ml-2 text-xs bg-purple-100 text-purple-700 px-1 rounded">Custom</span>}
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <input type="text" placeholder="Assigned to" value={doc.assigned_to || ''} onChange={(e: any) => updateDoc(doc.id, { assigned_to: e.target.value })} className="border border-gray-200 rounded px-2 py-1 text-xs min-w-0" />
+                  <input type="date" value={doc.due_date || ''} onChange={(e: any) => updateDoc(doc.id, { due_date: e.target.value })} className="border border-gray-200 rounded px-2 py-1 text-xs min-w-0" />
+                </div>
+                <input type="text" placeholder="Notes" value={doc.notes || ''} onChange={(e: any) => updateDoc(doc.id, { notes: e.target.value })} className="mt-2 w-full border border-gray-200 rounded px-2 py-1 text-xs" />
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  {parseAttachmentUrls(doc.file_url).map((url: string, i: number) => (
+                    <span key={i} className="flex items-center gap-1">
+                      <button onClick={async () => { const err = await openStoredFile(url); if (err) toast(err, 'error') }} className="text-xs text-blue-600 hover:underline">📎 {attachmentFileName(url)}</button>
+                      <button onClick={() => removeDocFile(doc, url)} className="text-xs text-red-400 hover:text-red-600" title="Remove file">✕</button>
                     </span>
-                  </div>
-                  <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2 ml-6">
-                    <input type="text" placeholder="Assigned to" value={doc.assigned_to || ''} onChange={(e: any) => updateDoc(doc.id, { assigned_to: e.target.value })} className="border border-gray-200 rounded px-2 py-1 text-xs" />
-                    <input type="date" value={doc.due_date || ''} onChange={(e: any) => updateDoc(doc.id, { due_date: e.target.value })} className="border border-gray-200 rounded px-2 py-1 text-xs" />
-                    <select value={doc.status || 'Not Started'} onChange={(e: any) => updateDoc(doc.id, { status: e.target.value })} className="border border-gray-200 rounded px-2 py-1 text-xs">
-                      <option value="Not Started">Not Started</option>
-                      <option value="In Progress">In Progress</option>
-                      <option value="Uploaded">Uploaded</option>
-                      <option value="Submitted">Submitted</option>
-                    </select>
-                  </div>
-                  <input type="text" placeholder="Notes" value={doc.notes || ''} onChange={(e: any) => updateDoc(doc.id, { notes: e.target.value })} className="mt-1 ml-6 w-[calc(100%-1.5rem)] border border-gray-200 rounded px-2 py-1 text-xs" />
-                  <div className="mt-2 ml-6 flex flex-wrap items-center gap-3">
-                    {parseAttachmentUrls(doc.file_url).map((url: string, i: number) => (
-                      <span key={i} className="flex items-center gap-1">
-                        <button onClick={async () => { const err = await openStoredFile(url); if (err) toast(err, 'error') }} className="text-xs text-blue-600 hover:underline">📎 {attachmentFileName(url)}</button>
-                        <button onClick={() => removeDocFile(doc, url)} className="text-xs text-red-400 hover:text-red-600" title="Remove file">✕</button>
-                      </span>
-                    ))}
-                    <label className="cursor-pointer text-xs text-blue-600 hover:underline">
-                      📎 Upload File(s)
-                      <input type="file" multiple className="hidden" onChange={async (e: any) => { await uploadDocFiles(doc, e.target.files); e.target.value = '' }} />
-                    </label>
-                  </div>
+                  ))}
+                  <label className="cursor-pointer text-xs text-blue-600 hover:underline">
+                    📎 Upload File(s)
+                    <input type="file" multiple className="hidden" onChange={async (e: any) => { await uploadDocFiles(doc, e.target.files); e.target.value = '' }} />
+                  </label>
                 </div>
               </div>
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
       </div>
 
       {showPacket && (
