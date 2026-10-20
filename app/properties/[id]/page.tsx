@@ -590,9 +590,9 @@ function TasksTab({ propertyId, morId }: any) {
       ) : categories.map((cat) => {
         const items = sorted.filter((t: any) => (t.category || 'Other') === cat)
         return (
-          <div key={cat} className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">{cat}</h3>
+          <div key={cat} className="space-y-3 pt-5">
+            <div className="flex items-center justify-between gap-2 border-b border-gray-300 pb-2">
+              <h3 className="text-xl font-bold text-gray-800">{cat}</h3>
               <div className="flex gap-3">
                 <button onClick={() => setAddModal({ category: cat, title: '', description: '', addToTemplate: false, newCategory: false })} className="text-xs text-blue-600 hover:underline">+ Add item</button>
                 <button onClick={() => removeCategory(cat)} className="text-xs text-red-400 hover:text-red-600">Remove category</button>

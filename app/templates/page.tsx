@@ -195,9 +195,9 @@ export default function TemplatesPage() {
             </div>
 
             {loading ? <p className="p-6 text-gray-500 text-sm">Loading...</p> : taskCategories.map((cat) => (
-              <div key={cat} className="space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">{cat}</h3>
+              <div key={cat} className="space-y-3 pt-5">
+                <div className="flex items-center justify-between gap-2 border-b border-gray-300 pb-2">
+                  <h3 className="text-xl font-bold text-gray-800">{cat}</h3>
                   <button onClick={() => removeTaskCategory(cat)} className="text-xs text-red-400 hover:text-red-600">Remove category</button>
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
