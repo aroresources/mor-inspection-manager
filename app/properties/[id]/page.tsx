@@ -2419,7 +2419,7 @@ const fetchMors = async () => {
                     </button>
                   </div>
                 ))}
-                <label className="cursor-pointer inline-flex items-center gap-2 text-sm text-blue-600 hover:underline">
+                <label className="cursor-pointer inline-flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700">
                   📎 Upload Document(s)
                   <input
                     type="file"
