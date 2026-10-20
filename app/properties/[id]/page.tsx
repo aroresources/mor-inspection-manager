@@ -241,7 +241,9 @@ function DocumentsTab({ propertyId, morId }: any) {
   const isCrossedOff = (d: any) => d.is_required === false
   const crossedOffCount = documents.filter(isCrossedOff).length
   const requiredDocs = documents.filter((d: any) => !isCrossedOff(d))
-  const completed = requiredDocs.filter((d: any) => d.status === 'Submitted').length
+  // "Property" items are kept/printed at the property and intentionally not
+  // uploaded to the portal, so they count as handled alongside "Submitted".
+  const completed = requiredDocs.filter((d: any) => d.status === 'Submitted' || d.status === 'Property').length
   const total = requiredDocs.length
   const assignees = ['all', ...Array.from(new Set(documents.map((d: any) => d.assigned_to).filter(Boolean)))]
 
@@ -264,7 +266,7 @@ function DocumentsTab({ propertyId, morId }: any) {
     <div className="space-y-4">
       <div className="bg-white rounded-lg shadow p-4">
         <div className="flex flex-wrap justify-between items-center gap-2 mb-2">
-          <span className="text-sm font-medium text-gray-700">Progress: {completed} of {total} submitted</span>
+          <span className="text-sm font-medium text-gray-700">Progress: {completed} of {total} handled (submitted or at property)</span>
           <div className="flex gap-2 flex-wrap">
             <button onClick={() => setShowPacket(true)} className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700">
               📦 Submission Packet
