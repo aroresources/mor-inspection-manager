@@ -2381,17 +2381,19 @@ const fetchMors = async () => {
 
         {activeTab === 'prep' && (
           <div className="space-y-4">
-            {/* MOR Scheduling Email — standalone info block at the very top (not a checklist item). */}
+            {/* MOR Scheduling Email — per-MOR notes + documents. */}
             <div className="bg-white rounded-lg shadow p-4">
               <h3 className="text-sm font-medium text-gray-700 mb-3">MOR Scheduling Email</h3>
               <div className="mb-3">
                 <label className="block text-xs text-gray-500 mb-1">Notes</label>
                 <textarea
-                  key={property.id}
-                  defaultValue={property.mor_scheduling_email_notes || ''}
+                  key={currentMorId}
+                  defaultValue={currentMor?.scheduling_email_notes || ''}
                   onBlur={async (e: any) => {
-                    await supabase.from('properties').update({ mor_scheduling_email_notes: e.target.value }).eq('id', id)
-                    fetchProperty()
+                    if (!currentMorId || e.target.value === (currentMor?.scheduling_email_notes || '')) return
+                    const { error } = await supabase.from('mors').update({ scheduling_email_notes: e.target.value || null }).eq('id', currentMorId)
+                    if (error) { toast('Could not save notes — run the mor_scheduling_per_mor.sql migration. (' + error.message + ')', 'error'); return }
+                    fetchMors()
                   }}
                   rows={3}
                   className="w-full border border-gray-200 rounded px-3 py-2 text-sm"
@@ -2399,7 +2401,7 @@ const fetchMors = async () => {
                 />
               </div>
               <div className="space-y-2">
-                {(property.overview_files || []).map((file: any, i: number) => (
+                {(currentMor?.scheduling_email_files || []).map((file: any, i: number) => (
                   <div key={i} className="flex items-center justify-between p-2 border border-gray-200 rounded">
                     <button
                       onClick={async () => { const err = await openStoredFile(file.url); if (err) toast(err, 'error') }}
@@ -2409,9 +2411,10 @@ const fetchMors = async () => {
                     </button>
                     <button
                       onClick={async () => {
-                        const updated = (property.overview_files || []).filter((_: any, idx: number) => idx !== i)
-                        await supabase.from('properties').update({ overview_files: updated }).eq('id', id)
-                        fetchProperty()
+                        if (!currentMorId) return
+                        const updated = (currentMor?.scheduling_email_files || []).filter((_: any, idx: number) => idx !== i)
+                        await supabase.from('mors').update({ scheduling_email_files: updated }).eq('id', currentMorId)
+                        fetchMors()
                       }}
                       className="text-xs text-red-400 hover:text-red-600"
                     >
@@ -2427,20 +2430,21 @@ const fetchMors = async () => {
                     className="hidden"
                     onChange={async (e: any) => {
                       const files = Array.from(e.target.files || []) as File[]
-                      if (!files.length) return
-                      const currentFiles = property.overview_files || []
+                      if (!files.length || !currentMorId) return
+                      const currentFiles = currentMor?.scheduling_email_files || []
                       const added: any[] = []
                       for (const file of files) {
                         const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-                        const filePath = `${id}/overview/${Date.now()}-${safeName}`
+                        const filePath = `${id}/scheduling/${currentMorId}/${Date.now()}-${safeName}`
                         const { error } = await supabase.storage.from('mor-documents').upload(filePath, file, { upsert: true })
                         if (error) { toast(`Error uploading ${file.name}: ${error.message}`, 'error'); continue }
                         const { data: urlData } = supabase.storage.from('mor-documents').getPublicUrl(filePath)
                         added.push({ name: file.name, url: urlData.publicUrl })
                       }
                       if (added.length) {
-                        await supabase.from('properties').update({ overview_files: [...currentFiles, ...added] }).eq('id', id)
-                        fetchProperty()
+                        const { error } = await supabase.from('mors').update({ scheduling_email_files: [...currentFiles, ...added] }).eq('id', currentMorId)
+                        if (error) toast('Could not save — run the mor_scheduling_per_mor.sql migration. (' + error.message + ')', 'error')
+                        else fetchMors()
                       }
                       e.target.value = ''
                     }}

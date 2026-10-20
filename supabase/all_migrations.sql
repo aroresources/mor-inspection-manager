@@ -55,6 +55,10 @@ alter table task_templates add column if not exists category text;
 alter table task_templates add column if not exists description text;
 alter table task_templates add column if not exists document_url text;
 
+-- Per-MOR scheduling email (notes + documents).
+alter table mors           add column if not exists scheduling_email_notes text;
+alter table mors           add column if not exists scheduling_email_files jsonb;
+
 
 -- ============================================================================
 -- 2) DATA: document checklist order (Addendum C) + VAWA consolidation
