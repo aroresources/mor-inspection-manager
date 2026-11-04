@@ -59,6 +59,29 @@ alter table task_templates add column if not exists document_url text;
 alter table mors           add column if not exists scheduling_email_notes text;
 alter table mors           add column if not exists scheduling_email_files jsonb;
 
+-- Property Documents (pilot: EIV P&P) — company defaults + per-property settings.
+-- (RLS policies for these tables are in supabase/property_documents.sql.)
+create table if not exists company_doc_settings (
+  id uuid default gen_random_uuid() primary key,
+  company_id uuid references companies(id) on delete cascade,
+  doc_type text not null,
+  settings jsonb not null default '{}'::jsonb,
+  updated_at timestamptz default now(),
+  unique (company_id, doc_type)
+);
+create table if not exists property_doc_settings (
+  id uuid default gen_random_uuid() primary key,
+  property_id uuid references properties(id) on delete cascade,
+  doc_type text not null,
+  settings jsonb not null default '{}'::jsonb,
+  overrides jsonb not null default '{}'::jsonb,
+  custom_items jsonb not null default '[]'::jsonb,
+  updated_at timestamptz default now(),
+  unique (property_id, doc_type)
+);
+grant all on company_doc_settings to anon, authenticated;
+grant all on property_doc_settings to anon, authenticated;
+
 
 -- ============================================================================
 -- 2) DATA: document checklist order (Addendum C) + VAWA consolidation
