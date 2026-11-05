@@ -8,6 +8,7 @@ import { Document, Packer, Paragraph, TextRun, AlignmentType, BorderStyle } from
 import { useToast } from '../../components/ToastProvider'
 import PreventiveMaintenanceTab from './PreventiveMaintenanceTab'
 import PropertyDocumentsTab from './PropertyDocumentsTab'
+import { Card, CardBody, StatusBadge, MetaChip, Button, SectionCard, Icon, type Tone } from '../../components/ui'
 import { parseDate, formatDate } from '../../../lib/dateUtils'
 import {
   MorEvent, MorEventType, EVENT_LABELS, newEventId, synthesizeLog,
@@ -1111,21 +1112,14 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
   const open = findings.filter((f: any) => f.status !== 'Submitted' && f.status !== 'Closed').length
   const total = findings.length
   const findingStatuses = ['Open', 'In Progress', 'Ready', 'Follow Up', 'Submitted', 'Closed']
-  const statusClasses = (status: string) =>
-    status === 'Submitted' ? 'bg-green-100 text-green-700 border-green-200' :
-    status === 'Closed' ? 'bg-gray-200 text-gray-700 border-gray-300' :
-    status === 'Ready' ? 'bg-blue-100 text-blue-700 border-blue-200' :
-    status === 'Follow Up' ? 'bg-orange-100 text-orange-700 border-orange-200' :
-    status === 'In Progress' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
-    'bg-red-100 text-red-700 border-red-200'
-  // Colored left-accent bar per status, so each finding card reads distinctly.
-  const statusAccent = (status: string) =>
-    status === 'Submitted' ? 'border-l-green-500' :
-    status === 'Closed' ? 'border-l-gray-400' :
-    status === 'Ready' ? 'border-l-blue-500' :
-    status === 'Follow Up' ? 'border-l-orange-500' :
-    status === 'In Progress' ? 'border-l-yellow-500' :
-    'border-l-red-500'
+  // Per-status tone, shared by the card accent strip and the status badge.
+  const findingTone = (status: string): Tone =>
+    status === 'Submitted' ? 'green' :
+    status === 'Closed' ? 'gray' :
+    status === 'Ready' ? 'blue' :
+    status === 'Follow Up' ? 'amber' :
+    status === 'In Progress' ? 'amber' :
+    'red'
   const visibleFindings = statusFilter === 'all' ? findings : findings.filter((f: any) => f.status === statusFilter)
 
   const toggleSelectFinding = (id: string) =>
@@ -1546,17 +1540,17 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
           : dl != null && dl < 0 ? 'over'
           : dl != null && dl <= 7 ? 'soon'
           : 'ok'
-        const cardBorder = urgency === 'over' ? 'border-red-300' : urgency === 'soon' ? 'border-yellow-300' : 'border-gray-200'
-        const dueColor = urgency === 'over' ? 'text-red-700' : urgency === 'soon' ? 'text-yellow-700' : 'text-gray-800'
+        const cardBorder = urgency === 'over' ? 'border-red-300' : urgency === 'soon' ? 'border-amber-300' : 'border-slate-200'
+        const dueColor = urgency === 'over' ? 'text-red-700' : urgency === 'soon' ? 'text-amber-700' : 'text-slate-800'
         const daysText = dl == null ? '' : dl < 0 ? `overdue by ${Math.abs(dl)} days` : dl === 0 ? 'due today' : `in ${dl} days`
         return (
-          <div className={`bg-white rounded-lg shadow border ${cardBorder} p-4`}>
+          <div className={`bg-white rounded-xl shadow-sm border ${cardBorder} p-5`}>
             <div className="flex items-start justify-between gap-3 mb-3">
-              <span className="text-xs text-gray-500">
+              <span className="text-xs font-medium uppercase tracking-wide text-slate-400">
                 MOR{currentMor?.mor_date ? ` · ${formatDate(currentMor.mor_date)}` : ''}
               </span>
               <div className="flex items-center gap-2">
-                <label className="text-xs text-gray-500">Rating</label>
+                <label className="text-xs text-slate-500">Rating</label>
                 <select
                   value={morRating}
                   onChange={async (e: any) => {
@@ -1568,7 +1562,7 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
                     if (onUpdateMor) onUpdateMor()
                     if (value) toast('MOR rating saved.', 'success')
                   }}
-                  className="border border-gray-300 rounded px-2 py-1 text-xs"
+                  className="border border-slate-300 rounded-lg px-2 py-1 text-xs"
                 >
                   <option value="">Select Rating</option>
                   <option value="Unsatisfactory">Unsatisfactory</option>
@@ -1581,62 +1575,63 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
             </div>
 
             {tracker.step === 'closed' && (
-              <p className="text-lg font-semibold text-green-700">✅ MOR closed out{currentMor?.rating ? ` — Rating: ${currentMor.rating}` : ''}</p>
+              <p className="text-lg font-semibold text-emerald-700 inline-flex items-center gap-2"><Icon name="check" size={20} /> MOR closed out{currentMor?.rating ? ` — Rating: ${currentMor.rating}` : ''}</p>
             )}
 
             {tracker.step === 'due' && (
               <>
                 <div className="flex items-baseline gap-2 flex-wrap">
-                  <span className={`text-xl font-semibold ${dueColor}`}>⏳ {tracker.label} due {formatDate(tracker.date)}</span>
-                  <span className="text-sm text-gray-500">{daysText}</span>
+                  <span className={`text-xl font-semibold inline-flex items-center gap-2 ${dueColor}`}><Icon name="clock" size={20} /> {tracker.label} due {formatDate(tracker.date)}</span>
+                  <span className="text-sm text-slate-500">{daysText}</span>
                 </div>
                 {tracker.originalDate && (
-                  <p className="text-xs text-gray-400 mt-1">Extended from {formatDate(tracker.originalDate)}</p>
+                  <p className="text-xs text-slate-400 mt-1">Extended from {formatDate(tracker.originalDate)}</p>
                 )}
-                <div className="flex gap-2 flex-wrap mt-3">
-                  <button onClick={() => openDateModal({ title: `${tracker.label} sent`, label: 'Date you sent the response to CA', value: todayStr, onSave: (d: string) => markSent(tracker.dueEvent, d) })} className="bg-green-600 text-white px-3 py-1.5 rounded text-sm hover:bg-green-700">✓ Mark sent</button>
-                  <button onClick={openExtensionModal} className="bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded text-sm hover:bg-gray-50">⏱ Extension</button>
-                  <button onClick={completeMor} disabled={completing} className="bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded text-sm hover:bg-gray-50 disabled:opacity-50">{completing ? 'Closing…' : '🏁 Close out MOR'}</button>
+                <div className="flex gap-2 flex-wrap mt-4">
+                  <Button variant="success" onClick={() => openDateModal({ title: `${tracker.label} sent`, label: 'Date you sent the response to CA', value: todayStr, onSave: (d: string) => markSent(tracker.dueEvent, d) })}><Icon name="check" /> Mark sent</Button>
+                  <Button variant="neutral" onClick={openExtensionModal}><Icon name="clock" /> Extension</Button>
+                  <Button variant="neutral" onClick={completeMor} disabled={completing}><Icon name="flag" /> {completing ? 'Closing…' : 'Close out MOR'}</Button>
                 </div>
               </>
             )}
 
             {tracker.step === 'awaiting_ca' && (
               <>
-                <p className="text-xl font-semibold text-green-700">✅ {tracker.label} sent {formatDate(tracker.sentDate)}</p>
-                <p className="text-sm text-gray-500 mt-1">Awaiting the contract administrator's decision.</p>
-                <div className="flex gap-2 flex-wrap mt-3">
-                  <button onClick={completeMor} disabled={completing} className="bg-green-600 text-white px-3 py-1.5 rounded text-sm hover:bg-green-700 disabled:opacity-50">{completing ? 'Closing…' : '✓ CA accepted — close out'}</button>
-                  <button onClick={() => openDateModal({ title: 'Start a follow-up', label: 'Follow-up response due date', value: '', onSave: (d: string) => startFollowUp(d) })} className="bg-orange-500 text-white px-3 py-1.5 rounded text-sm hover:bg-orange-600">↻ CA rejected — start follow-up</button>
-                  <button onClick={openExtensionModal} className="bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded text-sm hover:bg-gray-50">⏱ Extension</button>
+                <p className="text-xl font-semibold text-emerald-700 inline-flex items-center gap-2"><Icon name="check" size={20} /> {tracker.label} sent {formatDate(tracker.sentDate)}</p>
+                <p className="text-sm text-slate-500 mt-1">Awaiting the contract administrator's decision.</p>
+                <div className="flex gap-2 flex-wrap mt-4">
+                  <Button variant="success" onClick={completeMor} disabled={completing}><Icon name="check" /> {completing ? 'Closing…' : 'CA accepted — close out'}</Button>
+                  <Button variant="neutral" onClick={() => openDateModal({ title: 'Start a follow-up', label: 'Follow-up response due date', value: '', onSave: (d: string) => startFollowUp(d) })} className="text-amber-700 border-amber-200 hover:bg-amber-50"><Icon name="flag" /> CA rejected — start follow-up</Button>
+                  <Button variant="neutral" onClick={openExtensionModal}><Icon name="clock" /> Extension</Button>
                 </div>
               </>
             )}
 
             {(tracker.step === 'scheduled' || tracker.step === 'awaiting_report') && (
               <>
-                <p className="text-xl font-semibold text-gray-800">
-                  {tracker.step === 'scheduled' ? `📋 MOR scheduled ${formatDate(tracker.date)}` : `⏳ Awaiting report (MOR was ${formatDate(tracker.date)})`}
+                <p className="text-xl font-semibold text-slate-800 inline-flex items-center gap-2">
+                  <Icon name={tracker.step === 'scheduled' ? 'calendar' : 'clock'} size={20} />
+                  {tracker.step === 'scheduled' ? `MOR scheduled ${formatDate(tracker.date)}` : `Awaiting report (MOR was ${formatDate(tracker.date)})`}
                 </p>
                 <div className="flex items-end gap-2 flex-wrap mt-3">
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Response due date (once the report arrives)</label>
-                    <input type="date" value={responseDueDate} onChange={(e: any) => upsertSingle('response_due', e.target.value)} className="border border-gray-300 rounded px-3 py-2 text-sm" />
+                    <label className="block text-xs text-slate-500 mb-1">Response due date (once the report arrives)</label>
+                    <input type="date" value={responseDueDate} onChange={(e: any) => upsertSingle('response_due', e.target.value)} className="border border-slate-300 rounded-lg px-3 py-2 text-sm" />
                   </div>
                 </div>
               </>
             )}
 
             {tracker.step === 'none' && (
-              <p className="text-sm text-gray-500">Set the MOR date (✏️ next to the MOR selector above) to begin tracking.</p>
+              <p className="text-sm text-slate-500">Set the MOR date (✏️ next to the MOR selector above) to begin tracking.</p>
             )}
           </div>
         )
       })()}
 
       {/* MOR Notes */}
-      <div className="bg-white rounded-lg shadow p-4">
-        <label className="block text-xs text-gray-500 mb-1 font-medium">Notes</label>
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+        <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-400 mb-1">Notes</label>
         <textarea
           key={morId}
           defaultValue={currentMor?.notes || ''}
@@ -1649,16 +1644,16 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
           }}
           rows={3}
           placeholder="Notes about this MOR..."
-          className="w-full border border-gray-200 rounded px-3 py-2 text-sm"
+          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none"
         />
       </div>
 
       {/* History */}
-      <div className="bg-white rounded-lg shadow p-4">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
         <div className="flex justify-between items-center mb-3">
-          <h3 className="text-sm font-bold text-gray-800">History</h3>
-          <button onClick={() => setHistoryEdit(v => !v)} className="text-xs text-blue-600 hover:underline">
-            {historyEdit ? 'Done' : '✏️ Edit history'}
+          <h3 className="text-sm font-semibold text-slate-800">History</h3>
+          <button onClick={() => setHistoryEdit(v => !v)} className="text-xs font-medium text-indigo-600 hover:text-indigo-800 inline-flex items-center gap-1">
+            {historyEdit ? 'Done' : <><Icon name="edit" size={13} /> Edit history</>}
           </button>
         </div>
         {sortedLog.length === 0 ? (
@@ -1709,43 +1704,43 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
           </div>
         )}
         {historyEdit && (
-          <button onClick={addCustomEvent} className="mt-3 text-xs text-blue-600 hover:underline">+ Add log entry</button>
+          <button onClick={addCustomEvent} className="mt-3 text-xs font-medium text-indigo-600 hover:text-indigo-800">+ Add log entry</button>
         )}
       </div>
 
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
-        <h2 className="text-lg font-bold text-gray-800">
-          Findings & Response
-          {total > 0 && <span className="ml-2 text-sm font-normal text-gray-500">({open} open of {total})</span>}
+        <h2 className="text-lg font-semibold text-slate-800">
+          Findings &amp; Response
+          {total > 0 && <span className="ml-2 text-sm font-normal text-slate-500">({open} open of {total})</span>}
         </h2>
         <div className="flex gap-2 flex-wrap">
-          <label className="bg-yellow-500 text-white px-3 py-1 rounded text-sm hover:bg-yellow-600 cursor-pointer">
-            🤖 Extract Findings from PDF
+          <label className="inline-flex items-center gap-1.5 rounded-lg font-medium text-sm px-3.5 py-2 bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 cursor-pointer transition">
+            <Icon name="file" /> Extract from PDF
             <input type="file" accept=".pdf" className="hidden" onChange={extractFindingsFromPDF} />
           </label>
 
           {findings.length > 0 && (
             <>
-              <button onClick={() => setShowReportSettings(true)} className="bg-gray-600 text-white px-3 py-1 rounded text-sm hover:bg-gray-700">⚙️ Report Settings</button>
-              <button onClick={generatePDF} className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700">📄 Generate PDF Report</button>
-              <button onClick={generateDOCX} className="bg-blue-700 text-white px-3 py-1 rounded text-sm hover:bg-blue-800">📝 Download as Word</button>
-              <button onClick={downloadZip} className="bg-purple-600 text-white px-3 py-1 rounded text-sm hover:bg-purple-700">📦 Download Full Package (ZIP)</button>
+              <Button variant="neutral" onClick={() => setShowReportSettings(true)}><Icon name="edit" /> Report settings</Button>
+              <Button variant="neutral" onClick={generatePDF}><Icon name="download" /> PDF report</Button>
+              <Button variant="neutral" onClick={generateDOCX}><Icon name="download" /> Word</Button>
+              <Button variant="neutral" onClick={downloadZip}><Icon name="download" /> Package (ZIP)</Button>
             </>
           )}
-          <button onClick={() => setShowAddFinding(true)} className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700">+ Add Finding</button>
+          <Button variant="primary" onClick={() => setShowAddFinding(true)}><Icon name="plus" /> Add finding</Button>
         </div>
       </div>
 
       {findings.length > 0 && (
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs text-gray-500 font-medium">Filter by status:</span>
+          <span className="text-xs text-slate-500 font-medium">Filter:</span>
           {['all', ...findingStatuses].map((s) => {
             const count = s === 'all' ? findings.length : findings.filter((f: any) => f.status === s).length
             return (
               <button
                 key={s}
                 onClick={() => setStatusFilter(s)}
-                className={`text-xs px-3 py-1 rounded-full border transition ${statusFilter === s ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'}`}
+                className={`text-xs px-3 py-1 rounded-full border transition ${statusFilter === s ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-300 hover:border-indigo-400'}`}
               >
                 {s === 'all' ? 'All' : s} ({count})
               </button>
@@ -1755,10 +1750,11 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
       )}
 
       {findings.length > 0 && (
-        <div className="flex items-center gap-3 flex-wrap bg-white rounded-lg shadow px-3 py-2">
-          <label className="flex items-center gap-1 text-xs text-gray-600">
+        <div className="flex items-center gap-3 flex-wrap bg-white rounded-xl border border-slate-200 shadow-sm px-3.5 py-2.5">
+          <label className="flex items-center gap-1.5 text-xs text-slate-600">
             <input
               type="checkbox"
+              className="accent-indigo-600"
               checked={visibleFindings.length > 0 && visibleFindings.every((f: any) => selectedFindingIds.includes(f.id))}
               onChange={(e: any) => {
                 const visibleIds = visibleFindings.map((f: any) => f.id)
@@ -1769,90 +1765,85 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
             />
             Select all shown
           </label>
-          <span className="text-xs text-gray-500">{selectedFindingIds.length} selected</span>
+          <span className="text-xs text-slate-500">{selectedFindingIds.length} selected</span>
           <select
             value={bulkStatus}
             onChange={(e: any) => setBulkStatus(e.target.value)}
             disabled={selectedFindingIds.length === 0}
-            className="text-xs border border-gray-300 rounded px-2 py-1 disabled:opacity-50"
+            className="text-xs border border-slate-300 rounded-lg px-2 py-1.5 disabled:opacity-50"
           >
             <option value="">Set status to…</option>
             {findingStatuses.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
-          <button
-            onClick={() => bulkUpdateStatus(bulkStatus)}
-            disabled={!bulkStatus || selectedFindingIds.length === 0}
-            className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 disabled:opacity-50"
-          >
-            Apply
-          </button>
+          <Button variant="primary" size="sm" onClick={() => bulkUpdateStatus(bulkStatus)} disabled={!bulkStatus || selectedFindingIds.length === 0}>Apply</Button>
           {selectedFindingIds.length > 0 && (
-            <button onClick={() => setSelectedFindingIds([])} className="text-xs text-gray-500 hover:text-gray-700 underline">Clear</button>
+            <button onClick={() => setSelectedFindingIds([])} className="text-xs text-slate-500 hover:text-slate-700 underline">Clear</button>
           )}
         </div>
       )}
 
       {findings.length === 0 ? (
-        <div className="bg-white rounded-lg shadow p-6 text-center text-gray-500 text-sm">No findings yet. Click "+ Add Finding" to log findings from the MOR report.</div>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8 text-center text-slate-500 text-sm">No findings yet. Click “Add finding” to log findings from the MOR report.</div>
       ) : visibleFindings.length === 0 ? (
-        <div className="bg-white rounded-lg shadow p-6 text-center text-gray-500 text-sm">No findings with status &quot;{statusFilter}&quot;.</div>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8 text-center text-slate-500 text-sm">No findings with status &quot;{statusFilter}&quot;.</div>
       ) : (
         <div className="space-y-5">
           {visibleFindings.map((finding: any) => {
             const index = findings.findIndex((f: any) => f.id === finding.id)
             return (
-            <div key={finding.id} className={`bg-white rounded-lg shadow-md border border-gray-300 border-l-4 ${statusAccent(finding.status)} p-5`}>
-              <div className="flex items-start gap-3">
-                <div className="flex flex-col gap-1 mt-1">
-                  <button onClick={() => moveFindingTo(index, 'top')} title="Move to top" className="text-gray-400 hover:text-gray-600 text-xs leading-none">⤒</button>
-                  <button onClick={() => moveFinding(index, -1)} title="Move up" className="text-gray-400 hover:text-gray-600 text-xs leading-none">▲</button>
-                  <button onClick={() => moveFinding(index, 1)} title="Move down" className="text-gray-400 hover:text-gray-600 text-xs leading-none">▼</button>
-                  <button onClick={() => moveFindingTo(index, 'bottom')} title="Move to bottom" className="text-gray-400 hover:text-gray-600 text-xs leading-none">⤓</button>
+            <Card key={finding.id} accent={findingTone(finding.status)}>
+              <CardBody className="flex items-start gap-3">
+                <div className="flex flex-col gap-1 mt-1 text-slate-300">
+                  <button onClick={() => moveFindingTo(index, 'top')} title="Move to top" className="hover:text-slate-600 text-xs leading-none">⤒</button>
+                  <button onClick={() => moveFinding(index, -1)} title="Move up" className="hover:text-slate-600 text-xs leading-none">▲</button>
+                  <button onClick={() => moveFinding(index, 1)} title="Move down" className="hover:text-slate-600 text-xs leading-none">▼</button>
+                  <button onClick={() => moveFindingTo(index, 'bottom')} title="Move to bottom" className="hover:text-slate-600 text-xs leading-none">⤓</button>
                 </div>
-                <div className="flex-1">
-              <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-200">
+                <div className="flex-1 min-w-0">
+              <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-100">
                 <div className="flex items-center gap-3">
-                  <input type="checkbox" checked={selectedFindingIds.includes(finding.id)} onChange={() => toggleSelectFinding(finding.id)} title="Select for bulk status change" />
+                  <input type="checkbox" checked={selectedFindingIds.includes(finding.id)} onChange={() => toggleSelectFinding(finding.id)} title="Select for bulk status change" className="accent-indigo-600" />
                   {/* Positional number: always 1..N top to bottom, never travels with a reordered finding. */}
-                  <span className="text-base font-bold text-gray-800 whitespace-nowrap">Finding {index + 1}</span>
-                  <select value={finding.status} onChange={(e: any) => updateFinding(finding.id, { status: e.target.value })} className={`text-xs px-2 py-1 rounded border ${statusClasses(finding.status)}`}>
+                  <span className="text-sm font-semibold text-slate-800 whitespace-nowrap">Finding {index + 1}</span>
+                  <select value={finding.status} onChange={(e: any) => updateFinding(finding.id, { status: e.target.value })} className="text-xs px-2.5 py-1 rounded-lg border border-slate-300 bg-white text-slate-700 font-medium">
                     {findingStatuses.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
+                  <StatusBadge tone={findingTone(finding.status)}>{finding.status}</StatusBadge>
                 </div>
-                <button onClick={() => deleteFinding(finding.id)} className="text-red-400 hover:text-red-600 text-xs">Delete</button>
+                <button onClick={() => deleteFinding(finding.id)} title="Delete finding" className="text-slate-300 hover:text-red-500 transition"><Icon name="trash" /></button>
               </div>
               <div className="space-y-3">
                 <div>
-                  <label className="text-xs text-gray-500">Finding</label>
-                  <FindingTextarea value={finding.finding} onSave={(v: string) => updateFinding(finding.id, { finding: v })} rows={12} className="w-full mt-1 border border-gray-200 rounded px-3 py-2 text-sm resize-y" />
+                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Finding</label>
+                  <FindingTextarea value={finding.finding} onSave={(v: string) => updateFinding(finding.id, { finding: v })} rows={12} className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm resize-y focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none" />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-500">Assigned To</label>
-                  <input type="text" value={finding.assigned_to || ''} onChange={(e: any) => updateFinding(finding.id, { assigned_to: e.target.value })} className="w-full mt-1 border border-gray-200 rounded px-3 py-2 text-sm" />
+                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Assigned To</label>
+                  <input type="text" value={finding.assigned_to || ''} onChange={(e: any) => updateFinding(finding.id, { assigned_to: e.target.value })} className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none" />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-500">Written Response</label>
-                  <DebouncedFindingTextarea value={finding.response || ''} onType={(v: string) => { pendingResponses.current[finding.id] = v }} onSave={(v: string) => updateFinding(finding.id, { response: v || null })} rows={3} placeholder="Type your response to this finding here..." className="w-full mt-1 border border-gray-200 rounded px-3 py-2 text-sm" />
+                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Written Response</label>
+                  <DebouncedFindingTextarea value={finding.response || ''} onType={(v: string) => { pendingResponses.current[finding.id] = v }} onSave={(v: string) => updateFinding(finding.id, { response: v || null })} rows={3} placeholder="Type your response to this finding here..." className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none" />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-500">Supporting Documents</label>
-                  <div className="mt-1 flex flex-wrap items-center gap-3">
+                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Supporting Documents</label>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
                     {parseAttachmentUrls(finding.document_url).map((url: string, i: number) => (
-                      <span key={i} className="flex items-center gap-1">
-                        <button onClick={async () => { const err = await openStoredFile(url); if (err) toast(err, 'error') }} className="text-xs text-blue-600 hover:underline">📎 {attachmentFileName(url)}</button>
-                        <button onClick={() => removeFindingFile(finding, url)} className="text-xs text-red-400 hover:text-red-600" title="Remove file">✕</button>
+                      <span key={i} className="inline-flex items-center gap-1.5 bg-slate-50 rounded-md pl-2.5 pr-1.5 py-1">
+                        <button onClick={async () => { const err = await openStoredFile(url); if (err) toast(err, 'error') }} className="inline-flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800"><Icon name="paperclip" size={14} />{attachmentFileName(url)}</button>
+                        <button onClick={() => removeFindingFile(finding, url)} className="text-slate-300 hover:text-red-500" title="Remove file"><Icon name="x" size={13} /></button>
                       </span>
                     ))}
-                    <label className="cursor-pointer text-xs text-blue-600 hover:underline">
-                      📎 Upload Document(s)
+                    <label className="cursor-pointer inline-flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-800 border border-dashed border-slate-300 hover:border-indigo-400 rounded-md px-2.5 py-1">
+                      <Icon name="upload" size={14} /> Upload document(s)
                       <input type="file" multiple className="hidden" onChange={async (e: any) => { await uploadFindingFiles(finding, e.target.files); e.target.value = '' }} />
                     </label>
                   </div>
                 </div>
               </div>
                 </div>
-              </div>
-            </div>
+              </CardBody>
+            </Card>
             )
           })}
         </div>
@@ -1868,8 +1859,8 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
               <textarea placeholder="Initial response (optional)" value={newFinding.response} onChange={(e: any) => setNewFinding({...newFinding, response: e.target.value})} rows={3} className="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
             </div>
             <div className="flex gap-3 justify-end mt-4">
-              <button onClick={() => setShowAddFinding(false)} className="px-4 py-2 text-sm text-gray-600">Cancel</button>
-              <button onClick={addFinding} className="bg-blue-600 text-white px-4 py-2 rounded text-sm">Add Finding</button>
+              <Button variant="ghost" onClick={() => setShowAddFinding(false)}>Cancel</Button>
+              <Button variant="primary" onClick={addFinding}>Add finding</Button>
             </div>
           </div>
         </div>
@@ -1890,17 +1881,17 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
               />
             </div>
             <div className="flex gap-3 justify-end mt-4">
-              <button onClick={() => setDateModal(null)} className="px-4 py-2 text-sm text-gray-600">Cancel</button>
-              <button
+              <Button variant="ghost" onClick={() => setDateModal(null)}>Cancel</Button>
+              <Button
+                variant="primary"
                 onClick={() => {
                   if (!dateModal.value) { toast('Please pick a date.', 'warning'); return }
                   dateModal.onSave(dateModal.value)
                   setDateModal(null)
                 }}
-                className="bg-blue-600 text-white px-4 py-2 rounded text-sm"
               >
                 Save
-              </button>
+              </Button>
             </div>
           </div>
         </div>
