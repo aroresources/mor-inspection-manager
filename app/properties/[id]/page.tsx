@@ -201,11 +201,14 @@ function DocumentsTab({ propertyId, morId }: any) {
     if (e1 || e2) toast('Error reordering documents: ' + (e1 || e2)!.message, 'error')
   }
 
-  // Drag-to-reorder: persist the new full order (enabled only when unfiltered).
-  const reorderDocs = async (newIds: string[]) => {
+  // Drag-to-reorder. newVisibleIds is the new order of the CURRENTLY VISIBLE
+  // cards; any filtered/hidden items keep their existing slots.
+  const reorderDocs = async (newVisibleIds: string[]) => {
     const byId = new Map(documents.map((d: any) => [d.id, d]))
-    const reordered = newIds.map((id) => byId.get(id)).filter(Boolean)
-    const updated = reordered.map((d: any, i: number) => ({ ...d, sort_order: i }))
+    const visibleSet = new Set(newVisibleIds)
+    let vi = 0
+    const result = documents.map((d: any) => (visibleSet.has(d.id) ? byId.get(newVisibleIds[vi++]) : d))
+    const updated = result.map((d: any, i: number) => ({ ...d, sort_order: i }))
     const prevById = new Map(documents.map((d: any) => [d.id, d]))
     setDocuments(updated)
     const changed = updated.filter((d: any) => prevById.get(d.id)?.sort_order !== d.sort_order)
@@ -341,9 +344,8 @@ function DocumentsTab({ propertyId, morId }: any) {
         {indexedDocs.map((doc: any) => {
           const crossed = doc.is_required === false
           const files = parseAttachmentUrls(doc.file_url)
-          const dragDisabled = filterStatus !== 'all' || filterAssignee !== 'all' || (!showCrossedOff && crossedOffCount > 0)
           return (
-          <SortableRow key={doc.id} id={doc.id} disabled={dragDisabled}>
+          <SortableRow key={doc.id} id={doc.id}>
             {(h) => (
             <Card accent={docTone(doc.status || 'Not Started', crossed)} onClick={() => setOpenDocId(doc.id)}>
               <CardBody className="flex items-start gap-2.5">
