@@ -8,7 +8,7 @@ import { Document, Packer, Paragraph, TextRun, AlignmentType, BorderStyle } from
 import { useToast } from '../../components/ToastProvider'
 import PreventiveMaintenanceTab from './PreventiveMaintenanceTab'
 import PropertyDocumentsTab from './PropertyDocumentsTab'
-import { Card, CardBody, StatusBadge, MetaChip, Button, SectionCard, Drawer, Icon, type Tone } from '../../components/ui'
+import { Card, CardBody, StatusBadge, MetaChip, Button, SectionCard, Drawer, SortableList, SortableRow, DragHandle, Icon, type Tone } from '../../components/ui'
 import { parseDate, formatDate } from '../../../lib/dateUtils'
 import {
   MorEvent, MorEventType, EVENT_LABELS, newEventId, synthesizeLog,
@@ -1081,6 +1081,19 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
     if (e1 || e2) toast('Error reordering findings: ' + (e1 || e2)!.message, 'error')
   }
 
+  // Drag-to-reorder: persist the new full order (enabled only when unfiltered).
+  const reorderFindings = async (newIds: string[]) => {
+    const byId = new Map(findings.map((f: any) => [f.id, f]))
+    const reordered = newIds.map((id) => byId.get(id)).filter(Boolean)
+    const updated = reordered.map((f: any, i: number) => ({ ...f, sort_order: i }))
+    const prevById = new Map(findings.map((f: any) => [f.id, f]))
+    setFindings(updated)
+    const changed = updated.filter((f: any) => prevById.get(f.id)?.sort_order !== f.sort_order)
+    const results = await Promise.all(changed.map((f: any) => supabase.from('findings').update({ sort_order: f.sort_order }).eq('id', f.id)))
+    const err = results.find((r: any) => r.error)
+    if (err?.error) toast('Error reordering findings: ' + err.error.message, 'error')
+  }
+
   const moveFindingTo = async (index: any, position: 'top' | 'bottom') => {
     if (index < 0 || index >= findings.length) return
     if ((position === 'top' && index === 0) || (position === 'bottom' && index === findings.length - 1)) return
@@ -1787,38 +1800,38 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
       ) : visibleFindings.length === 0 ? (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8 text-center text-slate-500 text-sm">No findings with status &quot;{statusFilter}&quot;.</div>
       ) : (
-        <div className="space-y-3">
+        <SortableList ids={visibleFindings.map((f: any) => f.id)} onReorder={reorderFindings} className="space-y-3">
           {visibleFindings.map((finding: any) => {
             const index = findings.findIndex((f: any) => f.id === finding.id)
             const files = parseAttachmentUrls(finding.document_url)
             const preview = (finding.finding || '').replace(/\s+/g, ' ').trim()
+            const dragDisabled = statusFilter !== 'all'
             return (
-            <Card key={finding.id} accent={findingTone(finding.status)} onClick={() => setOpenFindingId(finding.id)}>
-              <CardBody className="flex items-start gap-3">
-                <input type="checkbox" onClick={(e: any) => e.stopPropagation()} checked={selectedFindingIds.includes(finding.id)} onChange={() => toggleSelectFinding(finding.id)} title="Select for bulk status change" className="mt-1 accent-indigo-600" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-semibold text-slate-800 whitespace-nowrap">Finding {index + 1}</span>
-                    <StatusBadge tone={findingTone(finding.status)}>{finding.status}</StatusBadge>
+            <SortableRow key={finding.id} id={finding.id} disabled={dragDisabled}>
+              {(h) => (
+              <Card accent={findingTone(finding.status)} onClick={() => setOpenFindingId(finding.id)}>
+                <CardBody className="flex items-start gap-2.5">
+                  <DragHandle {...h} className="mt-0.5" />
+                  <input type="checkbox" onClick={(e: any) => e.stopPropagation()} checked={selectedFindingIds.includes(finding.id)} onChange={() => toggleSelectFinding(finding.id)} title="Select for bulk status change" className="mt-1 accent-indigo-600" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-semibold text-slate-800 whitespace-nowrap">Finding {index + 1}</span>
+                      <StatusBadge tone={findingTone(finding.status)}>{finding.status}</StatusBadge>
+                    </div>
+                    <p className="mt-1 text-sm text-slate-600 line-clamp-2">{preview || <span className="text-slate-400 italic">No description yet</span>}</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      {finding.assigned_to && <MetaChip icon={<Icon name="user" size={13} />}>{finding.assigned_to}</MetaChip>}
+                      {finding.response ? <MetaChip icon={<Icon name="check" size={13} />}>Response drafted</MetaChip> : <MetaChip icon={<Icon name="alert" size={13} />}>No response</MetaChip>}
+                      {files.length > 0 && <MetaChip icon={<Icon name="paperclip" size={13} />}>{files.length}</MetaChip>}
+                    </div>
                   </div>
-                  <p className="mt-1 text-sm text-slate-600 line-clamp-2">{preview || <span className="text-slate-400 italic">No description yet</span>}</p>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    {finding.assigned_to && <MetaChip icon={<Icon name="user" size={13} />}>{finding.assigned_to}</MetaChip>}
-                    {finding.response ? <MetaChip icon={<Icon name="check" size={13} />}>Response drafted</MetaChip> : <MetaChip icon={<Icon name="alert" size={13} />}>No response</MetaChip>}
-                    {files.length > 0 && <MetaChip icon={<Icon name="paperclip" size={13} />}>{files.length}</MetaChip>}
-                  </div>
-                </div>
-                <div className="flex flex-col gap-1 mt-0.5 text-slate-300" onClick={(e: any) => e.stopPropagation()}>
-                  <button onClick={() => moveFindingTo(index, 'top')} title="Move to top" className="hover:text-slate-600 text-xs leading-none">⤒</button>
-                  <button onClick={() => moveFinding(index, -1)} title="Move up" className="hover:text-slate-600 text-xs leading-none">▲</button>
-                  <button onClick={() => moveFinding(index, 1)} title="Move down" className="hover:text-slate-600 text-xs leading-none">▼</button>
-                  <button onClick={() => moveFindingTo(index, 'bottom')} title="Move to bottom" className="hover:text-slate-600 text-xs leading-none">⤓</button>
-                </div>
-              </CardBody>
-            </Card>
+                </CardBody>
+              </Card>
+              )}
+            </SortableRow>
             )
           })}
-        </div>
+        </SortableList>
       )}
 
       {/* Finding editor — opens in a side drawer when a card is clicked. */}

@@ -1,5 +1,13 @@
 'use client'
 import React, { useEffect } from 'react'
+import {
+  DndContext, closestCenter, PointerSensor, TouchSensor, KeyboardSensor, useSensor, useSensors,
+} from '@dnd-kit/core'
+import {
+  SortableContext, verticalListSortingStrategy, useSortable, sortableKeyboardCoordinates, arrayMove,
+} from '@dnd-kit/sortable'
+import { restrictToVerticalAxis } from '@dnd-kit/modifiers'
+import { CSS } from '@dnd-kit/utilities'
 
 // ---------------------------------------------------------------------------
 // MOR design system — shared primitives.
@@ -131,6 +139,76 @@ export function Drawer(
         {footer && <div className="border-t border-slate-200 px-5 py-3 flex items-center justify-end gap-2">{footer}</div>}
       </div>
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Drag-to-reorder. SortableList sets up the context; each row renders via a
+// render-prop that hands back the drag-handle props to attach to a grip.
+// Pointer (desktop) + touch (long-press ~180ms, so taps/scroll still work).
+// ---------------------------------------------------------------------------
+export function SortableList(
+  { ids, onReorder, className = '', children }:
+  { ids: string[]; onReorder: (ids: string[]) => void; className?: string; children: React.ReactNode }
+) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      modifiers={[restrictToVerticalAxis]}
+      onDragEnd={({ active, over }) => {
+        if (!over || active.id === over.id) return
+        const oldIndex = ids.indexOf(String(active.id))
+        const newIndex = ids.indexOf(String(over.id))
+        if (oldIndex < 0 || newIndex < 0) return
+        onReorder(arrayMove(ids, oldIndex, newIndex))
+      }}
+    >
+      <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+        <div className={className}>{children}</div>
+      </SortableContext>
+    </DndContext>
+  )
+}
+
+type HandleProps = { attributes: any; listeners: any; isDragging: boolean; disabled: boolean }
+export function SortableRow(
+  { id, disabled = false, children }:
+  { id: string; disabled?: boolean; children: (h: HandleProps) => React.ReactNode }
+) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled })
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : undefined,
+    position: 'relative',
+  }
+  return (
+    <div ref={setNodeRef} style={style} className={isDragging ? 'opacity-90' : ''}>
+      {children({ attributes, listeners, isDragging, disabled })}
+    </div>
+  )
+}
+
+// A grip button to spread the sortable handle props onto.
+export function DragHandle({ attributes, listeners, disabled, className = '' }: HandleProps & { className?: string }) {
+  return (
+    <button
+      type="button"
+      {...(disabled ? {} : attributes)}
+      {...(disabled ? {} : listeners)}
+      onClick={(e) => e.stopPropagation()}
+      title={disabled ? 'Clear the filter to drag-reorder' : 'Drag to reorder'}
+      aria-label="Drag to reorder"
+      className={`shrink-0 touch-none ${disabled ? 'text-slate-200 cursor-not-allowed' : 'text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing'} ${className}`}
+    >
+      <Icon name="grip" size={18} />
+    </button>
   )
 }
 
