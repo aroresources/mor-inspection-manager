@@ -229,14 +229,14 @@ function DocumentsTab({ propertyId, morId }: any) {
   }
 
   const DOC_STATUSES = ['Not Started', 'In Progress', 'Uploaded', 'Submitted', 'Property']
-  // Colored left-accent bar per status, so each binder item reads distinctly.
-  const docAccent = (status: string, crossed: boolean) =>
-    crossed ? 'border-l-gray-300' :
-    status === 'Submitted' ? 'border-l-green-500' :
-    status === 'Uploaded' ? 'border-l-blue-500' :
-    status === 'Property' ? 'border-l-purple-500' :
-    status === 'In Progress' ? 'border-l-yellow-500' :
-    'border-l-gray-400'
+  // Per-status tone, shared by the card accent strip and status badge.
+  const docTone = (status: string, crossed: boolean): Tone =>
+    crossed ? 'gray' :
+    status === 'Submitted' ? 'green' :
+    status === 'Uploaded' ? 'blue' :
+    status === 'Property' ? 'purple' :
+    status === 'In Progress' ? 'amber' :
+    'slate'
 
   // Only items explicitly unchecked (is_required === false) count as crossed
   // off. A null/undefined is_required means "never set", so it stays visible.
@@ -266,51 +266,47 @@ function DocumentsTab({ propertyId, morId }: any) {
 
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-lg shadow p-4">
-        <div className="flex flex-wrap justify-between items-center gap-2 mb-2">
-          <span className="text-sm font-medium text-gray-700">Progress: {completed} of {total} handled (submitted or at property)</span>
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+        <div className="flex flex-wrap justify-between items-center gap-2 mb-3">
+          <span className="text-sm font-medium text-slate-700">Progress: <span className="text-slate-900 font-semibold">{completed} of {total}</span> handled <span className="text-slate-400 font-normal">(submitted or at property)</span></span>
           <div className="flex gap-2 flex-wrap">
-            <button onClick={() => setShowPacket(true)} className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700">
-              📦 Submission Packet
-            </button>
-            <button onClick={() => setShowAddCustom(true)} className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700">
-              + Add Custom Document
-            </button>
+            <Button variant="neutral" onClick={() => setShowPacket(true)}><Icon name="file" /> Submission packet</Button>
+            <Button variant="primary" onClick={() => setShowAddCustom(true)}><Icon name="plus" /> Add custom document</Button>
           </div>
         </div>
-        <div className="w-full bg-gray-200 rounded-full h-2">
-          <div className="bg-blue-600 h-2 rounded-full transition-all" style={{ width: total > 0 ? `${(completed / total) * 100}%` : '0%' }} />
+        <div className="w-full bg-slate-100 rounded-full h-2">
+          <div className="bg-indigo-600 h-2 rounded-full transition-all" style={{ width: total > 0 ? `${(completed / total) * 100}%` : '0%' }} />
         </div>
       </div>
 
       {/* Filter Bar */}
-      <div className="bg-white rounded-lg shadow p-3 space-y-2">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3.5 space-y-2.5">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs text-gray-500 font-medium w-16">Status:</span>
+          <span className="text-xs text-slate-500 font-medium w-16">Status:</span>
           {['all', 'Not Started', 'In Progress', 'Uploaded', 'Submitted', 'Property', 'required'].map(status => (
             <button
               key={status}
               onClick={() => setFilterStatus(status)}
               className={`text-xs px-3 py-1 rounded-full border transition ${
                 filterStatus === status
-                  ? 'bg-blue-600 text-white border-blue-600'
-                  : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
+                  ? 'bg-indigo-600 text-white border-indigo-600'
+                  : 'bg-white text-slate-600 border-slate-300 hover:border-indigo-400'
               }`}
             >
-              {status === 'all' ? 'All' : status === 'required' ? 'Required Only' : status}
+              {status === 'all' ? 'All' : status === 'required' ? 'Required only' : status}
             </button>
           ))}
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs text-gray-500 font-medium w-16">Assigned:</span>
+          <span className="text-xs text-slate-500 font-medium w-16">Assigned:</span>
           {assignees.map((assignee: any) => (
             <button
               key={assignee}
               onClick={() => setFilterAssignee(assignee)}
               className={`text-xs px-3 py-1 rounded-full border transition ${
                 filterAssignee === assignee
-                  ? 'bg-green-600 text-white border-green-600'
-                  : 'bg-white text-gray-600 border-gray-300 hover:border-green-400'
+                  ? 'bg-indigo-600 text-white border-indigo-600'
+                  : 'bg-white text-slate-600 border-slate-300 hover:border-indigo-400'
               }`}
             >
               {assignee === 'all' ? 'All' : assignee}
@@ -318,9 +314,9 @@ function DocumentsTab({ propertyId, morId }: any) {
           ))}
         </div>
         {crossedOffCount > 0 && (
-          <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
-            <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer">
-              <input type="checkbox" checked={showCrossedOff} onChange={(e: any) => setShowCrossedOff(e.target.checked)} />
+          <div className="flex items-center gap-2 pt-1 border-t border-slate-100">
+            <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
+              <input type="checkbox" className="accent-indigo-600" checked={showCrossedOff} onChange={(e: any) => setShowCrossedOff(e.target.checked)} />
               Show {crossedOffCount} crossed-off item{crossedOffCount === 1 ? '' : 's'}
             </label>
           </div>
@@ -328,76 +324,79 @@ function DocumentsTab({ propertyId, morId }: any) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
-        {indexedDocs.map((doc: any) => (
-          <div key={doc.id} className={`bg-white rounded-lg border border-gray-300 border-l-4 ${docAccent(doc.status || 'Not Started', doc.is_required === false)} shadow-sm p-3`}>
-            <div className="flex items-start gap-2">
-              <div className="flex flex-col gap-0.5 mt-0.5">
-                <button onClick={() => moveDoc(doc.globalIndex, -1)} className="text-gray-400 hover:text-gray-600 text-xs leading-none">▲</button>
-                <button onClick={() => moveDoc(doc.globalIndex, 1)} className="text-gray-400 hover:text-gray-600 text-xs leading-none">▼</button>
+        {indexedDocs.map((doc: any) => {
+          const crossed = doc.is_required === false
+          return (
+          <Card key={doc.id} accent={docTone(doc.status || 'Not Started', crossed)}>
+            <CardBody className="flex items-start gap-2">
+              <div className="flex flex-col gap-0.5 mt-0.5 text-slate-300">
+                <button onClick={() => moveDoc(doc.globalIndex, -1)} className="hover:text-slate-600 text-xs leading-none">▲</button>
+                <button onClick={() => moveDoc(doc.globalIndex, 1)} className="hover:text-slate-600 text-xs leading-none">▼</button>
               </div>
-              <input type="checkbox" checked={doc.is_required !== false} onChange={(e: any) => updateDoc(doc.id, { is_required: e.target.checked })} title="Uncheck to cross this item off the list" className="mt-1" />
+              <input type="checkbox" checked={!crossed} onChange={(e: any) => updateDoc(doc.id, { is_required: e.target.checked })} title="Uncheck to cross this item off the list" className="mt-1 accent-indigo-600" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2">
-                  <span className={`text-sm leading-snug ${doc.is_required === false ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
+                  <span className={`text-sm font-medium leading-snug ${crossed ? 'text-slate-400 line-through' : 'text-slate-800'}`}>
                     {doc.name}
-                    {doc.is_custom && <span className="ml-1 text-xs bg-purple-100 text-purple-700 px-1 rounded">Custom</span>}
+                    {doc.is_custom && <span className="ml-1.5 align-middle"><StatusBadge tone="purple">Custom</StatusBadge></span>}
                   </span>
-                  <select value={doc.status || 'Not Started'} onChange={(e: any) => updateDoc(doc.id, { status: e.target.value })} className="shrink-0 border border-gray-200 rounded px-1.5 py-1 text-xs">
+                  <select value={doc.status || 'Not Started'} onChange={(e: any) => updateDoc(doc.id, { status: e.target.value })} className="shrink-0 border border-slate-300 rounded-lg px-1.5 py-1 text-xs font-medium text-slate-700 bg-white">
                     {DOC_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  <input type="text" placeholder="Assigned to" value={doc.assigned_to || ''} onChange={(e: any) => updateDoc(doc.id, { assigned_to: e.target.value })} className="border border-gray-200 rounded px-2 py-1 text-xs min-w-0" />
-                  <input type="date" value={doc.due_date || ''} onChange={(e: any) => updateDoc(doc.id, { due_date: e.target.value })} className="border border-gray-200 rounded px-2 py-1 text-xs min-w-0" />
+                <div className="mt-2.5 grid grid-cols-2 gap-2">
+                  <input type="text" placeholder="Assigned to" value={doc.assigned_to || ''} onChange={(e: any) => updateDoc(doc.id, { assigned_to: e.target.value })} className="border border-slate-200 rounded-lg px-2 py-1.5 text-xs min-w-0 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none" />
+                  <input type="date" value={doc.due_date || ''} onChange={(e: any) => updateDoc(doc.id, { due_date: e.target.value })} className="border border-slate-200 rounded-lg px-2 py-1.5 text-xs min-w-0 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none" />
                 </div>
-                <input type="text" placeholder="Notes" value={doc.notes || ''} onChange={(e: any) => updateDoc(doc.id, { notes: e.target.value })} className="mt-2 w-full border border-gray-200 rounded px-2 py-1 text-xs" />
-                <div className="mt-2 flex flex-wrap items-center gap-3">
+                <input type="text" placeholder="Notes" value={doc.notes || ''} onChange={(e: any) => updateDoc(doc.id, { notes: e.target.value })} className="mt-2 w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none" />
+                <div className="mt-2.5 flex flex-wrap items-center gap-2">
                   {parseAttachmentUrls(doc.file_url).map((url: string, i: number) => (
-                    <span key={i} className="flex items-center gap-1">
-                      <button onClick={async () => { const err = await openStoredFile(url); if (err) toast(err, 'error') }} className="text-xs text-blue-600 hover:underline">📎 {attachmentFileName(url)}</button>
-                      <button onClick={() => removeDocFile(doc, url)} className="text-xs text-red-400 hover:text-red-600" title="Remove file">✕</button>
+                    <span key={i} className="inline-flex items-center gap-1.5 bg-slate-50 rounded-md pl-2.5 pr-1.5 py-1">
+                      <button onClick={async () => { const err = await openStoredFile(url); if (err) toast(err, 'error') }} className="inline-flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800"><Icon name="paperclip" size={14} />{attachmentFileName(url)}</button>
+                      <button onClick={() => removeDocFile(doc, url)} className="text-slate-300 hover:text-red-500" title="Remove file"><Icon name="x" size={13} /></button>
                     </span>
                   ))}
-                  <label className="cursor-pointer text-xs text-blue-600 hover:underline">
-                    📎 Upload File(s)
+                  <label className="cursor-pointer inline-flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-800 border border-dashed border-slate-300 hover:border-indigo-400 rounded-md px-2.5 py-1">
+                    <Icon name="upload" size={14} /> Upload file(s)
                     <input type="file" multiple className="hidden" onChange={async (e: any) => { await uploadDocFiles(doc, e.target.files); e.target.value = '' }} />
                   </label>
                 </div>
               </div>
-            </div>
-          </div>
-        ))}
+            </CardBody>
+          </Card>
+          )
+        })}
       </div>
 
       {showPacket && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto">
-            <h3 className="text-lg font-bold mb-2">Submission Packet</h3>
-            <p className="text-sm text-gray-500 mb-4">All uploaded documents for this property.</p>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto shadow-xl">
+            <h3 className="text-lg font-semibold text-slate-800 mb-1">Submission packet</h3>
+            <p className="text-sm text-slate-500 mb-4">All uploaded documents for this property.</p>
             {documents.filter((d: any) => parseAttachmentUrls(d.file_url).length > 0).length === 0 ? (
-              <p className="text-sm text-gray-500 text-center py-4">No files uploaded yet.</p>
+              <p className="text-sm text-slate-500 text-center py-4">No files uploaded yet.</p>
             ) : (
               <div className="space-y-2">
                 {documents.filter((d: any) => parseAttachmentUrls(d.file_url).length > 0).map((doc: any) => (
-                  <div key={doc.id} className="flex items-start justify-between p-3 border border-gray-200 rounded">
+                  <div key={doc.id} className="flex items-start justify-between p-3 border border-slate-200 rounded-lg">
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-800">{doc.name}</p>
-                      <p className="text-xs text-gray-500">{doc.status}</p>
+                      <p className="text-sm font-medium text-slate-800">{doc.name}</p>
+                      <p className="text-xs text-slate-500">{doc.status}</p>
                     </div>
                     <div className="flex flex-col items-end gap-1 ml-3">
                       {parseAttachmentUrls(doc.file_url).map((url: string, i: number) => (
-                        <button key={i} onClick={async () => { const err = await openStoredFile(url); if (err) toast(err, 'error') }} className="text-xs text-blue-600 hover:underline text-right">📎 {attachmentFileName(url)}</button>
+                        <button key={i} onClick={async () => { const err = await openStoredFile(url); if (err) toast(err, 'error') }} className="inline-flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800 text-right"><Icon name="paperclip" size={14} /> {attachmentFileName(url)}</button>
                       ))}
                     </div>
                   </div>
                 ))}
               </div>
             )}
-            <div className="mt-4 p-3 bg-gray-50 rounded text-xs text-gray-500">
-              💡 To share this packet, right-click each file link and select "Save link as" to download.
+            <div className="mt-4 p-3 bg-slate-50 rounded-lg text-xs text-slate-500">
+              To share this packet, right-click each file link and select "Save link as" to download.
             </div>
             <div className="flex justify-end mt-4">
-              <button onClick={() => setShowPacket(false)} className="px-4 py-2 text-sm text-gray-600 border rounded hover:bg-gray-50">Close</button>
+              <Button variant="neutral" onClick={() => setShowPacket(false)}>Close</Button>
             </div>
           </div>
         </div>
@@ -405,21 +404,21 @@ function DocumentsTab({ propertyId, morId }: any) {
 
       {showAddCustom && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-bold mb-4">Add Custom Document</h3>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
+            <h3 className="text-lg font-semibold text-slate-800 mb-4">Add custom document</h3>
             <div className="space-y-3">
-              <input type="text" placeholder="Document name *" value={customDoc.name} onChange={(e: any) => setCustomDoc({...customDoc, name: e.target.value})} className="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
-              <input type="text" placeholder="Assigned to" value={customDoc.assigned_to} onChange={(e: any) => setCustomDoc({...customDoc, assigned_to: e.target.value})} className="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
-              <input type="date" value={customDoc.due_date || ''} onChange={(e: any) => setCustomDoc({...customDoc, due_date: e.target.value || null})} className="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
-              <input type="text" placeholder="Notes" value={customDoc.notes} onChange={(e: any) => setCustomDoc({...customDoc, notes: e.target.value})} className="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
-              <label className="flex items-center gap-2 text-sm text-gray-600">
-                <input type="checkbox" checked={customDoc.addToTemplate || false} onChange={(e: any) => setCustomDoc({...customDoc, addToTemplate: e.target.checked})} />
+              <input type="text" placeholder="Document name *" value={customDoc.name} onChange={(e: any) => setCustomDoc({...customDoc, name: e.target.value})} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none" />
+              <input type="text" placeholder="Assigned to" value={customDoc.assigned_to} onChange={(e: any) => setCustomDoc({...customDoc, assigned_to: e.target.value})} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none" />
+              <input type="date" value={customDoc.due_date || ''} onChange={(e: any) => setCustomDoc({...customDoc, due_date: e.target.value || null})} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none" />
+              <input type="text" placeholder="Notes" value={customDoc.notes} onChange={(e: any) => setCustomDoc({...customDoc, notes: e.target.value})} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none" />
+              <label className="flex items-center gap-2 text-sm text-slate-600">
+                <input type="checkbox" className="accent-indigo-600" checked={customDoc.addToTemplate || false} onChange={(e: any) => setCustomDoc({...customDoc, addToTemplate: e.target.checked})} />
                 Add to template (include on all future properties)
               </label>
             </div>
             <div className="flex gap-3 justify-end mt-4">
-              <button onClick={() => setShowAddCustom(false)} className="px-4 py-2 text-sm text-gray-600">Cancel</button>
-              <button onClick={addCustomDoc} className="bg-blue-600 text-white px-4 py-2 rounded text-sm">Add Document</button>
+              <Button variant="ghost" onClick={() => setShowAddCustom(false)}>Cancel</Button>
+              <Button variant="primary" onClick={addCustomDoc}>Add document</Button>
             </div>
           </div>
         </div>
