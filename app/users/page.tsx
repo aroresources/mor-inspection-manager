@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../../lib/supabase'
+import { Button, StatusBadge, Icon, type Tone } from '../components/ui'
 
 export default function UsersPage() {
   const router = useRouter()
@@ -124,86 +125,69 @@ const inviteUser = async (e: any) => {
     : properties
 
   const getRoleBadge = (role: any) => {
-    const styles: any = {
-      super_admin: 'bg-red-100 text-red-700',
-      asset_manager: 'bg-blue-100 text-blue-700',
-      property_manager: 'bg-green-100 text-green-700'
-    }
-    const labels: any = {
-      super_admin: 'Super Admin',
-      asset_manager: 'Asset Manager',
-      property_manager: 'Property Manager'
-    }
-    return (
-      <span className={`text-xs px-2 py-1 rounded ${styles[role] || 'bg-gray-100 text-gray-700'}`}>
-        {labels[role] || role}
-      </span>
-    )
+    const tones: Record<string, Tone> = { super_admin: 'red', asset_manager: 'blue', property_manager: 'green' }
+    const labels: any = { super_admin: 'Super Admin', asset_manager: 'Asset Manager', property_manager: 'Property Manager' }
+    return <StatusBadge tone={tones[role] || 'slate'}>{labels[role] || role}</StatusBadge>
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <nav className="bg-white shadow-sm px-4 sm:px-6 py-4 flex flex-wrap justify-between items-center gap-x-4 gap-y-2">
+    <div className="min-h-screen bg-slate-100">
+      <nav className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3 flex flex-wrap justify-between items-center gap-x-4 gap-y-2 sticky top-0 z-30">
         <div className="flex items-center flex-wrap gap-x-4 gap-y-1">
-          <button onClick={() => router.push('/dashboard')} className="text-sm text-blue-600 hover:underline">
-            ← Back to Dashboard
+          <button onClick={() => router.push('/dashboard')} className="text-sm text-indigo-600 hover:text-indigo-800 inline-flex items-center gap-1">
+            <Icon name="chevron" size={14} className="rotate-90" /> Back to dashboard
           </button>
-          <h1 className="text-xl font-bold text-gray-800">Team Members</h1>
+          <h1 className="text-lg font-semibold text-slate-800">Team Members</h1>
         </div>
         <button
           onClick={async () => { await supabase.auth.signOut(); window.location.href = '/' }}
-          className="text-sm text-gray-500 hover:text-gray-700"
+          className="text-sm text-slate-400 hover:text-slate-700"
         >
-          Sign Out
+          Sign out
         </button>
       </nav>
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
         <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
           <div>
-            <h2 className="text-lg font-bold text-gray-800">Team Members</h2>
-            <p className="text-sm text-gray-500">Manage access and roles for your team.</p>
+            <h2 className="text-lg font-semibold text-slate-800">Team Members</h2>
+            <p className="text-sm text-slate-500">Manage access and roles for your team.</p>
           </div>
-          <button
-            onClick={() => setShowInvite(true)}
-            className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700"
-          >
-            + Invite User
-          </button>
+          <Button variant="primary" onClick={() => setShowInvite(true)}><Icon name="plus" /> Invite user</Button>
         </div>
 
-        <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           {loading ? (
-            <p className="p-6 text-gray-500 text-sm">Loading...</p>
+            <p className="p-6 text-slate-500 text-sm">Loading…</p>
           ) : users.length === 0 ? (
-            <p className="p-6 text-gray-500 text-sm text-center">No team members yet.</p>
+            <p className="p-6 text-slate-500 text-sm text-center">No team members yet.</p>
           ) : (
-            <div className="divide-y">
+            <div className="divide-y divide-slate-100">
               {users.map(user => (
                 <div key={user.id} className="p-4">
                   <div className="flex items-start justify-between">
                     <div>
-                      <p className="text-sm font-medium text-gray-800">{user.full_name || user.email}</p>
-                      <p className="text-xs text-gray-500">{user.email}</p>
+                      <p className="text-sm font-medium text-slate-800">{user.full_name || user.email}</p>
+                      <p className="text-xs text-slate-500">{user.email}</p>
                     </div>
                     <div className="flex items-center gap-3">
                       {user.role === 'super_admin' ? (
-                        <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700">All Companies</span>
+                        <span className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-600">All Companies</span>
                       ) : user.companies?.name ? (
-                        <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700">{user.companies.name}</span>
+                        <span className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-600">{user.companies.name}</span>
                       ) : (
-                        <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-500">No Company</span>
+                        <span className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-500">No Company</span>
                       )}
                       {getRoleBadge(user.role)}
                     </div>
                   </div>
                   <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs text-gray-500">Role</label>
+                      <label className="text-xs text-slate-500">Role</label>
                       <select
                         value={user.role}
                         onChange={(e: any) => updateUserRole(user.id, e.target.value)}
-                        className="w-full mt-1 border border-gray-200 rounded px-2 py-1 text-xs"
+                        className="w-full mt-1 border border-slate-300 rounded-lg px-2 py-1 text-xs"
                       >
                         <option value="super_admin">Super Admin</option>
                         <option value="asset_manager">Asset Manager</option>
@@ -211,16 +195,16 @@ const inviteUser = async (e: any) => {
                       </select>
                     </div>
                     <div>
-                      <label className="text-xs text-gray-500">Company Access</label>
+                      <label className="text-xs text-slate-500">Company Access</label>
                       {user.role === 'super_admin' ? (
-                        <p className="w-full mt-1 border border-gray-200 rounded px-2 py-1 text-xs bg-gray-50 text-gray-600">
+                        <p className="w-full mt-1 border border-slate-300 rounded-lg px-2 py-1 text-xs bg-slate-50 text-slate-600">
                           All Companies (Super Admin)
                         </p>
                       ) : (
                         <select
                           value={user.company_id || ''}
                           onChange={(e: any) => updateUserCompany(user.id, e.target.value)}
-                          className="w-full mt-1 border border-gray-200 rounded px-2 py-1 text-xs"
+                          className="w-full mt-1 border border-slate-300 rounded-lg px-2 py-1 text-xs"
                         >
                           <option value="">No Company</option>
                           {companies.map(c => (
@@ -233,9 +217,9 @@ const inviteUser = async (e: any) => {
                   {user.role === 'property_manager' && (
                     <button
                       onClick={() => openPropertyAccess(user)}
-                      className="mt-2 text-xs text-blue-600 hover:underline"
+                      className="mt-2 text-xs font-medium text-indigo-600 hover:text-indigo-800"
                     >
-                      Manage Property Access →
+                      Manage property access →
                     </button>
                   )}
                 </div>
@@ -248,27 +232,27 @@ const inviteUser = async (e: any) => {
       {/* Invite User Modal */}
       {showInvite && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-bold mb-4">Invite Team Member</h3>
+          <div className="bg-white rounded-2xl p-6 shadow-xl w-full max-w-md">
+            <h3 className="text-lg font-semibold mb-4">Invite Team Member</h3>
             <div className="space-y-3">
               <input
                 type="email"
                 placeholder="Email address *"
                 value={newUser.email}
                 onChange={(e: any) => setNewUser({...newUser, email: e.target.value})}
-                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none"
               />
               <input
                 type="text"
                 placeholder="Full name"
                 value={newUser.full_name}
                 onChange={(e: any) => setNewUser({...newUser, full_name: e.target.value})}
-                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none"
               />
               <select
                 value={newUser.role}
                 onChange={(e: any) => setNewUser({...newUser, role: e.target.value})}
-                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none"
               >
                 <option value="property_manager">Property Manager</option>
                 <option value="asset_manager">Asset Manager</option>
@@ -277,7 +261,7 @@ const inviteUser = async (e: any) => {
               <select
                 value={newUser.company_id}
                 onChange={(e: any) => setNewUser({...newUser, company_id: e.target.value})}
-                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none"
               >
                 <option value="">All Companies</option>
                 {companies.map(c => (
@@ -286,8 +270,8 @@ const inviteUser = async (e: any) => {
               </select>
             </div>
             <div className="flex gap-3 justify-end mt-4">
-              <button onClick={() => setShowInvite(false)} className="px-4 py-2 text-sm text-gray-600">Cancel</button>
-              <button onClick={inviteUser} className="bg-blue-600 text-white px-4 py-2 rounded text-sm">Send Invite</button>
+              <Button variant="ghost" onClick={() => setShowInvite(false)}>Cancel</Button>
+              <Button variant="primary" onClick={inviteUser}>Send invite</Button>
             </div>
           </div>
         </div>
@@ -296,33 +280,33 @@ const inviteUser = async (e: any) => {
       {/* Property Access Modal */}
       {showPropertyAccess && selectedUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[80vh] overflow-y-auto">
-            <h3 className="text-lg font-bold mb-1">Property Access</h3>
-            <p className="text-sm text-gray-500 mb-1">{selectedUser.full_name || selectedUser.email}</p>
+          <div className="bg-white rounded-2xl p-6 shadow-xl w-full max-w-md max-h-[80vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold mb-1">Property Access</h3>
+            <p className="text-sm text-slate-500 mb-1">{selectedUser.full_name || selectedUser.email}</p>
             {selectedUser.company_id && (
-              <p className="text-xs text-gray-400 mb-3">
+              <p className="text-xs text-slate-400 mb-3">
                 Showing properties for {selectedUser.companies?.name || 'their assigned company'}.
               </p>
             )}
             <div className="space-y-2">
               {accessProperties.length === 0 ? (
-                <p className="text-sm text-gray-500 text-center py-4">No properties in this company yet.</p>
+                <p className="text-sm text-slate-500 text-center py-4">No properties in this company yet.</p>
               ) : accessProperties.map(property => (
-                <label key={property.id} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded cursor-pointer">
+                <label key={property.id} className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded cursor-pointer">
                   <input
                     type="checkbox"
                     checked={userProperties.includes(property.id)}
                     onChange={() => togglePropertyAccess(property.id)}
                   />
                   <div>
-                    <p className="text-sm text-gray-800">{property.name}</p>
-                    <p className="text-xs text-gray-500">{property.companies?.name}</p>
+                    <p className="text-sm text-slate-800">{property.name}</p>
+                    <p className="text-xs text-slate-500">{property.companies?.name}</p>
                   </div>
                 </label>
               ))}
             </div>
             <div className="flex justify-end mt-4">
-              <button onClick={() => setShowPropertyAccess(false)} className="px-4 py-2 text-sm text-gray-600 border rounded hover:bg-gray-50">Done</button>
+              <Button variant="neutral" onClick={() => setShowPropertyAccess(false)}>Done</Button>
             </div>
           </div>
         </div>
