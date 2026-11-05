@@ -1971,6 +1971,12 @@ export default function PropertyPage() {
   const { id } = useParams()
   const [property, setProperty] = useState<any>(null)
   const [activeTab, setActiveTab] = useState('overview')
+  const docsDirtyRef = useRef(false) // Property Documents tab has unsaved changes
+  const guardedSetTab = (next: string) => {
+    if (docsDirtyRef.current && !window.confirm('You have unsaved Property Documents changes. Leave this tab without saving?')) return
+    docsDirtyRef.current = false
+    setActiveTab(next)
+  }
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState<any>({})
   const [saving, setSaving] = useState(false)
@@ -2128,7 +2134,7 @@ const fetchMors = async () => {
     <div className="min-h-screen bg-gray-100">
       <nav className="bg-white shadow-sm px-4 sm:px-6 py-4 flex flex-wrap justify-between items-center gap-x-4 gap-y-2">
         <div className="flex items-center flex-wrap gap-x-4 gap-y-1 min-w-0">
-          <button onClick={() => router.push('/dashboard')} className="text-sm text-blue-600 hover:underline whitespace-nowrap">
+          <button onClick={() => { if (docsDirtyRef.current && !window.confirm('You have unsaved Property Documents changes. Leave without saving?')) return; router.push('/dashboard') }} className="text-sm text-blue-600 hover:underline whitespace-nowrap">
             ← Back to Dashboard
           </button>
           <h1 className="text-lg sm:text-xl font-bold text-gray-800 truncate max-w-full">{property.name}</h1>
@@ -2208,7 +2214,7 @@ const fetchMors = async () => {
           {tabs.map(tab => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab.toLowerCase())}
+              onClick={() => guardedSetTab(tab.toLowerCase())}
               className={`py-4 text-sm font-medium border-b-2 transition whitespace-nowrap ${activeTab === tab.toLowerCase() ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
             >
               {tab}
@@ -2377,7 +2383,7 @@ const fetchMors = async () => {
         )}
 
         {activeTab === 'property documents' && (
-          <PropertyDocumentsTab propertyId={id} property={property} />
+          <PropertyDocumentsTab propertyId={id} property={property} onDirtyChange={(d: boolean) => { docsDirtyRef.current = d }} />
         )}
 
         {activeTab === 'mor binder' && (

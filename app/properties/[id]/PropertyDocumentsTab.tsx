@@ -87,7 +87,7 @@ const mergeSchedules = (a?: Record<string, ScheduleChoice>, b?: Record<string, S
 
 type Scope = 'property' | 'company'
 
-export default function PropertyDocumentsTab({ propertyId, property }: any) {
+export default function PropertyDocumentsTab({ propertyId, property, onDirtyChange }: any) {
   const { toast } = useToast()
   const companyId = property?.company_id || null
   const [loading, setLoading] = useState(true)
@@ -102,6 +102,10 @@ export default function PropertyDocumentsTab({ propertyId, property }: any) {
   const [customItems, setCustomItems] = useState<any[]>([])
   // Layer 2 — company defaults (stored as one jsonb in company_doc_settings.settings).
   const [co, setCo] = useState<CompanyDoc>({})
+  // Last-saved snapshots, for dirty-tracking + discard.
+  const [savedProp, setSavedProp] = useState({ settings: {} as EivSettings, overrides: {} as Record<string, string>, customItems: [] as any[] })
+  const [savedCo, setSavedCo] = useState<CompanyDoc>({})
+  const [formRev, setFormRev] = useState(0) // bump to remount uncontrolled inputs (phone/storage)
 
   const [editSection, setEditSection] = useState<string>('')
   const [overrideDraft, setOverrideDraft] = useState('')
@@ -122,34 +126,63 @@ export default function PropertyDocumentsTab({ propertyId, property }: any) {
       setRole(profile?.role || '')
     }
     const p = propRes.data
-    if (p) { setSettings(p.settings || {}); setOverrides(p.overrides || {}); setCustomItems(Array.isArray(p.custom_items) ? p.custom_items : []) }
-    else { setSettings({}); setOverrides({}); setCustomItems([]) }
-    setCo((coRes?.data?.settings as CompanyDoc) || {})
+    const pSettings = (p?.settings as EivSettings) || {}
+    const pOverrides = (p?.overrides as Record<string, string>) || {}
+    const pCustom = Array.isArray(p?.custom_items) ? p!.custom_items : []
+    const coSettings = (coRes?.data?.settings as CompanyDoc) || {}
+    setSettings(pSettings); setOverrides(pOverrides); setCustomItems(pCustom); setCo(coSettings)
+    setSavedProp({ settings: pSettings, overrides: pOverrides, customItems: pCustom }); setSavedCo(coSettings)
+    setFormRev((r) => r + 1)
     setLoading(false)
   }
 
   const canEditCompany = role === 'super_admin' || role === 'asset_manager'
   const readOnly = scope === 'company' && !canEditCompany
 
+  // --- Dirty tracking -----------------------------------------------------
+  const propDirty = JSON.stringify({ settings, overrides, customItems }) !== JSON.stringify(savedProp)
+  const coDirty = JSON.stringify(co) !== JSON.stringify(savedCo)
+  const dirty = propDirty || coDirty
+
+  // Warn on browser close / refresh / external navigation while unsaved.
+  useEffect(() => {
+    const h = (e: BeforeUnloadEvent) => { if (dirty) { e.preventDefault(); e.returnValue = '' } }
+    window.addEventListener('beforeunload', h)
+    return () => window.removeEventListener('beforeunload', h)
+  }, [dirty])
+
+  // Report dirty state to the parent (so it can guard tab switches), and clear on unmount.
+  useEffect(() => { onDirtyChange?.(dirty) }, [dirty])
+  useEffect(() => () => onDirtyChange?.(false), [])
+
   // --- Persistence --------------------------------------------------------
-  const persistProperty = async (nextSettings: EivSettings, nextOverrides: Record<string, string>, nextCustom: any[]) => {
+  const save = async () => {
     setSaving(true)
-    const { error } = await supabase.from('property_doc_settings').upsert(
-      { property_id: propertyId, doc_type: docType, settings: nextSettings, overrides: nextOverrides, custom_items: nextCustom, updated_at: new Date().toISOString() },
-      { onConflict: 'property_id,doc_type' }
-    )
+    let ok = true
+    if (propDirty) {
+      const { error } = await supabase.from('property_doc_settings').upsert(
+        { property_id: propertyId, doc_type: docType, settings, overrides, custom_items: customItems, updated_at: new Date().toISOString() },
+        { onConflict: 'property_id,doc_type' })
+      if (error) { ok = false; toast('Could not save — make sure the property_documents.sql migration has been run. (' + error.message + ')', 'error') }
+    }
+    if (ok && coDirty) {
+      if (!companyId) { ok = false; toast('Assign this property to a company before saving company defaults.', 'warning') }
+      else {
+        const { error } = await supabase.from('company_doc_settings').upsert(
+          { company_id: companyId, doc_type: docType, settings: co, updated_at: new Date().toISOString() },
+          { onConflict: 'company_id,doc_type' })
+        if (error) { ok = false; toast('Could not save company default. (' + error.message + ')', 'error') }
+      }
+    }
     setSaving(false)
-    if (error) toast('Could not save — make sure the property_documents.sql migration has been run. (' + error.message + ')', 'error')
+    if (ok) {
+      setSavedProp({ settings, overrides, customItems }); setSavedCo(co)
+      toast('Saved.', 'success')
+    }
   }
-  const persistCompany = async (next: CompanyDoc) => {
-    if (!companyId) { toast('Assign this property to a company before editing company defaults.', 'warning'); return }
-    setSaving(true)
-    const { error } = await supabase.from('company_doc_settings').upsert(
-      { company_id: companyId, doc_type: docType, settings: next, updated_at: new Date().toISOString() },
-      { onConflict: 'company_id,doc_type' }
-    )
-    setSaving(false)
-    if (error) toast('Could not save company default. (' + error.message + ')', 'error')
+  const discard = () => {
+    setSettings(savedProp.settings); setOverrides(savedProp.overrides); setCustomItems(savedProp.customItems); setCo(savedCo)
+    setFormRev((r) => r + 1)
   }
 
   // --- Scope-aware active config (what the editors read/write) -------------
@@ -160,16 +193,16 @@ export default function PropertyDocumentsTab({ propertyId, property }: any) {
   const curCustom = scope === 'company' ? (co.customItems || []) : customItems
 
   const saveSettings = (next: EivSettings) => {
-    if (scope === 'company') { const n = { ...co, storageDetail: next.storageDetail, schedule: next.schedule, roster: next.roster }; setCo(n); persistCompany(n) }
-    else { setSettings(next); persistProperty(next, overrides, customItems) }
+    if (scope === 'company') setCo({ ...co, storageDetail: next.storageDetail, schedule: next.schedule, roster: next.roster })
+    else setSettings(next)
   }
   const saveOverrides = (next: Record<string, string>) => {
-    if (scope === 'company') { const n = { ...co, overrides: next }; setCo(n); persistCompany(n) }
-    else { setOverrides(next); persistProperty(settings, next, customItems) }
+    if (scope === 'company') setCo({ ...co, overrides: next })
+    else setOverrides(next)
   }
   const saveCustom = (next: any[]) => {
-    if (scope === 'company') { const n = { ...co, customItems: next }; setCo(n); persistCompany(n) }
-    else { setCustomItems(next); persistProperty(settings, overrides, next) }
+    if (scope === 'company') setCo({ ...co, customItems: next })
+    else setCustomItems(next)
   }
 
   // --- Effective (resolved) config used for generation + inheritance hints -
@@ -188,20 +221,15 @@ export default function PropertyDocumentsTab({ propertyId, property }: any) {
   const effOverrides = { ...(co.overrides || {}), ...overrides }
   const effCustom = [...(co.customItems || []), ...customItems]
 
-  const setMerge = (k: string, v: string) => { setSettings({ ...settings, merge: { ...(settings.merge || {}), [k]: v } }); persistProperty({ ...settings, merge: { ...(settings.merge || {}), [k]: v } }, overrides, customItems) }
+  const setMerge = (k: string, v: string) => setSettings({ ...settings, merge: { ...(settings.merge || {}), [k]: v } })
 
   // --- Schedule editing (scope-aware) -------------------------------------
   const compChoice = (key: string): ScheduleChoice => co.schedule?.[key] || {}
   const propChoice = (key: string): ScheduleChoice => settings.schedule?.[key] || {}
   const shownChoice = (key: string): ScheduleChoice => scope === 'company' ? compChoice(key) : { ...compChoice(key), ...propChoice(key) }
   const setSchedule = (key: string, patch: any) => {
-    if (scope === 'company') {
-      const next = { ...co, schedule: { ...(co.schedule || {}), [key]: { ...(co.schedule?.[key] || {}), ...patch } } }
-      setCo(next); persistCompany(next)
-    } else {
-      const next = { ...settings, schedule: { ...(settings.schedule || {}), [key]: { ...(settings.schedule?.[key] || {}), ...patch } } }
-      setSettings(next); persistProperty(next, overrides, customItems)
-    }
+    if (scope === 'company') setCo({ ...co, schedule: { ...(co.schedule || {}), [key]: { ...(co.schedule?.[key] || {}), ...patch } } })
+    else setSettings({ ...settings, schedule: { ...(settings.schedule || {}), [key]: { ...(settings.schedule?.[key] || {}), ...patch } } })
   }
 
   // --- Roster (scope-aware) ----------------------------------------------
@@ -375,9 +403,17 @@ export default function PropertyDocumentsTab({ propertyId, property }: any) {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 className="text-lg font-bold text-gray-800">Property Documents</h2>
-            <p className="text-xs text-gray-500">EIV Policy &amp; Procedure{saving ? ' · saving…' : ''}</p>
+            <p className="text-xs">
+              <span className="text-gray-500">EIV Policy &amp; Procedure · </span>
+              {saving ? <span className="text-gray-500">saving…</span>
+                : dirty ? <span className="text-amber-600 font-medium">Unsaved changes</span>
+                : <span className="text-gray-400">All changes saved</span>}
+            </p>
           </div>
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap items-center">
+            {dirty && <button onClick={discard} disabled={saving} className="text-sm text-gray-500 hover:text-gray-700 px-2 py-1.5">Discard</button>}
+            <button onClick={save} disabled={!dirty || saving} className={`px-3 py-1.5 rounded text-sm text-white ${dirty && !saving ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-300 cursor-not-allowed'}`}>{saving ? 'Saving…' : 'Save'}</button>
+            <span className="w-px h-6 bg-gray-200 mx-1 hidden sm:inline-block" />
             <button onClick={generateWord} className="bg-blue-700 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-800">📝 Generate Word</button>
             <button onClick={generatePDF} className="bg-green-600 text-white px-3 py-1.5 rounded text-sm hover:bg-green-700">📄 Generate PDF</button>
           </div>
@@ -418,7 +454,7 @@ export default function PropertyDocumentsTab({ propertyId, property }: any) {
             <Info label="Address" value={merge.address || '—'} />
             <div>
               <label className="block text-xs text-gray-500 mb-1">Property phone</label>
-              <input defaultValue={merge.phone} onBlur={(e: any) => { if (e.target.value !== merge.phone) setMerge('phone', e.target.value) }} placeholder="e.g. 845-286-4080" className="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
+              <input key={`phone-${formRev}`} defaultValue={merge.phone} onBlur={(e: any) => { if (e.target.value !== merge.phone) setMerge('phone', e.target.value) }} placeholder="e.g. 845-286-4080" className="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
             </div>
           </div>
           <p className="text-xs text-gray-400 mt-2">Name, company, and address come from the property record (edit them on the Overview tab).</p>
@@ -479,7 +515,7 @@ export default function PropertyDocumentsTab({ propertyId, property }: any) {
           <h3 className="text-sm font-bold text-gray-800 mb-1">Physical storage location {isCompany && <span className="ml-1 text-xs font-normal text-indigo-600">· company default</span>}</h3>
           <p className="text-xs text-gray-500 mb-2">Default: “secure, locked storage location in a secure area.” Add specifics only if you want.</p>
           <input
-            key={`${scope}-storage`}
+            key={`${scope}-storage-${formRev}`}
             defaultValue={curSettings.storageDetail || ''}
             onBlur={(e: any) => { if (e.target.value !== (curSettings.storageDetail || '')) saveSettings({ ...curSettings, storageDetail: e.target.value || undefined }) }}
             placeholder={!isCompany && co.storageDetail ? `Company default: ${co.storageDetail}` : "e.g. locked cabinet in the manager's office"}
