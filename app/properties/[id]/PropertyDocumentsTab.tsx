@@ -8,6 +8,7 @@ import {
   EIV_SECTIONS, EIV_SCHEDULE, EIV_ROLES, scheduleFrequency, scheduleFiling, scheduleIncluded,
   type EivSettings, type ListItem, type ScheduleRow, type ScheduleChoice, type RosterEntry,
 } from '../../../lib/eivTemplate'
+import { Button, Icon } from '../../components/ui'
 
 const uid = () => { try { if (typeof crypto !== 'undefined' && (crypto as any).randomUUID) return (crypto as any).randomUUID() } catch {} return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}` }
 
@@ -391,7 +392,7 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
     saveAs(blob, `EIV-Policy-and-Procedure-${(property?.name || 'Property').replace(/[^a-zA-Z0-9]/g, '_')}.docx`)
   }
 
-  if (loading) return <div className="bg-white rounded-lg shadow p-6 text-gray-500">Loading documents…</div>
+  if (loading) return <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 text-slate-500">Loading documents…</div>
 
   const overriddenCount = Object.keys(curOverrides).filter((k) => curOverrides[k]?.trim()).length
   const isCompany = scope === 'company'
@@ -399,34 +400,34 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
 
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-lg shadow p-4">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 className="text-lg font-bold text-gray-800">Property Documents</h2>
+            <h2 className="text-lg font-semibold text-slate-800">Property Documents</h2>
             <p className="text-xs">
-              <span className="text-gray-500">EIV Policy &amp; Procedure · </span>
-              {saving ? <span className="text-gray-500">saving…</span>
+              <span className="text-slate-500">EIV Policy &amp; Procedure · </span>
+              {saving ? <span className="text-slate-500">saving…</span>
                 : dirty ? <span className="text-amber-600 font-medium">Unsaved changes</span>
-                : <span className="text-gray-400">All changes saved</span>}
+                : <span className="text-slate-400">All changes saved</span>}
             </p>
           </div>
           <div className="flex gap-2 flex-wrap items-center">
-            {dirty && <button onClick={discard} disabled={saving} className="text-sm text-gray-500 hover:text-gray-700 px-2 py-1.5">Discard</button>}
-            <button onClick={save} disabled={!dirty || saving} className={`px-3 py-1.5 rounded text-sm text-white ${dirty && !saving ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-300 cursor-not-allowed'}`}>{saving ? 'Saving…' : 'Save'}</button>
-            <span className="w-px h-6 bg-gray-200 mx-1 hidden sm:inline-block" />
-            <button onClick={generateWord} className="bg-blue-700 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-800">📝 Generate Word</button>
-            <button onClick={generatePDF} className="bg-green-600 text-white px-3 py-1.5 rounded text-sm hover:bg-green-700">📄 Generate PDF</button>
+            {dirty && <button onClick={discard} disabled={saving} className="text-sm text-slate-500 hover:text-slate-700 px-2 py-1.5">Discard</button>}
+            <Button variant="primary" onClick={save} disabled={!dirty || saving}>{saving ? 'Saving…' : 'Save'}</Button>
+            <span className="w-px h-6 bg-slate-200 mx-1 hidden sm:inline-block" />
+            <Button variant="neutral" onClick={generateWord}><Icon name="file" /> Word</Button>
+            <Button variant="neutral" onClick={generatePDF}><Icon name="download" /> PDF</Button>
           </div>
         </div>
 
         {/* Scope switcher */}
-        <div className="mt-4 flex flex-wrap items-center gap-2 border-t pt-3">
-          <span className="text-xs font-medium text-gray-500">Editing:</span>
-          <div className="inline-flex rounded-md border border-gray-300 overflow-hidden text-sm">
-            <button onClick={() => setScope('property')} className={`px-3 py-1.5 ${!isCompany ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>This property</button>
-            <button onClick={() => setScope('company')} className={`px-3 py-1.5 border-l border-gray-300 ${isCompany ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Company default</button>
+        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+          <span className="text-xs font-medium text-slate-500">Editing:</span>
+          <div className="inline-flex rounded-lg border border-slate-300 overflow-hidden text-sm">
+            <button onClick={() => setScope('property')} className={`px-3 py-1.5 ${!isCompany ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>This property</button>
+            <button onClick={() => setScope('company')} className={`px-3 py-1.5 border-l border-slate-300 ${isCompany ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>Company default</button>
           </div>
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-slate-500">
             {isCompany
               ? `Changes apply to every ${companyLabel} property that hasn’t set its own value.`
               : `Values fall back to ${companyLabel}’s company defaults where you leave them blank.`}
@@ -439,44 +440,44 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
           <p className="mt-2 text-xs text-amber-600">You can view company defaults, but only an asset manager or admin can change them.</p>
         )}
         {!isCompany && (
-          <p className="mt-2 text-xs text-gray-400">The generated document always combines the company defaults with this property’s own values.</p>
+          <p className="mt-2 text-xs text-slate-400">The generated document always combines the company defaults with this property’s own values.</p>
         )}
       </div>
 
       <fieldset disabled={readOnly} className={readOnly ? 'opacity-60 space-y-4' : 'space-y-4'}>
       {/* Property info (merge fields) — property scope only */}
       {!isCompany && (
-        <div className="bg-white rounded-lg shadow p-4">
-          <h3 className="text-sm font-bold text-gray-800 mb-3">Property Information</h3>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+          <h3 className="text-sm font-semibold text-slate-800 mb-3">Property Information</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Info label="Property name" value={merge.sitename || '—'} />
             <Info label="Management company" value={merge.company || '—'} />
             <Info label="Address" value={merge.address || '—'} />
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Property phone</label>
-              <input key={`phone-${formRev}`} defaultValue={merge.phone} onBlur={(e: any) => { if (e.target.value !== merge.phone) setMerge('phone', e.target.value) }} placeholder="e.g. 845-286-4080" className="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
+              <label className="block text-xs text-slate-500 mb-1">Property phone</label>
+              <input key={`phone-${formRev}`} defaultValue={merge.phone} onBlur={(e: any) => { if (e.target.value !== merge.phone) setMerge('phone', e.target.value) }} placeholder="e.g. 845-286-4080" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none" />
             </div>
           </div>
-          <p className="text-xs text-gray-400 mt-2">Name, company, and address come from the property record (edit them on the Overview tab).</p>
+          <p className="text-xs text-slate-400 mt-2">Name, company, and address come from the property record (edit them on the Overview tab).</p>
         </div>
       )}
 
       {/* EIV Schedule */}
-      <div className="bg-white rounded-lg shadow p-4">
-        <h3 className="text-sm font-bold text-gray-800 mb-1">EIV Schedule {isCompany && <span className="ml-1 text-xs font-normal text-indigo-600">· company default</span>}</h3>
-        <p className="text-xs text-gray-500 mb-3">Quarterly reports can be run monthly. {isCompany ? 'These become the default for every company property.' : 'A value shown as “company default” is inherited; change it to set it for this property only.'}</p>
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+        <h3 className="text-sm font-semibold text-slate-800 mb-1">EIV Schedule {isCompany && <span className="ml-1 text-xs font-normal text-indigo-600">· company default</span>}</h3>
+        <p className="text-xs text-slate-500 mb-3">Quarterly reports can be run monthly. {isCompany ? 'These become the default for every company property.' : 'A value shown as “company default” is inherited; change it to set it for this property only.'}</p>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead><tr className="text-left text-xs text-gray-500 border-b"><th className="py-2 pr-2">Report</th><th className="py-2 pr-2">Frequency</th><th className="py-2">Filed / retained in</th></tr></thead>
+            <thead><tr className="text-left text-xs text-slate-500 border-b"><th className="py-2 pr-2">Report</th><th className="py-2 pr-2">Frequency</th><th className="py-2">Filed / retained in</th></tr></thead>
             <tbody>
               {EIV_SCHEDULE.map((r: ScheduleRow, i: number) => r.group ? (
-                <tr key={i} className="bg-gray-50"><td colSpan={3} className="py-1.5 px-2 text-xs font-bold text-gray-700 uppercase tracking-wide">{r.group}</td></tr>
+                <tr key={i} className="bg-slate-50"><td colSpan={3} className="py-1.5 px-2 text-xs font-semibold text-slate-600 uppercase tracking-wide">{r.group}</td></tr>
               ) : (
-                <tr key={r.key} className="border-b border-gray-100 align-top">
-                  <td className="py-2 pr-2 text-gray-800">
+                <tr key={r.key} className="border-b border-slate-100 align-top">
+                  <td className="py-2 pr-2 text-slate-800">
                     {r.report}
                     {r.optIn && (
-                      <label className="ml-2 inline-flex items-center gap-1 text-xs text-gray-500">
+                      <label className="ml-2 inline-flex items-center gap-1 text-xs text-slate-500">
                         <input type="checkbox" checked={!!shownChoice(r.key!).include} onChange={(e: any) => setSchedule(r.key!, { include: e.target.checked })} /> include
                       </label>
                     )}
@@ -484,7 +485,7 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
                   <td className="py-2 pr-2">
                     {r.monthlyOption ? (
                       <span className="inline-flex items-center gap-1">
-                        <select value={shownChoice(r.key!).frequency || 'Quarterly'} onChange={(e: any) => setSchedule(r.key!, { frequency: e.target.value })} className="border border-gray-300 rounded px-2 py-1 text-xs">
+                        <select value={shownChoice(r.key!).frequency || 'Quarterly'} onChange={(e: any) => setSchedule(r.key!, { frequency: e.target.value })} className="border border-slate-300 rounded-lg px-2 py-1 text-xs">
                           <option value="Quarterly">Quarterly</option>
                           <option value="Monthly">Monthly</option>
                         </select>
@@ -492,12 +493,12 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
                           <span className="text-[10px] text-indigo-500">company</span>
                         )}
                       </span>
-                    ) : <span className="text-gray-600">{r.freq}</span>}
+                    ) : <span className="text-slate-600">{r.freq}</span>}
                   </td>
-                  <td className="py-2 text-gray-600 text-xs">
+                  <td className="py-2 text-slate-600 text-xs">
                     {scheduleFiling(r, scope === 'company' ? curSettings : effSettings)}
                     {r.fileOption && (
-                      <label className="ml-2 inline-flex items-center gap-1 text-xs text-blue-600">
+                      <label className="ml-2 inline-flex items-center gap-1 text-xs text-indigo-600">
                         <input type="checkbox" checked={!!shownChoice(r.key!).file} onChange={(e: any) => setSchedule(r.key!, { file: e.target.checked })} /> file it
                       </label>
                     )}
@@ -510,78 +511,78 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
       </div>
 
       {/* Storage location + roster */}
-      <div className="bg-white rounded-lg shadow p-4 space-y-4">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
         <div>
-          <h3 className="text-sm font-bold text-gray-800 mb-1">Physical storage location {isCompany && <span className="ml-1 text-xs font-normal text-indigo-600">· company default</span>}</h3>
-          <p className="text-xs text-gray-500 mb-2">Default: “secure, locked storage location in a secure area.” Add specifics only if you want.</p>
+          <h3 className="text-sm font-semibold text-slate-800 mb-1">Physical storage location {isCompany && <span className="ml-1 text-xs font-normal text-indigo-600">· company default</span>}</h3>
+          <p className="text-xs text-slate-500 mb-2">Default: “secure, locked storage location in a secure area.” Add specifics only if you want.</p>
           <input
             key={`${scope}-storage-${formRev}`}
             defaultValue={curSettings.storageDetail || ''}
             onBlur={(e: any) => { if (e.target.value !== (curSettings.storageDetail || '')) saveSettings({ ...curSettings, storageDetail: e.target.value || undefined }) }}
             placeholder={!isCompany && co.storageDetail ? `Company default: ${co.storageDetail}` : "e.g. locked cabinet in the manager's office"}
-            className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none"
           />
           {!isCompany && co.storageDetail && !settings.storageDetail && (
             <p className="text-[11px] text-indigo-500 mt-1">Inheriting the company default: “{co.storageDetail}”.</p>
           )}
         </div>
         <div>
-          <h3 className="text-sm font-bold text-gray-800 mb-1">EIV staff roster (optional) {isCompany && <span className="ml-1 text-xs font-normal text-indigo-600">· company default</span>}</h3>
-          <p className="text-xs text-gray-500 mb-2">Leave empty to keep role-only language (no names), so you don’t regenerate when staff change. Add names only if you want a roster in the document.</p>
+          <h3 className="text-sm font-semibold text-slate-800 mb-1">EIV staff roster (optional) {isCompany && <span className="ml-1 text-xs font-normal text-indigo-600">· company default</span>}</h3>
+          <p className="text-xs text-slate-500 mb-2">Leave empty to keep role-only language (no names), so you don’t regenerate when staff change. Add names only if you want a roster in the document.</p>
           {!isCompany && !roster.length && (co.roster || []).length > 0 && (
             <p className="text-[11px] text-indigo-500 mb-2">Inheriting the company roster ({co.roster!.length} {co.roster!.length === 1 ? 'person' : 'people'}). Add someone here to override it for this property.</p>
           )}
           {roster.map((r, i) => (
             <div key={i} className="flex gap-2 mb-2">
-              <input value={r.name} onChange={(e: any) => updateRoster(i, { name: e.target.value })} placeholder="Name" className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm" />
-              <select value={r.role} onChange={(e: any) => updateRoster(i, { role: e.target.value })} className="border border-gray-300 rounded px-2 py-1 text-sm">
+              <input value={r.name} onChange={(e: any) => updateRoster(i, { name: e.target.value })} placeholder="Name" className="flex-1 border border-slate-300 rounded-lg px-2 py-1 text-sm" />
+              <select value={r.role} onChange={(e: any) => updateRoster(i, { role: e.target.value })} className="border border-slate-300 rounded-lg px-2 py-1 text-sm">
                 {EIV_ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
               </select>
-              <button onClick={() => removeRoster(i)} className="text-red-400 hover:text-red-600 text-xs px-1">✕</button>
+              <button onClick={() => removeRoster(i)} className="text-slate-300 hover:text-red-500 text-xs px-1">✕</button>
             </div>
           ))}
-          <button onClick={addRoster} className="text-xs text-blue-600 hover:underline">+ Add person</button>
+          <button onClick={addRoster} className="text-xs font-medium text-indigo-600 hover:text-indigo-800">+ Add person</button>
         </div>
       </div>
 
       {/* Custom items */}
-      <div className="bg-white rounded-lg shadow p-4">
-        <h3 className="text-sm font-bold text-gray-800 mb-1">{isCompany ? 'Company-wide items' : 'Property-specific items'}</h3>
-        <p className="text-xs text-gray-500 mb-2">{isCompany ? 'A clause added here is inserted into the chosen section for every company property.' : 'Add a clause that applies only to this property; it is inserted into the section you choose.'}</p>
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+        <h3 className="text-sm font-semibold text-slate-800 mb-1">{isCompany ? 'Company-wide items' : 'Property-specific items'}</h3>
+        <p className="text-xs text-slate-500 mb-2">{isCompany ? 'A clause added here is inserted into the chosen section for every company property.' : 'Add a clause that applies only to this property; it is inserted into the section you choose.'}</p>
         {!isCompany && (co.customItems || []).length > 0 && (
           <div className="mb-2 rounded border border-indigo-100 bg-indigo-50/50 p-2">
             <p className="text-[11px] font-medium text-indigo-600 mb-1">Company-wide items (edit under “Company default”):</p>
             {(co.customItems || []).filter((c: any) => c.text?.trim()).map((c: any) => (
-              <p key={c.id} className="text-xs text-gray-600">• <span className="text-gray-400">[{EIV_SECTIONS.find((s) => s.id === c.sectionId)?.title}]</span> {c.text}</p>
+              <p key={c.id} className="text-xs text-slate-600">• <span className="text-slate-400">[{EIV_SECTIONS.find((s) => s.id === c.sectionId)?.title}]</span> {c.text}</p>
             ))}
           </div>
         )}
         {curCustom.map((c) => (
           <div key={c.id} className="flex gap-2 mb-2 items-start">
-            <select value={c.sectionId} onChange={(e: any) => updateCustom(c.id, { sectionId: e.target.value })} className="border border-gray-300 rounded px-2 py-1 text-sm">
+            <select value={c.sectionId} onChange={(e: any) => updateCustom(c.id, { sectionId: e.target.value })} className="border border-slate-300 rounded-lg px-2 py-1 text-sm">
               {EIV_SECTIONS.filter((s) => s.id !== 'eiv_schedule').map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}
             </select>
-            <textarea value={c.text} onChange={(e: any) => updateCustom(c.id, { text: e.target.value })} rows={2} placeholder="Text to add…" className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm" />
-            <button onClick={() => removeCustom(c.id)} className="text-red-400 hover:text-red-600 text-xs px-1">✕</button>
+            <textarea value={c.text} onChange={(e: any) => updateCustom(c.id, { text: e.target.value })} rows={2} placeholder="Text to add…" className="flex-1 border border-slate-300 rounded-lg px-2 py-1 text-sm" />
+            <button onClick={() => removeCustom(c.id)} className="text-slate-300 hover:text-red-500 text-xs px-1">✕</button>
           </div>
         ))}
-        <button onClick={addCustom} className="text-xs text-blue-600 hover:underline">+ Add {isCompany ? 'company-wide' : 'property-specific'} item</button>
+        <button onClick={addCustom} className="text-xs font-medium text-indigo-600 hover:text-indigo-800">+ Add {isCompany ? 'company-wide' : 'property-specific'} item</button>
       </div>
 
       {/* Section overrides */}
-      <div className="bg-white rounded-lg shadow p-4">
-        <h3 className="text-sm font-bold text-gray-800 mb-1">Edit section wording (optional) {isCompany && <span className="ml-1 text-xs font-normal text-indigo-600">· company default</span>}</h3>
-        <p className="text-xs text-gray-500 mb-2">Every section uses the standard HUD wording by default. Override any section {isCompany ? 'for all company properties' : 'for this property only'}. {overriddenCount > 0 && <span className="text-blue-600">{overriddenCount} overridden here.</span>}</p>
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+        <h3 className="text-sm font-semibold text-slate-800 mb-1">Edit section wording (optional) {isCompany && <span className="ml-1 text-xs font-normal text-indigo-600">· company default</span>}</h3>
+        <p className="text-xs text-slate-500 mb-2">Every section uses the standard HUD wording by default. Override any section {isCompany ? 'for all company properties' : 'for this property only'}. {overriddenCount > 0 && <span className="text-indigo-600">{overriddenCount} overridden here.</span>}</p>
         <div className="flex flex-wrap gap-2">
           {EIV_SECTIONS.filter((s) => s.id !== 'eiv_schedule').map((s) => {
             const own = !!curOverrides[s.id]?.trim()
             const inheritedCo = !isCompany && !own && !!co.overrides?.[s.id]?.trim()
             return (
               <span key={s.id} className="inline-flex items-center gap-1">
-                <button onClick={() => openEdit(s.id)} className={`text-xs px-2 py-1 rounded border ${own ? 'bg-blue-50 border-blue-300 text-blue-700' : inheritedCo ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-white border-gray-300 text-gray-600 hover:border-blue-400'}`}>
+                <button onClick={() => openEdit(s.id)} className={`text-xs px-2.5 py-1 rounded-lg border ${own ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : inheritedCo ? 'bg-indigo-50/60 border-indigo-200 text-indigo-600' : 'bg-white border-slate-300 text-slate-600 hover:border-indigo-400'}`}>
                   {s.title}{own ? ' ✎' : inheritedCo ? ' (company)' : ''}
                 </button>
-                {own && <button onClick={() => clearOverride(s.id)} title="Reset to default" className="text-xs text-gray-400 hover:text-red-500">↺</button>}
+                {own && <button onClick={() => clearOverride(s.id)} title="Reset to default" className="text-xs text-slate-400 hover:text-red-500">↺</button>}
               </span>
             )
           })}
@@ -591,13 +592,13 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
 
       {editSection && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[85vh] flex flex-col">
-            <h3 className="text-lg font-bold mb-2">Edit: {EIV_SECTIONS.find((s) => s.id === editSection)?.title} {isCompany && <span className="text-sm font-normal text-indigo-600">(company default)</span>}</h3>
-            <p className="text-xs text-gray-500 mb-2">This replaces the section’s wording {isCompany ? 'for all company properties' : 'for this property only'}. Separate paragraphs with a blank line.</p>
-            <textarea value={overrideDraft} onChange={(e: any) => setOverrideDraft(e.target.value)} className="flex-1 min-h-[300px] border border-gray-300 rounded px-3 py-2 text-sm font-mono" />
+          <div className="bg-white rounded-2xl p-6 w-full max-w-2xl max-h-[85vh] flex flex-col shadow-xl">
+            <h3 className="text-lg font-semibold text-slate-800 mb-2">Edit: {EIV_SECTIONS.find((s) => s.id === editSection)?.title} {isCompany && <span className="text-sm font-normal text-indigo-600">(company default)</span>}</h3>
+            <p className="text-xs text-slate-500 mb-2">This replaces the section’s wording {isCompany ? 'for all company properties' : 'for this property only'}. Separate paragraphs with a blank line.</p>
+            <textarea value={overrideDraft} onChange={(e: any) => setOverrideDraft(e.target.value)} className="flex-1 min-h-[300px] border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none" />
             <div className="flex gap-3 justify-end mt-3">
-              <button onClick={() => setEditSection('')} className="px-4 py-2 text-sm text-gray-600">Cancel</button>
-              <button onClick={saveEdit} className="bg-blue-600 text-white px-4 py-2 rounded text-sm">Save override</button>
+              <Button variant="ghost" onClick={() => setEditSection('')}>Cancel</Button>
+              <Button variant="primary" onClick={saveEdit}>Save override</Button>
             </div>
           </div>
         </div>
@@ -609,8 +610,8 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
 function Info({ label, value }: any) {
   return (
     <div>
-      <label className="block text-xs text-gray-500 mb-1">{label}</label>
-      <p className="text-sm font-medium text-gray-800">{value}</p>
+      <label className="block text-xs text-slate-500 mb-1">{label}</label>
+      <p className="text-sm font-medium text-slate-800">{value}</p>
     </div>
   )
 }
