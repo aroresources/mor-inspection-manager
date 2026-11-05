@@ -4,7 +4,7 @@ import {
   DndContext, closestCenter, PointerSensor, TouchSensor, KeyboardSensor, useSensor, useSensors,
 } from '@dnd-kit/core'
 import {
-  SortableContext, verticalListSortingStrategy, useSortable, sortableKeyboardCoordinates, arrayMove,
+  SortableContext, verticalListSortingStrategy, rectSortingStrategy, useSortable, sortableKeyboardCoordinates, arrayMove,
 } from '@dnd-kit/sortable'
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers'
 import { CSS } from '@dnd-kit/utilities'
@@ -148,8 +148,8 @@ export function Drawer(
 // Pointer (desktop) + touch (long-press ~180ms, so taps/scroll still work).
 // ---------------------------------------------------------------------------
 export function SortableList(
-  { ids, onReorder, className = '', children }:
-  { ids: string[]; onReorder: (ids: string[]) => void; className?: string; children: React.ReactNode }
+  { ids, onReorder, grid = false, className = '', children }:
+  { ids: string[]; onReorder: (ids: string[]) => void; grid?: boolean; className?: string; children: React.ReactNode }
 ) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -160,7 +160,7 @@ export function SortableList(
     <DndContext
       sensors={sensors}
       collisionDetection={closestCenter}
-      modifiers={[restrictToVerticalAxis]}
+      modifiers={grid ? [] : [restrictToVerticalAxis]}
       onDragEnd={({ active, over }) => {
         if (!over || active.id === over.id) return
         const oldIndex = ids.indexOf(String(active.id))
@@ -169,7 +169,7 @@ export function SortableList(
         onReorder(arrayMove(ids, oldIndex, newIndex))
       }}
     >
-      <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+      <SortableContext items={ids} strategy={grid ? rectSortingStrategy : verticalListSortingStrategy}>
         <div className={className}>{children}</div>
       </SortableContext>
     </DndContext>

@@ -92,6 +92,7 @@ function DocumentsTab({ propertyId, morId }: any) {
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterAssignee, setFilterAssignee] = useState('all')
   const [showCrossedOff, setShowCrossedOff] = useState(false)
+  const [openDocId, setOpenDocId] = useState<string | null>(null)
 
   useEffect(() => {
     if (morId) fetchDocuments()
@@ -198,6 +199,19 @@ function DocumentsTab({ propertyId, morId }: any) {
     const { error: e1 } = await supabase.from('documents').update({ sort_order: updated[index].sort_order }).eq('id', updated[index].id)
     const { error: e2 } = await supabase.from('documents').update({ sort_order: updated[swapIndex].sort_order }).eq('id', updated[swapIndex].id)
     if (e1 || e2) toast('Error reordering documents: ' + (e1 || e2)!.message, 'error')
+  }
+
+  // Drag-to-reorder: persist the new full order (enabled only when unfiltered).
+  const reorderDocs = async (newIds: string[]) => {
+    const byId = new Map(documents.map((d: any) => [d.id, d]))
+    const reordered = newIds.map((id) => byId.get(id)).filter(Boolean)
+    const updated = reordered.map((d: any, i: number) => ({ ...d, sort_order: i }))
+    const prevById = new Map(documents.map((d: any) => [d.id, d]))
+    setDocuments(updated)
+    const changed = updated.filter((d: any) => prevById.get(d.id)?.sort_order !== d.sort_order)
+    const results = await Promise.all(changed.map((d: any) => supabase.from('documents').update({ sort_order: d.sort_order }).eq('id', d.id)))
+    const err = results.find((r: any) => r.error)
+    if (err?.error) toast('Error reordering documents: ' + err.error.message, 'error')
   }
 
   const addCustomDoc = async (e: any) => {
@@ -323,34 +337,87 @@ function DocumentsTab({ propertyId, morId }: any) {
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
+      <SortableList ids={indexedDocs.map((d: any) => d.id)} onReorder={reorderDocs} grid className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
         {indexedDocs.map((doc: any) => {
           const crossed = doc.is_required === false
+          const files = parseAttachmentUrls(doc.file_url)
+          const dragDisabled = filterStatus !== 'all' || filterAssignee !== 'all' || (!showCrossedOff && crossedOffCount > 0)
           return (
-          <Card key={doc.id} accent={docTone(doc.status || 'Not Started', crossed)}>
-            <CardBody className="flex items-start gap-2">
-              <div className="flex flex-col gap-0.5 mt-0.5 text-slate-300">
-                <button onClick={() => moveDoc(doc.globalIndex, -1)} className="hover:text-slate-600 text-xs leading-none">▲</button>
-                <button onClick={() => moveDoc(doc.globalIndex, 1)} className="hover:text-slate-600 text-xs leading-none">▼</button>
-              </div>
-              <input type="checkbox" checked={!crossed} onChange={(e: any) => updateDoc(doc.id, { is_required: e.target.checked })} title="Uncheck to cross this item off the list" className="mt-1 accent-indigo-600" />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-start justify-between gap-2">
-                  <span className={`text-sm font-medium leading-snug ${crossed ? 'text-slate-400 line-through' : 'text-slate-800'}`}>
-                    {doc.name}
-                    {doc.is_custom && <span className="ml-1.5 align-middle"><StatusBadge tone="purple">Custom</StatusBadge></span>}
-                  </span>
-                  <select value={doc.status || 'Not Started'} onChange={(e: any) => updateDoc(doc.id, { status: e.target.value })} className="shrink-0 border border-slate-300 rounded-lg px-1.5 py-1 text-xs font-medium text-slate-700 bg-white">
+          <SortableRow key={doc.id} id={doc.id} disabled={dragDisabled}>
+            {(h) => (
+            <Card accent={docTone(doc.status || 'Not Started', crossed)} onClick={() => setOpenDocId(doc.id)}>
+              <CardBody className="flex items-start gap-2.5">
+                <DragHandle {...h} className="mt-0.5" />
+                <input type="checkbox" onClick={(e: any) => e.stopPropagation()} checked={!crossed} onChange={(e: any) => updateDoc(doc.id, { is_required: e.target.checked })} title="Uncheck to cross this item off the list" className="mt-1 accent-indigo-600" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className={`text-sm font-medium leading-snug ${crossed ? 'text-slate-400 line-through' : 'text-slate-800'}`}>
+                      {doc.name}
+                      {doc.is_custom && <span className="ml-1.5 align-middle"><StatusBadge tone="purple">Custom</StatusBadge></span>}
+                    </span>
+                    <StatusBadge tone={docTone(doc.status || 'Not Started', crossed)}>{doc.status || 'Not Started'}</StatusBadge>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {doc.assigned_to && <MetaChip icon={<Icon name="user" size={13} />}>{doc.assigned_to}</MetaChip>}
+                    {doc.due_date && <MetaChip icon={<Icon name="calendar" size={13} />}>{formatDate(doc.due_date)}</MetaChip>}
+                    {files.length > 0 && <MetaChip icon={<Icon name="paperclip" size={13} />}>{files.length}</MetaChip>}
+                    {doc.notes && <MetaChip icon={<Icon name="message" size={13} />}>Note</MetaChip>}
+                  </div>
+                </div>
+              </CardBody>
+            </Card>
+            )}
+          </SortableRow>
+          )
+        })}
+      </SortableList>
+
+      {/* Binder item editor — opens in a side drawer when a card is clicked. */}
+      {(() => {
+        const doc = documents.find((d: any) => d.id === openDocId)
+        if (!doc) return null
+        const crossed = doc.is_required === false
+        const files = parseAttachmentUrls(doc.file_url)
+        return (
+          <Drawer
+            open={!!doc}
+            onClose={() => setOpenDocId(null)}
+            accent={docTone(doc.status || 'Not Started', crossed)}
+            title={doc.name}
+            subtitle={doc.status || 'Not Started'}
+            footer={<Button variant="primary" onClick={() => setOpenDocId(null)}>Done</Button>}
+          >
+            <div className="space-y-4">
+              <label className="flex items-center gap-2 text-sm text-slate-600">
+                <input type="checkbox" className="accent-indigo-600" checked={!crossed} onChange={(e: any) => updateDoc(doc.id, { is_required: e.target.checked })} />
+                Required for this MOR {crossed && <span className="text-slate-400">(crossed off)</span>}
+              </label>
+              <div>
+                <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Status</label>
+                <div className="mt-1">
+                  <select value={doc.status || 'Not Started'} onChange={(e: any) => updateDoc(doc.id, { status: e.target.value })} className="text-sm px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 font-medium">
                     {DOC_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
-                <div className="mt-2.5 grid grid-cols-2 gap-2">
-                  <input type="text" placeholder="Assigned to" value={doc.assigned_to || ''} onChange={(e: any) => updateDoc(doc.id, { assigned_to: e.target.value })} className="border border-slate-200 rounded-lg px-2 py-1.5 text-xs min-w-0 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none" />
-                  <input type="date" value={doc.due_date || ''} onChange={(e: any) => updateDoc(doc.id, { due_date: e.target.value })} className="border border-slate-200 rounded-lg px-2 py-1.5 text-xs min-w-0 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none" />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Assigned to</label>
+                  <input type="text" placeholder="Name" value={doc.assigned_to || ''} onChange={(e: any) => updateDoc(doc.id, { assigned_to: e.target.value })} className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none" />
                 </div>
-                <input type="text" placeholder="Notes" value={doc.notes || ''} onChange={(e: any) => updateDoc(doc.id, { notes: e.target.value })} className="mt-2 w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none" />
-                <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                  {parseAttachmentUrls(doc.file_url).map((url: string, i: number) => (
+                <div>
+                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Due date</label>
+                  <input type="date" value={doc.due_date || ''} onChange={(e: any) => updateDoc(doc.id, { due_date: e.target.value })} className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none" />
+                </div>
+              </div>
+              <div>
+                <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Notes</label>
+                <input type="text" placeholder="Notes" value={doc.notes || ''} onChange={(e: any) => updateDoc(doc.id, { notes: e.target.value })} className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none" />
+              </div>
+              <div>
+                <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Files</label>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {files.map((url: string, i: number) => (
                     <span key={i} className="inline-flex items-center gap-1.5 bg-slate-50 rounded-md pl-2.5 pr-1.5 py-1">
                       <button onClick={async () => { const err = await openStoredFile(url); if (err) toast(err, 'error') }} className="inline-flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800"><Icon name="paperclip" size={14} />{attachmentFileName(url)}</button>
                       <button onClick={() => removeDocFile(doc, url)} className="text-slate-300 hover:text-red-500" title="Remove file"><Icon name="x" size={13} /></button>
@@ -362,11 +429,10 @@ function DocumentsTab({ propertyId, morId }: any) {
                   </label>
                 </div>
               </div>
-            </CardBody>
-          </Card>
-          )
-        })}
-      </div>
+            </div>
+          </Drawer>
+        )
+      })()}
 
       {showPacket && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
