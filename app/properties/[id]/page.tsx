@@ -1212,11 +1212,14 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
     if (e1 || e2) toast('Error reordering findings: ' + (e1 || e2)!.message, 'error')
   }
 
-  // Drag-to-reorder: persist the new full order (enabled only when unfiltered).
-  const reorderFindings = async (newIds: string[]) => {
+  // Drag-to-reorder. newVisibleIds is the new order of the CURRENTLY VISIBLE
+  // cards; any filtered-out findings keep their existing slots.
+  const reorderFindings = async (newVisibleIds: string[]) => {
     const byId = new Map(findings.map((f: any) => [f.id, f]))
-    const reordered = newIds.map((id) => byId.get(id)).filter(Boolean)
-    const updated = reordered.map((f: any, i: number) => ({ ...f, sort_order: i }))
+    const visibleSet = new Set(newVisibleIds)
+    let vi = 0
+    const result = findings.map((f: any) => (visibleSet.has(f.id) ? byId.get(newVisibleIds[vi++]) : f))
+    const updated = result.map((f: any, i: number) => ({ ...f, sort_order: i }))
     const prevById = new Map(findings.map((f: any) => [f.id, f]))
     setFindings(updated)
     const changed = updated.filter((f: any) => prevById.get(f.id)?.sort_order !== f.sort_order)
@@ -1936,9 +1939,8 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
             const index = findings.findIndex((f: any) => f.id === finding.id)
             const files = parseAttachmentUrls(finding.document_url)
             const preview = (finding.finding || '').replace(/\s+/g, ' ').trim()
-            const dragDisabled = statusFilter !== 'all'
             return (
-            <SortableRow key={finding.id} id={finding.id} disabled={dragDisabled}>
+            <SortableRow key={finding.id} id={finding.id}>
               {(h) => (
               <Card accent={findingTone(finding.status)} onClick={() => setOpenFindingId(finding.id)}>
                 <CardBody className="flex items-start gap-2.5">
