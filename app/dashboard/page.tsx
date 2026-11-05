@@ -6,6 +6,7 @@ import { supabase } from '../../lib/supabase'
 import { useToast } from '../components/ToastProvider'
 import { parseDate, formatDateObj } from '../../lib/dateUtils'
 import { deriveWorkflow, isDueStage } from '../../lib/morWorkflow'
+import { Card, CardBody, StatusBadge, MetaChip, Button, Icon } from '../components/ui'
 
 // Add `months` months to a UTC date without timezone drift, clamping the day to
 // the target month's length (e.g. Jan 31 + 1 month -> Feb 28, not Mar 3).
@@ -643,54 +644,42 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <nav className="bg-white shadow-sm px-4 sm:px-6 py-4 flex flex-wrap justify-between items-center gap-x-4 gap-y-2">
-        <h1 className="text-lg sm:text-xl font-bold text-gray-800">MOR Inspection Manager</h1>
-        <div className="flex items-center flex-wrap gap-x-4 gap-y-2">
+    <div className="min-h-screen bg-slate-100">
+      <nav className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3 flex flex-wrap justify-between items-center gap-x-4 gap-y-2 sticky top-0 z-30">
+        <div className="flex items-center gap-2.5">
+          <span className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-xs shadow-sm">MOR</span>
+          <h1 className="text-base sm:text-lg font-semibold text-slate-800">Inspection Manager</h1>
+        </div>
+        <div className="flex items-center flex-wrap gap-x-5 gap-y-2">
           {userRole === 'super_admin' && (
             <button
               onClick={testReminders}
               disabled={testingReminders}
-              className="text-sm text-gray-600 hover:text-gray-800 disabled:opacity-50"
+              className="text-sm text-slate-500 hover:text-slate-800 disabled:opacity-50 inline-flex items-center gap-1.5"
               title="Send deadline reminder emails to super admins now"
             >
-              {testingReminders ? 'Sending…' : '🔔 Test Reminders'}
+              <Icon name="bell" size={15} />{testingReminders ? 'Sending…' : 'Test reminders'}
             </button>
           )}
-          <button
-            onClick={() => router.push('/templates')}
-            className="text-sm text-gray-600 hover:text-gray-800"
-          >
-            Templates
-          </button>
-          <button
-            onClick={() => router.push('/users')}
-            className="text-sm text-gray-600 hover:text-gray-800"
-          >
-            Team Members
-          </button>
+          <button onClick={() => router.push('/templates')} className="text-sm text-slate-500 hover:text-slate-800">Templates</button>
+          <button onClick={() => router.push('/users')} className="text-sm text-slate-500 hover:text-slate-800">Team members</button>
           <button
             onClick={async () => { await supabase.auth.signOut(); window.location.href = '/' }}
-            className="text-sm text-gray-500 hover:text-gray-700"
+            className="text-sm text-slate-400 hover:text-slate-700"
           >
-            Sign Out
+            Sign out
           </button>
           </div>
         </nav>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
-          <h2 className="text-2xl font-bold text-gray-800">Properties</h2>
-          <div className="flex flex-wrap gap-2 sm:gap-3">
+          <h2 className="text-2xl font-semibold text-slate-800">Properties</h2>
+          <div className="flex flex-wrap gap-2">
             {/* Creating companies/properties is super_admin only. */}
             {userRole === 'super_admin' && (
               <>
-                <button
-                  onClick={() => setShowAddCompany(true)}
-                  className="bg-gray-600 text-white px-4 py-2 rounded font-medium hover:bg-gray-700 text-sm"
-                >
-                  + Add Company
-                </button>
+                <Button variant="neutral" onClick={() => setShowAddCompany(true)}><Icon name="plus" /> Add company</Button>
                 <input
                   ref={importInputRef}
                   type="file"
@@ -698,27 +687,12 @@ export default function Dashboard() {
                   className="hidden"
                   onChange={handleImportFile}
                 />
-                <button
-                  onClick={() => importInputRef.current?.click()}
-                  className="bg-green-600 text-white px-4 py-2 rounded font-medium hover:bg-green-700 text-sm"
-                >
-                  ⬆ Import Properties
-                </button>
+                <Button variant="neutral" onClick={() => importInputRef.current?.click()}><Icon name="upload" /> Import</Button>
               </>
             )}
-            <button
-              onClick={exportToExcel}
-              className="bg-indigo-600 text-white px-4 py-2 rounded font-medium hover:bg-indigo-700 text-sm"
-            >
-              ⬇ Export
-            </button>
+            <Button variant="neutral" onClick={exportToExcel}><Icon name="download" /> Export</Button>
             {userRole === 'super_admin' && (
-              <button
-                onClick={() => setShowAddProperty(true)}
-                className="bg-blue-600 text-white px-4 py-2 rounded font-medium hover:bg-blue-700 text-sm"
-              >
-                + Add Property
-              </button>
+              <Button variant="primary" onClick={() => setShowAddProperty(true)}><Icon name="plus" /> Add property</Button>
             )}
           </div>
         </div>
@@ -734,9 +708,9 @@ export default function Dashboard() {
           <select
             value={filterCompany}
             onChange={(e: any) => { setFilterCompany(e.target.value); setEditingCompany(false) }}
-            className="border border-gray-300 rounded px-3 py-2 text-sm"
+            className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white"
           >
-            <option value="all">All Companies</option>
+            <option value="all">All companies</option>
             {visibleCompanies.map((c: any) => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
@@ -748,11 +722,11 @@ export default function Dashboard() {
                   type="text"
                   value={editCompanyName}
                   onChange={(e: any) => setEditCompanyName(e.target.value)}
-                  className="border border-gray-300 rounded px-3 py-2 text-sm"
+                  className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none"
                   placeholder="Company name"
                 />
-                <button onClick={saveCompanyName} className="bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700">Save</button>
-                <button onClick={() => setEditingCompany(false)} className="text-gray-500 hover:text-gray-700 text-sm">Cancel</button>
+                <Button variant="primary" size="sm" onClick={saveCompanyName}>Save</Button>
+                <button onClick={() => setEditingCompany(false)} className="text-slate-500 hover:text-slate-700 text-sm">Cancel</button>
               </div>
             ) : (
               <>
@@ -762,15 +736,15 @@ export default function Dashboard() {
                     setEditCompanyName(company?.name || '')
                     setEditingCompany(true)
                   }}
-                  className="text-blue-500 hover:text-blue-700 text-sm"
+                  className="text-indigo-600 hover:text-indigo-800 text-sm inline-flex items-center gap-1"
                 >
-                  ✏️ Edit Company Name
+                  <Icon name="edit" size={14} /> Edit name
                 </button>
                 <button
                   onClick={openDeleteCompany}
-                  className="text-red-400 hover:text-red-600 text-sm"
+                  className="text-slate-400 hover:text-red-500 text-sm inline-flex items-center gap-1"
                 >
-                  🗑️ Delete Company
+                  <Icon name="trash" size={14} /> Delete company
                 </button>
               </>
             )
@@ -808,19 +782,22 @@ export default function Dashboard() {
         {/* Search */}
         {!noAccessMessage && (
           <div className="mb-4">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e: any) => setSearchQuery(e.target.value)}
-              placeholder="Search properties by name or address..."
-              className="w-full sm:w-96 border border-gray-300 rounded px-3 py-2 text-sm"
-            />
+            <div className="relative w-full sm:w-96">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"><Icon name="search" size={16} /></span>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e: any) => setSearchQuery(e.target.value)}
+                placeholder="Search properties by name or address…"
+                className="w-full border border-slate-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none"
+              />
+            </div>
           </div>
         )}
 
         {/* Sort Controls */}
         <div className="mb-4 flex items-center gap-2 flex-wrap">
-          <span className="text-xs text-gray-500 font-medium">Sort by:</span>
+          <span className="text-xs text-slate-500 font-medium">Sort by:</span>
           {[
             { key: 'name', label: 'Property Name' },
             { key: 'company', label: 'Company' },
@@ -830,28 +807,28 @@ export default function Dashboard() {
             <button
               key={key}
               onClick={() => { if (sortBy === key) setSortAsc(!sortAsc); else { setSortBy(key); setSortAsc(true) } }}
-              className={`text-xs px-3 py-1 rounded border transition ${
+              className={`text-xs px-3 py-1 rounded-full border transition ${
                 sortBy === key
-                  ? 'bg-blue-600 text-white border-blue-600'
-                  : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
+                  ? 'bg-indigo-600 text-white border-indigo-600'
+                  : 'bg-white text-slate-600 border-slate-300 hover:border-indigo-400'
               }`}
             >
               {label}{sortBy === key ? (sortAsc ? ' ↑' : ' ↓') : ''}
             </button>
           ))}
 
-          <div className="ml-auto flex items-center border border-gray-300 rounded overflow-hidden">
+          <div className="ml-auto flex items-center border border-slate-300 rounded-lg overflow-hidden">
             <button
               onClick={() => changeViewMode('list')}
               title="List view"
-              className={`px-2 py-1 ${viewMode === 'list' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+              className={`px-2.5 py-1.5 ${viewMode === 'list' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="2" width="14" height="2" rx="1" /><rect x="1" y="7" width="14" height="2" rx="1" /><rect x="1" y="12" width="14" height="2" rx="1" /></svg>
             </button>
             <button
               onClick={() => changeViewMode('grid')}
               title="Grid view"
-              className={`px-2 py-1 ${viewMode === 'grid' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+              className={`px-2.5 py-1.5 ${viewMode === 'grid' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1" /><rect x="9" y="1" width="6" height="6" rx="1" /><rect x="1" y="9" width="6" height="6" rx="1" /><rect x="9" y="9" width="6" height="6" rx="1" /></svg>
             </button>
@@ -860,14 +837,14 @@ export default function Dashboard() {
 
         {/* Properties List */}
         {filtered.length === 0 ? (
-          <div className="bg-white rounded-lg shadow p-6 text-center text-gray-500">
-            No properties yet. Click "+ Add Property" to get started.
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8 text-center text-slate-500">
+            No properties yet. Click “Add property” to get started.
           </div>
         ) : viewMode === 'list' ? (
-          <div className="bg-white rounded-lg shadow overflow-x-auto">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b">
-                <tr className="text-left text-xs text-gray-500">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr className="text-left text-xs text-slate-500">
                   {[
                     { key: 'name', label: 'Property Name' },
                     { key: 'company', label: 'Company' },
@@ -887,40 +864,40 @@ export default function Dashboard() {
                   {userRole === 'super_admin' && <th className="px-4 py-3 font-medium"></th>}
                 </tr>
               </thead>
-              <tbody className="divide-y">
+              <tbody className="divide-y divide-slate-100">
                 {filtered.map(property => {
                   const status = getMorStatus(property)
                   return (
-                    <tr key={property.id} className="hover:bg-gray-50">
+                    <tr key={property.id} className="hover:bg-slate-50/70">
                       <td className="px-4 py-3 align-top">
                         <button
                           onClick={() => router.push(`/properties/${property.id}`)}
-                          className="font-medium text-blue-600 hover:underline text-left"
+                          className="font-medium text-indigo-600 hover:text-indigo-800 hover:underline text-left"
                         >
                           {property.name}
                         </button>
-                        {property.address && <p className="text-xs text-gray-400">{property.address}</p>}
+                        {property.address && <p className="text-xs text-slate-400">{property.address}</p>}
                       </td>
-                      <td className="px-4 py-3 align-top text-gray-600">{property.companies?.name || '—'}</td>
+                      <td className="px-4 py-3 align-top text-slate-600">{property.companies?.name || '—'}</td>
                       <td className="px-4 py-3 align-top">
-                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded whitespace-nowrap">{property.contract_type || '—'}</span>
+                        <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded-md whitespace-nowrap">{property.contract_type || '—'}</span>
                       </td>
                       <td className="px-4 py-3 align-top">
                         {property.risk_classification
-                          ? <span className={`text-xs px-2 py-1 rounded whitespace-nowrap ${riskBadgeClasses(property.risk_classification)}`}>{property.risk_classification}</span>
-                          : <span className="text-gray-400">—</span>}
+                          ? <span className={`text-xs px-2 py-1 rounded-md whitespace-nowrap ${riskBadgeClasses(property.risk_classification)}`}>{property.risk_classification}</span>
+                          : <span className="text-slate-400">—</span>}
                       </td>
                       <td className="px-4 py-3 align-top">
                         {property.last_mor_rating
-                          ? <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded whitespace-nowrap">{property.last_mor_rating}</span>
-                          : <span className="text-gray-400">—</span>}
+                          ? <span className="text-xs bg-purple-50 text-purple-700 px-2 py-1 rounded-md whitespace-nowrap">{property.last_mor_rating}</span>
+                          : <span className="text-slate-400">—</span>}
                       </td>
                       <td className="px-4 py-3 align-top">
-                        <span className={`text-xs px-2 py-1 rounded whitespace-nowrap ${status.classes}`}>{status.label}</span>
+                        <span className={`text-xs px-2 py-1 rounded-md whitespace-nowrap ${status.classes}`}>{status.label}</span>
                       </td>
                       {userRole === 'super_admin' && (
                         <td className="px-4 py-3 align-top text-right">
-                          <button onClick={() => deleteProperty(property)} className="text-red-400 hover:text-red-600 text-xs" title="Delete property">🗑️</button>
+                          <button onClick={() => deleteProperty(property)} className="text-slate-300 hover:text-red-500" title="Delete property"><Icon name="trash" size={15} /></button>
                         </td>
                       )}
                     </tr>
@@ -930,61 +907,44 @@ export default function Dashboard() {
             </table>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filtered.map(property => (
-              <div
-              key={property.id}
-              className="bg-white rounded-lg shadow p-5 hover:shadow-md transition relative"
-            >
-              {userRole === 'super_admin' && (
-              <button
-                onClick={(e: any) => {
-                  e.stopPropagation()
-                  deleteProperty(property)
-                }}
-                className="absolute top-3 right-3 text-red-400 hover:text-red-600 text-xs"
-              >
-                🗑️
-              </button>
-              )}
-              <div onClick={() => router.push(`/properties/${property.id}`)} className="cursor-pointer">
-              <h3 className="font-bold text-gray-800">{property.name}</h3>
-              <p className="text-sm text-gray-500 mt-1">{property.companies?.name}</p>
-              <p className="text-sm text-gray-500">{property.address}</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-start">
+            {filtered.map(property => {
+              const status = getMorStatus(property)
+              const tone = status.classes.includes('red') ? 'red'
+                : status.classes.includes('orange') || status.classes.includes('yellow') ? 'amber'
+                : status.classes.includes('green') ? 'green'
+                : status.classes.includes('blue') ? 'blue' : 'slate'
+              return (
+              <Card key={property.id} accent={tone} onClick={() => router.push(`/properties/${property.id}`)}>
+                <CardBody className="relative">
+                  {userRole === 'super_admin' && (
+                    <button
+                      onClick={(e: any) => { e.stopPropagation(); deleteProperty(property) }}
+                      className="absolute top-0 right-0 text-slate-300 hover:text-red-500"
+                      title="Delete property"
+                    >
+                      <Icon name="trash" size={15} />
+                    </button>
+                  )}
+                  <h3 className="font-semibold text-slate-800 pr-6">{property.name}</h3>
+                  <p className="text-sm text-slate-500 mt-0.5">{property.companies?.name}</p>
+                  {property.address && <p className="text-sm text-slate-400">{property.address}</p>}
 
-
-              <div className="mt-3 flex flex-wrap gap-2">
-                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
-                  {property.contract_type || 'No contract type'}
-                </span>
-                {property.risk_classification && (
-                  <span className={`text-xs px-2 py-1 rounded ${
-                    property.risk_classification === 'Troubled' ? 'bg-red-100 text-red-700' :
-                    property.risk_classification === 'Potentially Troubled' ? 'bg-yellow-100 text-yellow-700' :
-                    property.risk_classification === 'Unknown' ? 'bg-gray-100 text-gray-700' :
-                    'bg-green-100 text-green-700'
-                  }`}>
-                    {property.risk_classification}
-                  </span>
-                )}
-                {property.last_mor_rating && (
-                  <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
-                    {property.last_mor_rating}
-                  </span>
-                )}
-              </div>
-
-              {(() => {
-                const status = getMorStatus(property)
-                return (
-                  <div className={`mt-3 text-xs px-2 py-1 rounded ${status.classes}`}>
-                    {status.label}
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded-md">{property.contract_type || 'No contract type'}</span>
+                    {property.risk_classification && (
+                      <span className={`text-xs px-2 py-1 rounded-md ${riskBadgeClasses(property.risk_classification)}`}>{property.risk_classification}</span>
+                    )}
+                    {property.last_mor_rating && (
+                      <span className="text-xs bg-purple-50 text-purple-700 px-2 py-1 rounded-md">{property.last_mor_rating}</span>
+                    )}
                   </div>
-                )
-              })()}
-            </div>
-            </div>
-            ))}
+
+                  <div className={`mt-3 inline-block text-xs px-2 py-1 rounded-md ${status.classes}`}>{status.label}</div>
+                </CardBody>
+              </Card>
+              )
+            })}
           </div>
         )}
 
@@ -1027,20 +987,10 @@ export default function Dashboard() {
                 </table>
               </div>
               <div className="flex gap-3 justify-end mt-4">
-                <button
-                  onClick={() => { setShowImportPreview(false); setImportRows([]) }}
-                  disabled={importing}
-                  className="px-4 py-2 text-sm text-gray-600 border rounded hover:bg-gray-50 disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={confirmImport}
-                  disabled={importing}
-                  className="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700 disabled:opacity-50"
-                >
-                  {importing ? 'Importing...' : `Import ${importRows.length} ${importRows.length === 1 ? 'Property' : 'Properties'}`}
-                </button>
+                <Button variant="ghost" onClick={() => { setShowImportPreview(false); setImportRows([]) }} disabled={importing}>Cancel</Button>
+                <Button variant="primary" onClick={confirmImport} disabled={importing}>
+                  {importing ? 'Importing…' : `Import ${importRows.length} ${importRows.length === 1 ? 'property' : 'properties'}`}
+                </Button>
               </div>
             </div>
           </div>
@@ -1090,8 +1040,8 @@ export default function Dashboard() {
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm mb-4"
               />
               <div className="flex gap-3 justify-end">
-                <button onClick={() => setShowAddCompany(false)} className="px-4 py-2 text-sm text-gray-600">Cancel</button>
-                <button onClick={addCompany} className="bg-blue-600 text-white px-4 py-2 rounded text-sm">Add Company</button>
+                <Button variant="ghost" onClick={() => setShowAddCompany(false)}>Cancel</Button>
+                <Button variant="primary" onClick={addCompany}>Add company</Button>
               </div>
             </div>
           </div>
@@ -1139,8 +1089,8 @@ export default function Dashboard() {
                 </select>
               </div>
               <div className="flex gap-3 justify-end mt-4">
-                <button onClick={() => setShowAddProperty(false)} className="px-4 py-2 text-sm text-gray-600">Cancel</button>
-                <button onClick={addProperty} className="bg-blue-600 text-white px-4 py-2 rounded text-sm">Add Property</button>
+                <Button variant="ghost" onClick={() => setShowAddProperty(false)}>Cancel</Button>
+                <Button variant="primary" onClick={addProperty}>Add property</Button>
               </div>
             </div>
           </div>
