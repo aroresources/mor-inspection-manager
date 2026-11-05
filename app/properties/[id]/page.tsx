@@ -497,6 +497,7 @@ function TasksTab({ propertyId, morId }: any) {
   const [tasks, setTasks] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [addModal, setAddModal] = useState<any>(null) // { category, title, description, addToTemplate, newCategory }
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchTasks()
@@ -627,6 +628,26 @@ function TasksTab({ propertyId, morId }: any) {
     toast('Item added.', 'success')
   }
 
+  // Drag-to-reorder within a category; persists the full sort_order.
+  const reorderTasks = async (category: string, newIds: string[]) => {
+    const sortedNow = sortTasks(tasks)
+    const cats: string[] = []
+    for (const t of sortedNow) { const c = t.category || 'Other'; if (!cats.includes(c)) cats.push(c) }
+    const byId = new Map(tasks.map((t: any) => [t.id, t]))
+    const flat: any[] = []
+    for (const c of cats) {
+      if (c === category) { for (const id of newIds) { const t = byId.get(id); if (t) flat.push(t) } }
+      else { for (const t of sortedNow.filter((x: any) => (x.category || 'Other') === c)) flat.push(t) }
+    }
+    const prevById = new Map(tasks.map((t: any) => [t.id, t]))
+    const updated = flat.map((t: any, i: number) => ({ ...t, sort_order: i }))
+    setTasks(updated)
+    const changed = updated.filter((t: any) => prevById.get(t.id)?.sort_order !== t.sort_order)
+    const results = await Promise.all(changed.map((t: any) => supabase.from('tasks').update({ sort_order: t.sort_order }).eq('id', t.id)))
+    const err = results.find((r: any) => r.error)
+    if (err?.error) toast('Error reordering prep items: ' + err.error.message, 'error')
+  }
+
   const completed = tasks.filter((t: any) => t.completed).length
   const total = tasks.length
 
@@ -635,121 +656,163 @@ function TasksTab({ propertyId, morId }: any) {
   const categories: string[] = []
   for (const t of sorted) { const c = t.category || 'Other'; if (!categories.includes(c)) categories.push(c) }
 
-  if (loading) return <div className="bg-white rounded-lg shadow p-6 text-gray-500">Loading prep list...</div>
+  if (loading) return <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 text-slate-500">Loading prep list…</div>
 
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-lg shadow p-4">
-        <div className="flex flex-wrap justify-between items-center gap-2 mb-2">
-          <span className="text-sm font-medium text-gray-700">Progress: {completed} of {total} completed</span>
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+        <div className="flex flex-wrap justify-between items-center gap-2 mb-3">
+          <span className="text-sm font-medium text-slate-700">Progress: <span className="text-slate-900 font-semibold">{completed} of {total}</span> completed</span>
           <div className="flex gap-2 flex-wrap">
-            <button onClick={resetToTemplate} className="text-gray-600 border border-gray-300 px-3 py-1 rounded text-sm hover:bg-gray-50">↻ Reset to template</button>
-            <button onClick={() => setAddModal({ category: categories[0] || '', title: '', description: '', addToTemplate: false, newCategory: !categories.length })} className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700">+ Add Prep Item</button>
+            <Button variant="neutral" onClick={resetToTemplate}><Icon name="refresh" /> Reset to template</Button>
+            <Button variant="primary" onClick={() => setAddModal({ category: categories[0] || '', title: '', description: '', addToTemplate: false, newCategory: !categories.length })}><Icon name="plus" /> Add prep item</Button>
           </div>
         </div>
-        <div className="w-full bg-gray-200 rounded-full h-2">
-          <div className="bg-green-500 h-2 rounded-full transition-all" style={{ width: total > 0 ? `${(completed / total) * 100}%` : '0%' }} />
+        <div className="w-full bg-slate-100 rounded-full h-2">
+          <div className="bg-indigo-600 h-2 rounded-full transition-all" style={{ width: total > 0 ? `${(completed / total) * 100}%` : '0%' }} />
         </div>
       </div>
 
       {total === 0 ? (
-        <div className="bg-white rounded-lg shadow p-6 text-center text-gray-500 text-sm">No prep items yet. Click "+ Add Prep Item", or "Reset to template" to load the standard list.</div>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8 text-center text-slate-500 text-sm">No prep items yet. Click “Add prep item”, or “Reset to template” to load the standard list.</div>
       ) : categories.map((cat) => {
         const items = sorted.filter((t: any) => (t.category || 'Other') === cat)
         return (
           <div key={cat} className="space-y-3 pt-5">
-            <div className="flex items-center justify-between gap-2 border-b border-gray-300 pb-2">
-              <h3 className="text-xl font-bold text-gray-800">{cat}</h3>
+            <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-2">
+              <h3 className="text-lg font-semibold text-slate-800">{cat}</h3>
               <div className="flex gap-3">
-                <button onClick={() => setAddModal({ category: cat, title: '', description: '', addToTemplate: false, newCategory: false })} className="text-xs text-blue-600 hover:underline">+ Add item</button>
-                <button onClick={() => removeCategory(cat)} className="text-xs text-red-400 hover:text-red-600">Remove category</button>
+                <button onClick={() => setAddModal({ category: cat, title: '', description: '', addToTemplate: false, newCategory: false })} className="text-xs font-medium text-indigo-600 hover:text-indigo-800">+ Add item</button>
+                <button onClick={() => removeCategory(cat)} className="text-xs text-slate-400 hover:text-red-500">Remove category</button>
               </div>
             </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
-              {items.map((task: any) => (
-                <div key={task.id} className={`bg-white rounded-lg border border-gray-300 border-l-4 ${task.completed ? 'border-l-green-500' : 'border-l-gray-400'} shadow-sm p-3`}>
-                  <div className="flex items-start gap-2">
-                    <input type="checkbox" checked={task.completed} onChange={(e: any) => updateTask(task.id, { completed: e.target.checked })} className="mt-1" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <span className={`text-sm font-medium leading-snug ${task.completed ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+            <SortableList ids={items.map((t: any) => t.id)} onReorder={(ids) => reorderTasks(cat, ids)} grid className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
+              {items.map((task: any) => {
+                const files = parseAttachmentUrls(task.document_url)
+                return (
+                <SortableRow key={task.id} id={task.id}>
+                  {(h) => (
+                  <Card accent={task.completed ? 'green' : 'slate'} onClick={() => setOpenTaskId(task.id)}>
+                    <CardBody className="flex items-start gap-2.5">
+                      <DragHandle {...h} className="mt-0.5" />
+                      <input type="checkbox" onClick={(e: any) => e.stopPropagation()} checked={task.completed} onChange={(e: any) => updateTask(task.id, { completed: e.target.checked })} className="mt-1 accent-indigo-600" />
+                      <div className="flex-1 min-w-0">
+                        <span className={`text-sm font-medium leading-snug ${task.completed ? 'line-through text-slate-400' : 'text-slate-800'}`}>
                           {task.title}
-                          {task.is_custom && <span className="ml-1 text-xs bg-purple-100 text-purple-700 px-1 rounded">Custom</span>}
+                          {task.is_custom && <span className="ml-1.5 align-middle"><StatusBadge tone="purple">Custom</StatusBadge></span>}
                         </span>
-                        <button onClick={() => removeTask(task.id)} className="shrink-0 text-red-400 hover:text-red-600 text-xs" title="Remove item">✕</button>
+                        {task.description && <p className="mt-1 text-xs text-slate-500 line-clamp-2">{task.description}</p>}
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          {task.assigned_to && <MetaChip icon={<Icon name="user" size={13} />}>{task.assigned_to}</MetaChip>}
+                          {task.due_date && <MetaChip icon={<Icon name="calendar" size={13} />}>{formatDate(task.due_date)}</MetaChip>}
+                          {files.length > 0 && <MetaChip icon={<Icon name="paperclip" size={13} />}>{files.length}</MetaChip>}
+                          {task.notes && <MetaChip icon={<Icon name="message" size={13} />}>Note</MetaChip>}
+                        </div>
                       </div>
-                      <textarea
-                        key={task.id + '-desc'}
-                        defaultValue={task.description || ''}
-                        onBlur={(e: any) => { if (e.target.value !== (task.description || '')) updateTask(task.id, { description: e.target.value || null }) }}
-                        rows={2}
-                        placeholder="Description / instructions…"
-                        className="w-full mt-2 border border-gray-200 rounded px-2 py-1 text-xs"
-                      />
-                      <div className="mt-2 grid grid-cols-2 gap-2">
-                        <input type="text" placeholder="Assigned to" value={task.assigned_to || ''} onChange={(e: any) => updateTask(task.id, { assigned_to: e.target.value })} className="border border-gray-200 rounded px-2 py-1 text-xs min-w-0" />
-                        <input type="date" value={task.due_date || ''} onChange={(e: any) => updateTask(task.id, { due_date: e.target.value })} className="border border-gray-200 rounded px-2 py-1 text-xs min-w-0" />
-                      </div>
-                      <input
-                        type="text"
-                        key={task.id + '-notes'}
-                        defaultValue={task.notes || ''}
-                        onBlur={(e: any) => { if (e.target.value !== (task.notes || '')) updateTask(task.id, { notes: e.target.value || null }) }}
-                        placeholder="Notes"
-                        className="w-full mt-2 border border-gray-200 rounded px-2 py-1 text-xs"
-                      />
-                      <div className="mt-2 flex flex-wrap items-center gap-3">
-                        {parseAttachmentUrls(task.document_url).map((url: string, i: number) => (
-                          <span key={i} className="flex items-center gap-1">
-                            <button onClick={async () => { const err = await openStoredFile(url); if (err) toast(err, 'error') }} className="text-xs text-blue-600 hover:underline">📎 {attachmentFileName(url)}</button>
-                            <button onClick={() => removeTaskFile(task, url)} className="text-xs text-red-400 hover:text-red-600" title="Remove file">✕</button>
-                          </span>
-                        ))}
-                        <label className="cursor-pointer text-xs text-blue-600 hover:underline">
-                          📎 Upload Document(s)
-                          <input type="file" multiple className="hidden" onChange={async (e: any) => { await uploadTaskFiles(task, e.target.files); e.target.value = '' }} />
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                    </CardBody>
+                  </Card>
+                  )}
+                </SortableRow>
+                )
+              })}
+            </SortableList>
           </div>
         )
       })}
 
+      {/* Prep item editor — opens in a side drawer when a card is clicked. */}
+      {(() => {
+        const task = tasks.find((t: any) => t.id === openTaskId)
+        if (!task) return null
+        const files = parseAttachmentUrls(task.document_url)
+        return (
+          <Drawer
+            open={!!task}
+            onClose={() => setOpenTaskId(null)}
+            accent={task.completed ? 'green' : 'slate'}
+            title={task.title}
+            subtitle={task.category || 'Other'}
+            footer={
+              <>
+                <Button variant="danger" onClick={() => { removeTask(task.id); setOpenTaskId(null) }}><Icon name="trash" /> Remove</Button>
+                <Button variant="primary" onClick={() => setOpenTaskId(null)}>Done</Button>
+              </>
+            }
+          >
+            <div className="space-y-4">
+              <label className="flex items-center gap-2 text-sm text-slate-600">
+                <input type="checkbox" className="accent-indigo-600" checked={task.completed} onChange={(e: any) => updateTask(task.id, { completed: e.target.checked })} />
+                Completed
+              </label>
+              <div>
+                <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Description / instructions</label>
+                <textarea key={task.id + '-desc'} defaultValue={task.description || ''} onBlur={(e: any) => { if (e.target.value !== (task.description || '')) updateTask(task.id, { description: e.target.value || null }) }} rows={3} placeholder="Description / instructions…" className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none" />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Assigned to</label>
+                  <input type="text" placeholder="Name" value={task.assigned_to || ''} onChange={(e: any) => updateTask(task.id, { assigned_to: e.target.value })} className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none" />
+                </div>
+                <div>
+                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Due date</label>
+                  <input type="date" value={task.due_date || ''} onChange={(e: any) => updateTask(task.id, { due_date: e.target.value })} className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none" />
+                </div>
+              </div>
+              <div>
+                <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Notes</label>
+                <input type="text" key={task.id + '-notes'} defaultValue={task.notes || ''} onBlur={(e: any) => { if (e.target.value !== (task.notes || '')) updateTask(task.id, { notes: e.target.value || null }) }} placeholder="Notes" className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none" />
+              </div>
+              <div>
+                <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Documents</label>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {files.map((url: string, i: number) => (
+                    <span key={i} className="inline-flex items-center gap-1.5 bg-slate-50 rounded-md pl-2.5 pr-1.5 py-1">
+                      <button onClick={async () => { const err = await openStoredFile(url); if (err) toast(err, 'error') }} className="inline-flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800"><Icon name="paperclip" size={14} />{attachmentFileName(url)}</button>
+                      <button onClick={() => removeTaskFile(task, url)} className="text-slate-300 hover:text-red-500" title="Remove file"><Icon name="x" size={13} /></button>
+                    </span>
+                  ))}
+                  <label className="cursor-pointer inline-flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-800 border border-dashed border-slate-300 hover:border-indigo-400 rounded-md px-2.5 py-1">
+                    <Icon name="upload" size={14} /> Upload document(s)
+                    <input type="file" multiple className="hidden" onChange={async (e: any) => { await uploadTaskFiles(task, e.target.files); e.target.value = '' }} />
+                  </label>
+                </div>
+              </div>
+            </div>
+          </Drawer>
+        )
+      })()}
+
       {addModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-bold mb-4">Add Prep Item</h3>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
+            <h3 className="text-lg font-semibold text-slate-800 mb-4">Add prep item</h3>
             <div className="space-y-3">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Category</label>
+                <label className="block text-xs text-slate-500 mb-1">Category</label>
                 {addModal.newCategory ? (
                   <div className="flex gap-2">
-                    <input type="text" autoFocus placeholder="New category name" value={addModal.category} onChange={(e: any) => setAddModal({ ...addModal, category: e.target.value })} className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm" />
-                    {categories.length > 0 && <button onClick={() => setAddModal({ ...addModal, newCategory: false, category: categories[0] })} className="text-xs text-gray-500 px-2">Pick existing</button>}
+                    <input type="text" autoFocus placeholder="New category name" value={addModal.category} onChange={(e: any) => setAddModal({ ...addModal, category: e.target.value })} className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none" />
+                    {categories.length > 0 && <button onClick={() => setAddModal({ ...addModal, newCategory: false, category: categories[0] })} className="text-xs text-slate-500 px-2">Pick existing</button>}
                   </div>
                 ) : (
                   <div className="flex gap-2">
-                    <select value={addModal.category} onChange={(e: any) => setAddModal({ ...addModal, category: e.target.value })} className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm">
+                    <select value={addModal.category} onChange={(e: any) => setAddModal({ ...addModal, category: e.target.value })} className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm">
                       {categories.map((c) => <option key={c} value={c}>{c}</option>)}
                     </select>
-                    <button onClick={() => setAddModal({ ...addModal, newCategory: true, category: '' })} className="text-xs text-blue-600 px-2">+ New</button>
+                    <button onClick={() => setAddModal({ ...addModal, newCategory: true, category: '' })} className="text-xs text-indigo-600 px-2">+ New</button>
                   </div>
                 )}
               </div>
-              <input type="text" placeholder="Item name *" value={addModal.title} onChange={(e: any) => setAddModal({ ...addModal, title: e.target.value })} className="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
-              <textarea placeholder="Description (optional)" value={addModal.description} onChange={(e: any) => setAddModal({ ...addModal, description: e.target.value })} rows={2} className="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
-              <label className="flex items-center gap-2 text-sm text-gray-600">
-                <input type="checkbox" checked={addModal.addToTemplate} onChange={(e: any) => setAddModal({ ...addModal, addToTemplate: e.target.checked })} />
+              <input type="text" placeholder="Item name *" value={addModal.title} onChange={(e: any) => setAddModal({ ...addModal, title: e.target.value })} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none" />
+              <textarea placeholder="Description (optional)" value={addModal.description} onChange={(e: any) => setAddModal({ ...addModal, description: e.target.value })} rows={2} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none" />
+              <label className="flex items-center gap-2 text-sm text-slate-600">
+                <input type="checkbox" className="accent-indigo-600" checked={addModal.addToTemplate} onChange={(e: any) => setAddModal({ ...addModal, addToTemplate: e.target.checked })} />
                 Save to template (include on every new MOR)
               </label>
             </div>
             <div className="flex gap-3 justify-end mt-4">
-              <button onClick={() => setAddModal(null)} className="px-4 py-2 text-sm text-gray-600">Cancel</button>
-              <button onClick={saveAddModal} className="bg-blue-600 text-white px-4 py-2 rounded text-sm">Add Item</button>
+              <Button variant="ghost" onClick={() => setAddModal(null)}>Cancel</Button>
+              <Button variant="primary" onClick={saveAddModal}>Add item</Button>
             </div>
           </div>
         </div>
