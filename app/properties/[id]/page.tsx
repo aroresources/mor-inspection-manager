@@ -8,7 +8,7 @@ import { Document, Packer, Paragraph, TextRun, AlignmentType, BorderStyle } from
 import { useToast } from '../../components/ToastProvider'
 import PreventiveMaintenanceTab from './PreventiveMaintenanceTab'
 import PropertyDocumentsTab from './PropertyDocumentsTab'
-import { Card, CardBody, StatusBadge, MetaChip, Button, SectionCard, Icon, type Tone } from '../../components/ui'
+import { Card, CardBody, StatusBadge, MetaChip, Button, SectionCard, Drawer, Icon, type Tone } from '../../components/ui'
 import { parseDate, formatDate } from '../../../lib/dateUtils'
 import {
   MorEvent, MorEventType, EVENT_LABELS, newEventId, synthesizeLog,
@@ -840,6 +840,7 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
   const [findings, setFindings] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('all')
+  const [openFindingId, setOpenFindingId] = useState<string | null>(null)
   const [selectedFindingIds, setSelectedFindingIds] = useState<string[]>([])
   const [bulkStatus, setBulkStatus] = useState('')
   const [showAddFinding, setShowAddFinding] = useState(false)
@@ -1786,60 +1787,32 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
       ) : visibleFindings.length === 0 ? (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8 text-center text-slate-500 text-sm">No findings with status &quot;{statusFilter}&quot;.</div>
       ) : (
-        <div className="space-y-5">
+        <div className="space-y-3">
           {visibleFindings.map((finding: any) => {
             const index = findings.findIndex((f: any) => f.id === finding.id)
+            const files = parseAttachmentUrls(finding.document_url)
+            const preview = (finding.finding || '').replace(/\s+/g, ' ').trim()
             return (
-            <Card key={finding.id} accent={findingTone(finding.status)}>
+            <Card key={finding.id} accent={findingTone(finding.status)} onClick={() => setOpenFindingId(finding.id)}>
               <CardBody className="flex items-start gap-3">
-                <div className="flex flex-col gap-1 mt-1 text-slate-300">
+                <input type="checkbox" onClick={(e: any) => e.stopPropagation()} checked={selectedFindingIds.includes(finding.id)} onChange={() => toggleSelectFinding(finding.id)} title="Select for bulk status change" className="mt-1 accent-indigo-600" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-semibold text-slate-800 whitespace-nowrap">Finding {index + 1}</span>
+                    <StatusBadge tone={findingTone(finding.status)}>{finding.status}</StatusBadge>
+                  </div>
+                  <p className="mt-1 text-sm text-slate-600 line-clamp-2">{preview || <span className="text-slate-400 italic">No description yet</span>}</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {finding.assigned_to && <MetaChip icon={<Icon name="user" size={13} />}>{finding.assigned_to}</MetaChip>}
+                    {finding.response ? <MetaChip icon={<Icon name="check" size={13} />}>Response drafted</MetaChip> : <MetaChip icon={<Icon name="alert" size={13} />}>No response</MetaChip>}
+                    {files.length > 0 && <MetaChip icon={<Icon name="paperclip" size={13} />}>{files.length}</MetaChip>}
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1 mt-0.5 text-slate-300" onClick={(e: any) => e.stopPropagation()}>
                   <button onClick={() => moveFindingTo(index, 'top')} title="Move to top" className="hover:text-slate-600 text-xs leading-none">⤒</button>
                   <button onClick={() => moveFinding(index, -1)} title="Move up" className="hover:text-slate-600 text-xs leading-none">▲</button>
                   <button onClick={() => moveFinding(index, 1)} title="Move down" className="hover:text-slate-600 text-xs leading-none">▼</button>
                   <button onClick={() => moveFindingTo(index, 'bottom')} title="Move to bottom" className="hover:text-slate-600 text-xs leading-none">⤓</button>
-                </div>
-                <div className="flex-1 min-w-0">
-              <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-100">
-                <div className="flex items-center gap-3">
-                  <input type="checkbox" checked={selectedFindingIds.includes(finding.id)} onChange={() => toggleSelectFinding(finding.id)} title="Select for bulk status change" className="accent-indigo-600" />
-                  {/* Positional number: always 1..N top to bottom, never travels with a reordered finding. */}
-                  <span className="text-sm font-semibold text-slate-800 whitespace-nowrap">Finding {index + 1}</span>
-                  <select value={finding.status} onChange={(e: any) => updateFinding(finding.id, { status: e.target.value })} className="text-xs px-2.5 py-1 rounded-lg border border-slate-300 bg-white text-slate-700 font-medium">
-                    {findingStatuses.map((s) => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                  <StatusBadge tone={findingTone(finding.status)}>{finding.status}</StatusBadge>
-                </div>
-                <button onClick={() => deleteFinding(finding.id)} title="Delete finding" className="text-slate-300 hover:text-red-500 transition"><Icon name="trash" /></button>
-              </div>
-              <div className="space-y-3">
-                <div>
-                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Finding</label>
-                  <FindingTextarea value={finding.finding} onSave={(v: string) => updateFinding(finding.id, { finding: v })} rows={12} className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm resize-y focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none" />
-                </div>
-                <div>
-                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Assigned To</label>
-                  <input type="text" value={finding.assigned_to || ''} onChange={(e: any) => updateFinding(finding.id, { assigned_to: e.target.value })} className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none" />
-                </div>
-                <div>
-                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Written Response</label>
-                  <DebouncedFindingTextarea value={finding.response || ''} onType={(v: string) => { pendingResponses.current[finding.id] = v }} onSave={(v: string) => updateFinding(finding.id, { response: v || null })} rows={3} placeholder="Type your response to this finding here..." className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none" />
-                </div>
-                <div>
-                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Supporting Documents</label>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    {parseAttachmentUrls(finding.document_url).map((url: string, i: number) => (
-                      <span key={i} className="inline-flex items-center gap-1.5 bg-slate-50 rounded-md pl-2.5 pr-1.5 py-1">
-                        <button onClick={async () => { const err = await openStoredFile(url); if (err) toast(err, 'error') }} className="inline-flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800"><Icon name="paperclip" size={14} />{attachmentFileName(url)}</button>
-                        <button onClick={() => removeFindingFile(finding, url)} className="text-slate-300 hover:text-red-500" title="Remove file"><Icon name="x" size={13} /></button>
-                      </span>
-                    ))}
-                    <label className="cursor-pointer inline-flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-800 border border-dashed border-slate-300 hover:border-indigo-400 rounded-md px-2.5 py-1">
-                      <Icon name="upload" size={14} /> Upload document(s)
-                      <input type="file" multiple className="hidden" onChange={async (e: any) => { await uploadFindingFiles(finding, e.target.files); e.target.value = '' }} />
-                    </label>
-                  </div>
-                </div>
-              </div>
                 </div>
               </CardBody>
             </Card>
@@ -1847,6 +1820,67 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
           })}
         </div>
       )}
+
+      {/* Finding editor — opens in a side drawer when a card is clicked. */}
+      {(() => {
+        const f = findings.find((x: any) => x.id === openFindingId)
+        if (!f) return null
+        const index = findings.findIndex((x: any) => x.id === f.id)
+        const files = parseAttachmentUrls(f.document_url)
+        return (
+          <Drawer
+            open={!!f}
+            onClose={() => setOpenFindingId(null)}
+            accent={findingTone(f.status)}
+            title={`Finding ${index + 1}`}
+            subtitle={f.status}
+            footer={
+              <>
+                <Button variant="danger" onClick={() => { deleteFinding(f.id); setOpenFindingId(null) }}><Icon name="trash" /> Delete</Button>
+                <Button variant="primary" onClick={() => setOpenFindingId(null)}>Done</Button>
+              </>
+            }
+          >
+            <div className="space-y-4">
+              <div>
+                <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Status</label>
+                <div className="mt-1">
+                  <select value={f.status} onChange={(e: any) => updateFinding(f.id, { status: e.target.value })} className="text-sm px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 font-medium">
+                    {findingStatuses.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Finding</label>
+                <FindingTextarea key={`fnd-${f.id}`} value={f.finding} onSave={(v: string) => updateFinding(f.id, { finding: v })} rows={10} className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm resize-y focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none" />
+              </div>
+              <div>
+                <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Assigned To</label>
+                <input type="text" value={f.assigned_to || ''} onChange={(e: any) => updateFinding(f.id, { assigned_to: e.target.value })} className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none" />
+              </div>
+              <div>
+                <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Written Response</label>
+                <DebouncedFindingTextarea key={`resp-${f.id}`} value={f.response || ''} onType={(v: string) => { pendingResponses.current[f.id] = v }} onSave={(v: string) => updateFinding(f.id, { response: v || null })} rows={4} placeholder="Type your response to this finding here..." className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none" />
+              </div>
+              <div>
+                <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Supporting Documents</label>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {files.map((url: string, i: number) => (
+                    <span key={i} className="inline-flex items-center gap-1.5 bg-slate-50 rounded-md pl-2.5 pr-1.5 py-1">
+                      <button onClick={async () => { const err = await openStoredFile(url); if (err) toast(err, 'error') }} className="inline-flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800"><Icon name="paperclip" size={14} />{attachmentFileName(url)}</button>
+                      <button onClick={() => removeFindingFile(f, url)} className="text-slate-300 hover:text-red-500" title="Remove file"><Icon name="x" size={13} /></button>
+                    </span>
+                  ))}
+                  <label className="cursor-pointer inline-flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-800 border border-dashed border-slate-300 hover:border-indigo-400 rounded-md px-2.5 py-1">
+                    <Icon name="upload" size={14} /> Upload document(s)
+                    <input type="file" multiple className="hidden" onChange={async (e: any) => { await uploadFindingFiles(f, e.target.files); e.target.value = '' }} />
+                  </label>
+                </div>
+              </div>
+            </div>
+          </Drawer>
+        )
+      })()}
 
       {showAddFinding && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">

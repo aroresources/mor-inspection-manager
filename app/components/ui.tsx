@@ -1,5 +1,5 @@
 'use client'
-import React from 'react'
+import React, { useEffect } from 'react'
 
 // ---------------------------------------------------------------------------
 // MOR design system — shared primitives.
@@ -101,6 +101,39 @@ export function SectionCard(
   )
 }
 
+// Right-side slide-in panel. Click-to-open card editors live here.
+export function Drawer(
+  { open, onClose, title, subtitle, accent, footer, children }:
+  { open: boolean; onClose: () => void; title?: React.ReactNode; subtitle?: React.ReactNode; accent?: Tone; footer?: React.ReactNode; children: React.ReactNode }
+) {
+  useEffect(() => {
+    if (!open) return
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', h)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { window.removeEventListener('keydown', h); document.body.style.overflow = prev }
+  }, [open, onClose])
+  if (!open) return null
+  return (
+    <div className="fixed inset-0 z-50">
+      <div className="absolute inset-0 bg-slate-900/40 animate-[fadein_.15s_ease-out]" onClick={onClose} />
+      <div className="absolute right-0 top-0 h-full w-full max-w-xl bg-white shadow-2xl flex flex-col animate-[slidein_.2s_ease-out]">
+        <div className="flex items-start gap-3 px-5 py-4 border-b border-slate-200">
+          {accent && <span className={`mt-1 w-2.5 h-2.5 rounded-full ${BAR[accent]}`} />}
+          <div className="flex-1 min-w-0">
+            {title && <h3 className="text-base font-semibold text-slate-800 truncate">{title}</h3>}
+            {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
+          </div>
+          <button onClick={onClose} aria-label="Close" className="text-slate-400 hover:text-slate-700 shrink-0"><Icon name="x" size={20} /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        {footer && <div className="border-t border-slate-200 px-5 py-3 flex items-center justify-end gap-2">{footer}</div>}
+      </div>
+    </div>
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Minimal inline-SVG icon set (stroke = currentColor), dependency-free.
 // ---------------------------------------------------------------------------
@@ -121,6 +154,8 @@ const PATHS: Record<string, React.ReactNode> = {
   chevron: <path d="M6 9l6 6 6-6" />,
   x: <path d="M6 6l12 12M18 6L6 18" />,
   flag: <path d="M5 21V4m0 0h11l-2 4 2 4H5" />,
+  user: <><circle cx="12" cy="8" r="3.5" /><path d="M5 20a7 7 0 0114 0" /></>,
+  grip: <><circle cx="9" cy="6" r="1" /><circle cx="9" cy="12" r="1" /><circle cx="9" cy="18" r="1" /><circle cx="15" cy="6" r="1" /><circle cx="15" cy="12" r="1" /><circle cx="15" cy="18" r="1" /></>,
   arrowRight: <path d="M5 12h14m0 0l-6-6m6 6l-6 6" />,
 }
 export function Icon({ name, className = '', size = 16 }: { name: string; className?: string; size?: number }) {
