@@ -26,7 +26,7 @@ const CATEGORIES = [
 ]
 
 const FREQ_TYPES = ['Annually', 'Quarterly', 'Monthly', 'Weekly', 'Daily', 'Move In', 'Move Out', 'Other']
-const MAINTAIN_ROLES = ['Property Manager', 'Super', 'Maintenance Technician', 'Porter', 'Other']
+const MAINTAIN_ROLES = ['Property Manager', 'Super', 'Maintenance Technician', 'Porter', 'Third Party', 'Other']
 const SCHEDULE_ROLES = ['State', 'City/Township', 'Property Manager', 'Super', 'Maintenance Technician', 'Porter', 'Third Party', 'Other']
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
@@ -381,7 +381,7 @@ function LocationEditor({ item, loc, index, onChange, onRemove, onAddLocation }:
         </Field>
 
         <Field label="4. Who performs the maintenance?">
-          <WhoEditor roles={MAINTAIN_ROLES} nameRoles={['Other']} value={loc.maintainBy} onChange={(v: any) => onChange({ maintainBy: v })} />
+          <WhoEditor roles={MAINTAIN_ROLES} nameRoles={['Third Party', 'Other']} value={loc.maintainBy} onChange={(v: any) => onChange({ maintainBy: v })} />
         </Field>
 
         <Field label="5. How often is this area inspected?">
