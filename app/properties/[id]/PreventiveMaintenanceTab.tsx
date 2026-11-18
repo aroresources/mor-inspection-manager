@@ -38,7 +38,8 @@ const uid = () => {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
-const newFreq = () => ({ id: uid(), type: 'Annually', months: [] as number[], dayOfMonth: '', weekday: '', weekdays: [] as string[], other: '' })
+const newFreq = () => ({ id: uid(), type: 'Annually', months: [] as number[], dayOfMonth: '', ordinal: '', weekday: '', weekdays: [] as string[], other: '' })
+const ordLabel = (o: string) => (o === 'last' ? 'last' : ({ '1': '1st', '2': '2nd', '3': '3rd', '4': '4th' } as any)[o] || o)
 const newLocation = () => ({
   id: uid(), location: '', maintenanceDesc: '',
   maintainFreqs: [] as any[], maintainBy: [] as any[],
@@ -50,7 +51,7 @@ const freqSummary = (f: any): string => {
   switch (f.type) {
     case 'Annually': return `Annually${f.months?.length ? ` (${f.months.map((m: number) => MONTHS[m - 1]).join(', ')})` : ''}`
     case 'Quarterly': return `Quarterly${f.months?.length ? ` (${f.months.map((m: number) => MONTHS[m - 1]).join(', ')})` : ''}`
-    case 'Monthly': return `Monthly${f.dayOfMonth ? ` (day ${f.dayOfMonth})` : ''}`
+    case 'Monthly': return f.ordinal && f.weekday ? `Monthly (${ordLabel(f.ordinal)} ${f.weekday})` : `Monthly${f.dayOfMonth ? ` (day ${f.dayOfMonth})` : ''}`
     case 'Weekly': return `Weekly${f.weekday ? ` (${f.weekday})` : ''}`
     case 'Daily': return `Daily${f.weekdays?.length ? ` (${f.weekdays.join(', ')})` : ''}`
     case 'Move In': return 'At move-in'
@@ -84,6 +85,12 @@ const daysInMonth = (y: number, m: number) => new Date(y, m, 0).getDate()
 const weekdayOf = (y: number, m: number, d: number) => WEEKDAYS[(new Date(y, m - 1, d).getDay() + 6) % 7]
 const weeksInMonth = (y: number, m: number) => Math.ceil(daysInMonth(y, m) / 7)
 const weekRange = (y: number, m: number, w: number): [number, number] => [(w - 1) * 7 + 1, Math.min(w * 7, daysInMonth(y, m))]
+// Is date d the Nth (or last) given weekday of the month? ordinal: '1'..'4' | 'last'.
+const isOrdinalWeekday = (y: number, m: number, d: number, ordinal: string, weekday: string): boolean => {
+  if (weekdayOf(y, m, d) !== weekday) return false
+  if (ordinal === 'last') return d + 7 > daysInMonth(y, m)
+  return Math.ceil(d / 7) === Number(ordinal)
+}
 // Is a task (by its frequencies) due on a specific calendar date?
 const dueOnDate = (freqs: any[], y: number, m: number, d: number): boolean => {
   const wd = weekdayOf(y, m, d)
@@ -91,7 +98,7 @@ const dueOnDate = (freqs: any[], y: number, m: number, d: number): boolean => {
     switch (f.type) {
       case 'Daily': return !(f.weekdays?.length) || f.weekdays.includes(wd)
       case 'Weekly': return f.weekday ? f.weekday === wd : wd === 'Mon'
-      case 'Monthly': return f.dayOfMonth ? Number(f.dayOfMonth) === d : d === 1
+      case 'Monthly': return f.ordinal && f.weekday ? isOrdinalWeekday(y, m, d, f.ordinal, f.weekday) : (f.dayOfMonth ? Number(f.dayOfMonth) === d : d === 1)
       case 'Quarterly':
       case 'Annually': return (f.months || []).includes(m) && d === 1
       default: return false
@@ -601,9 +608,31 @@ function FreqEditor({ value, onChange }: any) {
             </div>
           )}
           {f.type === 'Monthly' && (
-            <div className="mt-2 flex items-center gap-2">
-              <span className="text-xs text-gray-500">Day of month</span>
-              <input type="number" min={1} max={31} value={f.dayOfMonth} onChange={(e: any) => update(f.id, { dayOfMonth: e.target.value })} className="w-20 border border-gray-300 rounded px-2 py-1 text-sm" placeholder="1-31" />
+            <div className="mt-2 space-y-2">
+              <div className="inline-flex rounded-lg border border-gray-300 overflow-hidden text-xs">
+                <button type="button" onClick={() => update(f.id, { ordinal: '', weekday: '' })} className={`px-2.5 py-1 ${!f.ordinal ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Day of month</button>
+                <button type="button" onClick={() => update(f.id, { ordinal: f.ordinal || '1', weekday: f.weekday || 'Mon', dayOfMonth: '' })} className={`px-2.5 py-1 border-l border-gray-300 ${f.ordinal ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Day of week</button>
+              </div>
+              {!f.ordinal ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500">Day of month</span>
+                  <input type="number" min={1} max={31} value={f.dayOfMonth} onChange={(e: any) => update(f.id, { dayOfMonth: e.target.value })} className="w-20 border border-gray-300 rounded px-2 py-1 text-sm" placeholder="1-31" />
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <select value={f.ordinal} onChange={(e: any) => update(f.id, { ordinal: e.target.value })} className="border border-gray-300 rounded px-2 py-1 text-sm">
+                    <option value="1">1st</option>
+                    <option value="2">2nd</option>
+                    <option value="3">3rd</option>
+                    <option value="4">4th</option>
+                    <option value="last">Last</option>
+                  </select>
+                  <select value={f.weekday} onChange={(e: any) => update(f.id, { weekday: e.target.value })} className="border border-gray-300 rounded px-2 py-1 text-sm">
+                    {WEEKDAYS.map((d) => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                  <span className="text-xs text-gray-500">of the month</span>
+                </div>
+              )}
             </div>
           )}
           {f.type === 'Weekly' && (
