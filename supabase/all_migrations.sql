@@ -59,6 +59,10 @@ alter table task_templates add column if not exists document_url text;
 alter table mors           add column if not exists scheduling_email_notes text;
 alter table mors           add column if not exists scheduling_email_files jsonb;
 
+-- Source PDF(s) uploaded on the Findings tab to scan for findings, kept so
+-- they can be reopened (JSON array of storage URLs).
+alter table mors           add column if not exists findings_pdf_files jsonb;
+
 -- Property Documents (pilot: EIV P&P) — company defaults + per-property settings.
 -- (RLS policies for these tables are in supabase/property_documents.sql.)
 create table if not exists company_doc_settings (

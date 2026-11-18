@@ -1212,6 +1212,14 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
     if (e1 || e2) toast('Error reordering findings: ' + (e1 || e2)!.message, 'error')
   }
 
+  // Remove a saved scanned-report PDF from this MOR.
+  const removeFindingsPdf = async (url: string) => {
+    const next = parseAttachmentUrls(currentMor?.findings_pdf_files).filter((u: string) => u !== url)
+    const { error } = await supabase.from('mors').update({ findings_pdf_files: serializeAttachmentUrls(next) }).eq('id', morId)
+    if (error) { toast('Could not remove the report: ' + error.message, 'error'); return }
+    if (onUpdateMor) onUpdateMor()
+  }
+
   // Drag-to-reorder. newVisibleIds is the new order of the CURRENTLY VISIBLE
   // cards; any filtered-out findings keep their existing slots.
   const reorderFindings = async (newVisibleIds: string[]) => {
@@ -1343,6 +1351,21 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
         }
         reader.readAsDataURL(file)
       })
+
+      // Keep the uploaded report on the MOR so it can be reopened later.
+      if (morId) {
+        try {
+          const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+          const path = `${propertyId}/findings-source/${morId}/${Date.now()}-${safeName}`
+          const { error: upErr } = await supabase.storage.from('mor-documents').upload(path, file, { upsert: true })
+          if (!upErr) {
+            const { data: urlData } = supabase.storage.from('mor-documents').getPublicUrl(path)
+            const existing = parseAttachmentUrls(currentMor?.findings_pdf_files)
+            const { error: updErr } = await supabase.from('mors').update({ findings_pdf_files: serializeAttachmentUrls([...existing, urlData.publicUrl]) }).eq('id', morId)
+            if (!updErr && onUpdateMor) onUpdateMor()
+          }
+        } catch { /* non-fatal: extraction still proceeds */ }
+      }
 
       const { data: { session } } = await supabase.auth.getSession()
       const authHeader = `Bearer ${session?.access_token || ''}`
@@ -1877,6 +1900,19 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
           <Button variant="primary" onClick={() => setShowAddFinding(true)}><Icon name="plus" /> Add finding</Button>
         </div>
       </div>
+
+      {/* Scanned source report(s) — uploaded for extraction, kept so they can be reopened. */}
+      {parseAttachmentUrls(currentMor?.findings_pdf_files).length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-slate-500 font-medium">Scanned report{parseAttachmentUrls(currentMor?.findings_pdf_files).length > 1 ? 's' : ''}:</span>
+          {parseAttachmentUrls(currentMor?.findings_pdf_files).map((url: string, i: number) => (
+            <span key={i} className="inline-flex items-center gap-1.5 bg-white border border-slate-200 rounded-md pl-2.5 pr-1.5 py-1 shadow-sm">
+              <button onClick={async () => { const err = await openStoredFile(url); if (err) toast(err, 'error') }} className="inline-flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800"><Icon name="file" size={14} />{attachmentFileName(url)}</button>
+              <button onClick={() => removeFindingsPdf(url)} className="text-slate-300 hover:text-red-500" title="Remove report"><Icon name="x" size={13} /></button>
+            </span>
+          ))}
+        </div>
+      )}
 
       {findings.length > 0 && (
         <div className="flex items-center gap-2 flex-wrap">
