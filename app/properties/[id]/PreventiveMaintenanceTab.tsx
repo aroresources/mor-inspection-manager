@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { useToast } from '../../components/ToastProvider'
+import { Button, Drawer, Icon } from '../../components/ui'
 
 // ---------------------------------------------------------------------------
 // Preventive Maintenance Plan
@@ -76,6 +77,28 @@ const monthsForFreqs = (arr: any[]): Set<number> => {
 }
 const isEventBased = (arr: any[]) => (arr || []).some((f: any) => f.type === 'Move In' || f.type === 'Move Out' || f.type === 'As Needed' || f.type === 'Turnover' || f.type === 'Other')
 
+// --- Calendar helpers for weekly/daily schedules ---------------------------
+const range = (a: number, b: number) => (b < a ? [] : Array.from({ length: b - a + 1 }, (_, i) => a + i))
+const daysInMonth = (y: number, m: number) => new Date(y, m, 0).getDate()
+// WEEKDAYS is Monday-first; JS getDay() is Sunday=0, so shift by +6 mod 7.
+const weekdayOf = (y: number, m: number, d: number) => WEEKDAYS[(new Date(y, m - 1, d).getDay() + 6) % 7]
+const weeksInMonth = (y: number, m: number) => Math.ceil(daysInMonth(y, m) / 7)
+const weekRange = (y: number, m: number, w: number): [number, number] => [(w - 1) * 7 + 1, Math.min(w * 7, daysInMonth(y, m))]
+// Is a task (by its frequencies) due on a specific calendar date?
+const dueOnDate = (freqs: any[], y: number, m: number, d: number): boolean => {
+  const wd = weekdayOf(y, m, d)
+  return (freqs || []).some((f: any) => {
+    switch (f.type) {
+      case 'Daily': return !(f.weekdays?.length) || f.weekdays.includes(wd)
+      case 'Weekly': return f.weekday ? f.weekday === wd : wd === 'Mon'
+      case 'Monthly': return f.dayOfMonth ? Number(f.dayOfMonth) === d : d === 1
+      case 'Quarterly':
+      case 'Annually': return (f.months || []).includes(m) && d === 1
+      default: return false
+    }
+  })
+}
+
 const itemName = (it: any) => it.category
 
 export default function PreventiveMaintenanceTab({ propertyId, property, onSaved }: any) {
@@ -85,7 +108,11 @@ export default function PreventiveMaintenanceTab({ propertyId, property, onSaved
   const [saving, setSaving] = useState(false)
   const [showCustom, setShowCustom] = useState(false)
   const [customName, setCustomName] = useState('')
-  const [schedMonth, setSchedMonth] = useState(new Date().getMonth() + 1)
+  const [showScheduleDrawer, setShowScheduleDrawer] = useState(false)
+  const [schedMode, setSchedMode] = useState<'task' | 'annual' | 'monthly' | 'weekly' | 'daily'>('monthly')
+  const [schedMonthSel, setSchedMonthSel] = useState<string>(String(new Date().getMonth() + 1))
+  const [schedWeekSel, setSchedWeekSel] = useState<string>('all')
+  const [schedDaySel, setSchedDaySel] = useState<string>('all')
 
   useEffect(() => {
     const plan = property?.pm_plan
@@ -264,18 +291,81 @@ export default function PreventiveMaintenanceTab({ propertyId, property, onSaved
     printDoc('PM Annual Schedule', body)
   }
 
-  const generateByMonth = () => {
+  const monthRow = (t: any) => `<tr><td>${esc(t.category)}</td><td>${esc(t.location)}</td><td>${esc(t.kind)}${t.desc ? ' — ' + esc(t.desc) : ''}</td><td>${esc(freqsSummary(t.freqs))}</td><td>${esc(t.who)}</td><td class="sig"></td><td class="sig"></td></tr>`
+  const monthHead = `<tr><th>Item</th><th>Location</th><th>Task</th><th>Frequency</th><th>Responsible</th><th style="width:70px">Done</th><th style="width:120px">Signature</th></tr>`
+
+  const generateMonthly = (monthSel: string) => {
     const tasks = buildTasks()
     if (!tasks.length) { toast('Add at least one item with a location first.', 'warning'); return }
-    const due = tasks.filter((t: any) => monthsForFreqs(t.freqs).has(schedMonth))
-    let body = planHeader(`Preventive Maintenance Schedule — ${MONTHS_LONG[schedMonth - 1]}`)
-    if (!due.length) body += `<p class="muted">No scheduled tasks for ${MONTHS_LONG[schedMonth - 1]}.</p>`
-    else {
-      body += `<table><tr><th>Item</th><th>Location</th><th>Task</th><th>Frequency</th><th>Responsible</th><th style="width:70px">Done</th><th style="width:120px">Signature</th><th style="width:140px">Comments</th></tr>`
-      for (const t of due) body += `<tr><td>${esc(t.category)}</td><td>${esc(t.location)}</td><td>${esc(t.kind)}${t.desc ? ' — ' + esc(t.desc) : ''}</td><td>${esc(freqsSummary(t.freqs))}</td><td>${esc(t.who)}</td><td class="sig"></td><td class="sig"></td><td class="sig"></td></tr>`
-      body += `</table>`
+    const months = monthSel === 'all' ? range(1, 12) : [Number(monthSel)]
+    let body = planHeader(monthSel === 'all' ? 'Preventive Maintenance Schedule — Monthly (all months)' : `Preventive Maintenance Schedule — ${MONTHS_LONG[Number(monthSel) - 1]}`)
+    for (const m of months) {
+      const due = tasks.filter((t: any) => monthsForFreqs(t.freqs).has(m))
+      body += `<h2>${MONTHS_LONG[m - 1]}</h2>`
+      if (!due.length) { body += `<p class="muted">No scheduled tasks.</p>`; continue }
+      body += `<table>${monthHead}${due.map(monthRow).join('')}</table>`
     }
-    printDoc(`PM Schedule — ${MONTHS_LONG[schedMonth - 1]}`, body)
+    printDoc('PM Monthly Schedule', body)
+  }
+
+  const generateWeekly = (monthSel: string, weekSel: string) => {
+    const tasks = buildTasks()
+    if (!tasks.length) { toast('Add at least one item with a location first.', 'warning'); return }
+    const y = new Date().getFullYear()
+    const months = monthSel === 'all' ? range(1, 12) : [Number(monthSel)]
+    let body = planHeader('Preventive Maintenance Schedule — Weekly')
+    for (const m of months) {
+      const weeks = weekSel === 'all' ? range(1, weeksInMonth(y, m)) : (Number(weekSel) <= weeksInMonth(y, m) ? [Number(weekSel)] : [])
+      for (const w of weeks) {
+        const [s, e] = weekRange(y, m, w)
+        const rows: any[] = []
+        for (const t of tasks) {
+          const days: string[] = []
+          for (let d = s; d <= e; d++) if (dueOnDate(t.freqs, y, m, d)) days.push(`${weekdayOf(y, m, d)} ${d}`)
+          if (days.length) rows.push({ t, days })
+        }
+        body += `<h2>${MONTHS_LONG[m - 1]} — Week ${w} (${s}–${e})</h2>`
+        if (!rows.length) { body += `<p class="muted">No scheduled tasks.</p>`; continue }
+        body += `<table><tr><th>Item</th><th>Location</th><th>Task</th><th>Day(s)</th><th>Responsible</th><th style="width:70px">Done</th><th style="width:120px">Signature</th></tr>`
+        for (const { t, days } of rows) body += `<tr><td>${esc(t.category)}</td><td>${esc(t.location)}</td><td>${esc(t.kind)}${t.desc ? ' — ' + esc(t.desc) : ''}</td><td>${esc(days.join(', '))}</td><td>${esc(t.who)}</td><td class="sig"></td><td class="sig"></td></tr>`
+        body += `</table>`
+      }
+    }
+    printDoc('PM Weekly Schedule', body)
+  }
+
+  const generateDaily = (monthSel: string, weekSel: string, daySel: string) => {
+    const tasks = buildTasks()
+    if (!tasks.length) { toast('Add at least one item with a location first.', 'warning'); return }
+    const y = new Date().getFullYear()
+    const months = monthSel === 'all' ? range(1, 12) : [Number(monthSel)]
+    let body = planHeader('Preventive Maintenance Schedule — Daily')
+    let any = false
+    for (const m of months) {
+      const weeks = weekSel === 'all' ? range(1, weeksInMonth(y, m)) : (Number(weekSel) <= weeksInMonth(y, m) ? [Number(weekSel)] : [])
+      for (const w of weeks) {
+        const [s, e] = weekRange(y, m, w)
+        for (let d = s; d <= e; d++) {
+          const wd = weekdayOf(y, m, d)
+          if (daySel !== 'all' && wd !== daySel) continue
+          const due = tasks.filter((t: any) => dueOnDate(t.freqs, y, m, d))
+          if (!due.length) continue
+          any = true
+          body += `<h2>${MONTHS_LONG[m - 1]} ${d} — ${wd}</h2><table>${monthHead}${due.map(monthRow).join('')}</table>`
+        }
+      }
+    }
+    if (!any) body += `<p class="muted">No scheduled tasks for the chosen day(s).</p>`
+    printDoc('PM Daily Schedule', body)
+  }
+
+  const runSchedule = () => {
+    setShowScheduleDrawer(false)
+    if (schedMode === 'task') return generateByTask()
+    if (schedMode === 'annual') return generateByYear()
+    if (schedMode === 'monthly') return generateMonthly(schedMonthSel)
+    if (schedMode === 'weekly') return generateWeekly(schedMonthSel, schedWeekSel)
+    if (schedMode === 'daily') return generateDaily(schedMonthSel, schedWeekSel, schedDaySel)
   }
 
   // --- Render ----------------------------------------------------------------
@@ -325,15 +415,8 @@ export default function PreventiveMaintenanceTab({ propertyId, property, onSaved
             <p className="text-xs text-gray-500">{plannedCount} item{plannedCount === 1 ? '' : 's'} in the plan{saving ? ' · saving…' : ''}</p>
           </div>
           <div className="flex gap-2 flex-wrap">
-            <button onClick={generatePlan} className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700">📄 Generate Plan</button>
-            <button onClick={generateByTask} className="bg-gray-700 text-white px-3 py-1.5 rounded text-sm hover:bg-gray-800">🗓️ Schedule by Task</button>
-            <button onClick={generateByYear} className="bg-gray-700 text-white px-3 py-1.5 rounded text-sm hover:bg-gray-800">📅 Annual Schedule</button>
-            <div className="flex items-center gap-1">
-              <select value={schedMonth} onChange={(e: any) => setSchedMonth(Number(e.target.value))} className="border border-gray-300 rounded px-2 py-1.5 text-sm">
-                {MONTHS_LONG.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
-              </select>
-              <button onClick={generateByMonth} className="bg-gray-700 text-white px-3 py-1.5 rounded text-sm hover:bg-gray-800">📅 Month</button>
-            </div>
+            <Button variant="primary" onClick={generatePlan}><Icon name="file" /> Generate plan</Button>
+            <Button variant="neutral" onClick={() => setShowScheduleDrawer(true)}><Icon name="calendar" /> Print schedule</Button>
           </div>
         </div>
       </div>
@@ -352,6 +435,74 @@ export default function PreventiveMaintenanceTab({ propertyId, property, onSaved
       ) : (
         <button onClick={() => setShowCustom(true)} className="text-sm text-blue-600 hover:underline">+ Add other item</button>
       )}
+
+      <Drawer
+        open={showScheduleDrawer}
+        onClose={() => setShowScheduleDrawer(false)}
+        title="Print schedule"
+        subtitle="Choose what to generate, then print or save as PDF."
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setShowScheduleDrawer(false)}>Cancel</Button>
+            <Button variant="primary" onClick={runSchedule}><Icon name="download" /> Generate</Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="space-y-2">
+            {([
+              ['task', 'By task', 'Every task in one checklist.'],
+              ['annual', 'Annual', 'All 12 months, each with the tasks due that month.'],
+              ['monthly', 'Monthly', 'A single month (or all months).'],
+              ['weekly', 'Weekly', 'A chosen month and week (or all).'],
+              ['daily', 'Daily', 'A chosen month, week, and day (or all).'],
+            ] as const).map(([mode, label, desc]) => (
+              <button
+                key={mode}
+                onClick={() => setSchedMode(mode)}
+                className={`w-full text-left rounded-lg border p-3 transition ${schedMode === mode ? 'border-indigo-400 bg-indigo-50/50 ring-1 ring-indigo-400' : 'border-slate-200 hover:border-slate-300'}`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className={`w-3.5 h-3.5 rounded-full border-2 ${schedMode === mode ? 'border-indigo-600 bg-indigo-600' : 'border-slate-300'}`} />
+                  <span className="text-sm font-medium text-slate-800">{label}</span>
+                </div>
+                <p className="text-xs text-slate-500 mt-1 ml-5">{desc}</p>
+              </button>
+            ))}
+          </div>
+
+          {(schedMode === 'monthly' || schedMode === 'weekly' || schedMode === 'daily') && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+              <div>
+                <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-400 mb-1">Month</label>
+                <select value={schedMonthSel} onChange={(e: any) => setSchedMonthSel(e.target.value)} className="w-full border border-slate-300 rounded-lg px-2 py-2 text-sm bg-white">
+                  <option value="all">All months</option>
+                  {MONTHS_LONG.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+                </select>
+              </div>
+              {(schedMode === 'weekly' || schedMode === 'daily') && (
+                <div>
+                  <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-400 mb-1">Week</label>
+                  <select value={schedWeekSel} onChange={(e: any) => setSchedWeekSel(e.target.value)} className="w-full border border-slate-300 rounded-lg px-2 py-2 text-sm bg-white">
+                    <option value="all">All weeks</option>
+                    {[1, 2, 3, 4, 5].map((w) => <option key={w} value={w}>Week {w}</option>)}
+                  </select>
+                </div>
+              )}
+              {schedMode === 'daily' && (
+                <div>
+                  <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-400 mb-1">Day</label>
+                  <select value={schedDaySel} onChange={(e: any) => setSchedDaySel(e.target.value)} className="w-full border border-slate-300 rounded-lg px-2 py-2 text-sm bg-white">
+                    <option value="all">All days</option>
+                    {WEEKDAYS.map((d) => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+              )}
+            </div>
+          )}
+          <p className="text-xs text-slate-400">Recurring tasks are placed on their due dates; “as needed” / event-based items are listed separately on the annual schedule.</p>
+        </div>
+      </Drawer>
     </div>
   )
 }
