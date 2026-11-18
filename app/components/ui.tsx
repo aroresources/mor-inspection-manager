@@ -238,6 +238,7 @@ const PATHS: Record<string, React.ReactNode> = {
   arrowRight: <path d="M5 12h14m0 0l-6-6m6 6l-6 6" />,
   bell: <><path d="M6 9a6 6 0 0112 0c0 5 2 6 2 6H4s2-1 2-6" /><path d="M10 20a2 2 0 004 0" /></>,
   search: <><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></>,
+  clipboard: <><rect x="6" y="4" width="12" height="17" rx="2" /><path d="M9 4V3h6v1M9 11h6M9 15h4" /></>,
 }
 export function Icon({ name, className = '', size = 16 }: { name: string; className?: string; size?: number }) {
   return (

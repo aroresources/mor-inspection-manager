@@ -6,7 +6,7 @@ import { supabase } from '../../lib/supabase'
 import { useToast } from '../components/ToastProvider'
 import { parseDate, formatDateObj } from '../../lib/dateUtils'
 import { deriveWorkflow, isDueStage } from '../../lib/morWorkflow'
-import { Card, CardBody, StatusBadge, MetaChip, Button, Icon } from '../components/ui'
+import { Card, CardBody, StatusBadge, MetaChip, Button, Drawer, Icon } from '../components/ui'
 
 // Add `months` months to a UTC date without timezone drift, clamping the day to
 // the target month's length (e.g. Jan 31 + 1 month -> Feb 28, not Mar 3).
@@ -46,6 +46,8 @@ export default function Dashboard() {
   const [deleteCompanyModal, setDeleteCompanyModal] = useState<any>(null)
   const [attentionFilter, setAttentionFilter] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [showPrevPart, setShowPrevPart] = useState(false)
+  const [showPrevPartDone, setShowPrevPartDone] = useState(false)
   const [testingReminders, setTestingReminders] = useState(false)
 
   useEffect(() => {
@@ -643,6 +645,29 @@ export default function Dashboard() {
     XLSX.writeFile(wb, `properties-export-${new Date().toISOString().slice(0, 10)}.xlsx`)
   }
 
+  // Previous Participation: every closed-out MOR (across visible properties)
+  // with its score, so it can be entered into secure systems and checked off.
+  const scoreTone = (rating: string) =>
+    rating === 'Superior' || rating === 'Above Average' ? 'green' as const :
+    rating === 'Satisfactory' ? 'blue' as const :
+    rating === 'Below Average' ? 'amber' as const :
+    rating === 'Unsatisfactory' ? 'red' as const : 'slate' as const
+  const prevPartList = properties.flatMap((p: any) => (p.mors || [])
+    .filter((m: any) => m.status === 'Completed' || (Array.isArray(m.activity_log) && m.activity_log.some((e: any) => e?.type === 'closed')))
+    .map((m: any) => {
+      const closedEv = Array.isArray(m.activity_log) ? m.activity_log.find((e: any) => e?.type === 'closed') : null
+      return { morId: m.id, propertyId: p.id, propertyName: p.name, rating: m.rating || null, dateStr: closedEv?.date || m.mor_date || null, done: !!m.prev_participation_done }
+    }))
+    .sort((a: any, b: any) => new Date(b.dateStr || 0).getTime() - new Date(a.dateStr || 0).getTime())
+  const prevPartPending = prevPartList.filter((x: any) => !x.done)
+  const prevPartVisible = showPrevPartDone ? prevPartList : prevPartPending
+
+  const togglePrevPart = async (morId: string, done: boolean) => {
+    const { error } = await supabase.from('mors').update({ prev_participation_done: done }).eq('id', morId)
+    if (error) { toast('Could not update — make sure the prev_participation migration has been run. (' + error.message + ')', 'error'); return }
+    setProperties((props: any[]) => props.map((p: any) => ({ ...p, mors: (p.mors || []).map((m: any) => m.id === morId ? { ...m, prev_participation_done: done } : m) })))
+  }
+
   return (
     <div className="min-h-screen bg-slate-100">
       <nav className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3 flex flex-wrap justify-between items-center gap-x-4 gap-y-2 sticky top-0 z-30">
@@ -661,6 +686,12 @@ export default function Dashboard() {
               <Icon name="bell" size={15} />{testingReminders ? 'Sending…' : 'Test reminders'}
             </button>
           )}
+          <button onClick={() => setShowPrevPart(true)} className="text-sm text-slate-500 hover:text-slate-800 inline-flex items-center gap-1.5" title="Closed-out MOR scores to enter into secure systems">
+            <Icon name="clipboard" size={15} /> Prev. participation
+            {prevPartPending.length > 0 && (
+              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-indigo-600 text-white text-[10px] font-bold">{prevPartPending.length}</span>
+            )}
+          </button>
           <button onClick={() => router.push('/templates')} className="text-sm text-slate-500 hover:text-slate-800">Templates</button>
           <button onClick={() => router.push('/users')} className="text-sm text-slate-500 hover:text-slate-800">Team members</button>
           <button
@@ -947,6 +978,41 @@ export default function Dashboard() {
             })}
           </div>
         )}
+
+        {/* Previous Participation drawer */}
+        <Drawer
+          open={showPrevPart}
+          onClose={() => setShowPrevPart(false)}
+          title="Previous Participation"
+          subtitle="Enter each closed-out MOR's score into secure systems, then check it off."
+          footer={
+            <label className="flex items-center gap-2 text-xs text-slate-500 mr-auto">
+              <input type="checkbox" className="accent-indigo-600" checked={showPrevPartDone} onChange={(e: any) => setShowPrevPartDone(e.target.checked)} />
+              Show completed ({prevPartList.length - prevPartPending.length})
+            </label>
+          }
+        >
+          {prevPartVisible.length === 0 ? (
+            <p className="text-sm text-slate-500 text-center py-8">
+              {prevPartList.length === 0 ? 'No closed-out MORs yet.' : 'All caught up — every closed-out MOR has been updated.'}
+            </p>
+          ) : (
+            <div className="space-y-1">
+              {prevPartVisible.map((x: any) => (
+                <div key={x.morId} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-slate-50">
+                  <input type="checkbox" className="accent-indigo-600 w-4 h-4" checked={x.done} onChange={(e: any) => togglePrevPart(x.morId, e.target.checked)} title="Mark updated in secure systems" />
+                  <button onClick={() => router.push(`/properties/${x.propertyId}`)} className="flex-1 min-w-0 text-left">
+                    <p className={`text-sm font-medium truncate ${x.done ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{x.propertyName}</p>
+                    <p className="text-xs text-slate-400">MOR {x.dateStr ? formatDateObj(parseDate(x.dateStr) as Date) : '—'}</p>
+                  </button>
+                  {x.rating
+                    ? <StatusBadge tone={scoreTone(x.rating)}>{x.rating}</StatusBadge>
+                    : <span className="text-xs text-slate-400 italic">No score</span>}
+                </div>
+              ))}
+            </div>
+          )}
+        </Drawer>
 
         {/* Import Preview Modal */}
         {showImportPreview && (
