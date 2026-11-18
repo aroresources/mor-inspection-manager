@@ -494,16 +494,81 @@ function DocumentsTab({ propertyId, morId }: any) {
     </div>
   )
 }
-function TasksTab({ propertyId, morId }: any) {
+function TasksTab({ propertyId, morId, mors, currentMor, onUpdateMor }: any) {
   const { toast, confirm } = useToast()
   const [tasks, setTasks] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [addModal, setAddModal] = useState<any>(null) // { category, title, description, addToTemplate, newCategory }
   const [openTaskId, setOpenTaskId] = useState<string | null>(null)
+  const [prepSummary, setPrepSummary] = useState<string>(currentMor?.prep_summary || '')
+  const [summaryBusy, setSummaryBusy] = useState(false)
+  const [summaryMsg, setSummaryMsg] = useState('')
 
   useEffect(() => {
     fetchTasks()
   }, [propertyId, morId])
+
+  // Keep the summary box in sync with the selected MOR.
+  useEffect(() => { setPrepSummary(currentMor?.prep_summary || '') }, [morId, currentMor?.prep_summary])
+
+  const saveSummary = async (text: string) => {
+    if (!morId) return
+    const { error } = await supabase.from('mors').update({ prep_summary: text || null }).eq('id', morId)
+    if (error) { toast('Could not save summary — make sure the prep_summary migration has been run. (' + error.message + ')', 'error'); return }
+    if (onUpdateMor) onUpdateMor()
+  }
+
+  const summarizeApi = async (body: any): Promise<string | null> => {
+    const { data: { session } } = await supabase.auth.getSession()
+    const r = await fetch('/api/summarize-mor', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` },
+      body: JSON.stringify(body),
+    })
+    const d = await r.json()
+    if (d.error) throw new Error(d.error)
+    return d.summary || null
+  }
+
+  // Summarize the most recent prior MOR's findings + responses.
+  const generateFromLastMor = async () => {
+    const closed = (mors || [])
+      .filter((m: any) => m.id !== morId && (m.status === 'Completed' || (Array.isArray(m.activity_log) && m.activity_log.some((e: any) => e?.type === 'closed'))))
+      .sort((a: any, b: any) => new Date(b.mor_date || 0).getTime() - new Date(a.mor_date || 0).getTime())
+    const prior = closed[0] || (mors || []).filter((m: any) => m.id !== morId).sort((a: any, b: any) => new Date(b.mor_date || 0).getTime() - new Date(a.mor_date || 0).getTime())[0]
+    if (!prior) { toast('No prior MOR found in the program. Upload the last MOR report to scan it instead.', 'warning'); return }
+    setSummaryBusy(true); setSummaryMsg('Reading the last MOR’s findings…')
+    try {
+      const { data: findings } = await supabase.from('findings').select('finding, response, status').eq('mor_id', prior.id)
+      if (!findings || findings.length === 0) { toast('The last MOR has no findings recorded. Upload the report to scan it instead.', 'warning'); return }
+      setSummaryMsg('Summarizing…')
+      const summary = await summarizeApi({ findings })
+      if (summary) { setPrepSummary(summary); await saveSummary(summary); toast('Summary generated.', 'success') }
+    } catch (err: any) {
+      toast(err?.message ? `Could not summarize: ${err.message}` : 'Could not summarize. Please try again.', 'error')
+    }
+    setSummaryBusy(false); setSummaryMsg('')
+  }
+
+  // Scan an uploaded MOR PDF and summarize it (for properties with no prior MOR in the program).
+  const uploadAndScanMor = async (fileList: FileList | null) => {
+    const file = Array.from(fileList || [])[0]
+    if (!file) return
+    setSummaryBusy(true); setSummaryMsg('Reading the report…')
+    try {
+      const base64 = await new Promise<string>((resolve) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve((reader.result as string).split(',')[1])
+        reader.readAsDataURL(file)
+      })
+      setSummaryMsg('Scanning and summarizing…')
+      const summary = await summarizeApi({ base64PDF: base64 })
+      if (summary) { setPrepSummary(summary); await saveSummary(summary); toast('Summary generated from the uploaded report.', 'success') }
+    } catch (err: any) {
+      toast(err?.message ? `Could not summarize: ${err.message}` : 'Could not summarize. Please try again.', 'error')
+    }
+    setSummaryBusy(false); setSummaryMsg('')
+  }
 
   // Order by sort_order (falling back to created_at). Resilient to the
   // sort_order column not existing yet (treated as 0).
@@ -662,6 +727,32 @@ function TasksTab({ propertyId, morId }: any) {
 
   return (
     <div className="space-y-4">
+      {/* Previous MOR summary — issues to work on in prep for the next one. */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+        <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-800">Last MOR summary</h3>
+            <p className="text-xs text-slate-500">Major issues (and recurring ones) to work on before the next MOR.</p>
+          </div>
+          <div className="flex gap-2 flex-wrap items-center">
+            <Button variant="neutral" size="sm" onClick={generateFromLastMor} disabled={summaryBusy}><Icon name="refresh" /> Generate from last MOR</Button>
+            <label className={`inline-flex items-center gap-1.5 rounded-lg font-medium text-xs px-2.5 py-1 border transition cursor-pointer ${summaryBusy ? 'opacity-50 pointer-events-none border-slate-300 text-slate-400' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'}`}>
+              <Icon name="upload" size={14} /> Upload MOR to scan
+              <input type="file" accept=".pdf" className="hidden" disabled={summaryBusy} onChange={async (e: any) => { await uploadAndScanMor(e.target.files); e.target.value = '' }} />
+            </label>
+          </div>
+        </div>
+        {summaryBusy && <p className="text-xs text-indigo-600 mb-2 inline-flex items-center gap-1.5"><Icon name="clock" size={13} /> {summaryMsg || 'Working…'}</p>}
+        <textarea
+          value={prepSummary}
+          onChange={(e: any) => setPrepSummary(e.target.value)}
+          onBlur={(e: any) => { if (e.target.value !== (currentMor?.prep_summary || '')) saveSummary(e.target.value) }}
+          rows={prepSummary ? 10 : 3}
+          placeholder="Generate a summary from the last MOR, upload a MOR to scan, or type your own notes here…"
+          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none"
+        />
+      </div>
+
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
         <div className="flex flex-wrap justify-between items-center gap-2 mb-3">
           <span className="text-sm font-medium text-slate-700">Progress: <span className="text-slate-900 font-semibold">{completed} of {total}</span> completed</span>
@@ -2718,7 +2809,7 @@ const fetchMors = async () => {
                 </label>
               </div>
             </div>
-            <TasksTab propertyId={id} morId={currentMorId} />
+            <TasksTab propertyId={id} morId={currentMorId} mors={mors} currentMor={currentMor} onUpdateMor={fetchMors} />
           </div>
         )}
 

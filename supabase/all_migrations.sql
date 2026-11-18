@@ -71,6 +71,10 @@ alter table mors           add column if not exists prev_participation_done bool
 -- JSON array of storage URLs.
 alter table mors           add column if not exists mor_documents jsonb;
 
+-- Prep: an AI-generated (editable) summary of issues from the last MOR to
+-- work on in preparation for this one.
+alter table mors           add column if not exists prep_summary text;
+
 -- Property Documents (pilot: EIV P&P) — company defaults + per-property settings.
 -- (RLS policies for these tables are in supabase/property_documents.sql.)
 create table if not exists company_doc_settings (
