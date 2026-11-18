@@ -25,7 +25,7 @@ const CATEGORIES = [
   'General Cleaning', 'Laundry',
 ]
 
-const FREQ_TYPES = ['Annually', 'Quarterly', 'Monthly', 'Weekly', 'Daily', 'Move In', 'Move Out', 'Other']
+const FREQ_TYPES = ['Annually', 'Quarterly', 'Monthly', 'Weekly', 'Daily', 'Move In', 'Move Out', 'As Needed', 'Turnover', 'Other']
 const MAINTAIN_ROLES = ['Property Manager', 'Super', 'Maintenance Technician', 'Porter', 'Third Party', 'Other']
 const SCHEDULE_ROLES = ['State', 'City/Township', 'Property Manager', 'Super', 'Maintenance Technician', 'Porter', 'Third Party', 'Other']
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -74,7 +74,7 @@ const monthsForFreqs = (arr: any[]): Set<number> => {
   }
   return s
 }
-const isEventBased = (arr: any[]) => (arr || []).some((f: any) => f.type === 'Move In' || f.type === 'Move Out' || f.type === 'Other')
+const isEventBased = (arr: any[]) => (arr || []).some((f: any) => f.type === 'Move In' || f.type === 'Move Out' || f.type === 'As Needed' || f.type === 'Turnover' || f.type === 'Other')
 
 const itemName = (it: any) => it.category
 
