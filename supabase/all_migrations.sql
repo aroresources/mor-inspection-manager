@@ -67,6 +67,10 @@ alter table mors           add column if not exists findings_pdf_files jsonb;
 -- has been entered into secure systems (checked off on the dashboard).
 alter table mors           add column if not exists prev_participation_done boolean not null default false;
 
+-- MOR-level documents on the Findings tab (e.g. the closing letter).
+-- JSON array of storage URLs.
+alter table mors           add column if not exists mor_documents jsonb;
+
 -- Property Documents (pilot: EIV P&P) — company defaults + per-property settings.
 -- (RLS policies for these tables are in supabase/property_documents.sql.)
 create table if not exists company_doc_settings (

@@ -1198,6 +1198,37 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
     await updateFinding(finding.id, { document_url: serializeAttachmentUrls(remaining) })
   }
 
+  // MOR-level documents (e.g. the closing letter), stored on the MOR itself.
+  const uploadMorDocuments = async (fileList: FileList | null) => {
+    if (!morId) return
+    const files = Array.from(fileList || [])
+    if (!files.length) return
+    const existing = parseAttachmentUrls(currentMor?.mor_documents)
+    const added: string[] = []
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+      const filePath = `${propertyId}/mor-documents/${morId}/${Date.now()}-${i}/${safeName}`
+      const { error: uploadError } = await supabase.storage.from('mor-documents').upload(filePath, file, { upsert: true })
+      if (uploadError) { toast(`Error uploading ${file.name}: ${uploadError.message}`, 'error'); continue }
+      const { data: urlData } = supabase.storage.from('mor-documents').getPublicUrl(filePath)
+      added.push(urlData.publicUrl)
+    }
+    if (added.length) {
+      const { error } = await supabase.from('mors').update({ mor_documents: serializeAttachmentUrls([...existing, ...added]) }).eq('id', morId)
+      if (error) { toast('Could not save — make sure the mor_documents migration has been run. (' + error.message + ')', 'error'); return }
+      if (onUpdateMor) onUpdateMor()
+      toast(`Uploaded ${added.length} document${added.length === 1 ? '' : 's'}.`, 'success')
+    }
+  }
+
+  const removeMorDocument = async (url: string) => {
+    const remaining = parseAttachmentUrls(currentMor?.mor_documents).filter((u: string) => u !== url)
+    const { error } = await supabase.from('mors').update({ mor_documents: serializeAttachmentUrls(remaining) }).eq('id', morId)
+    if (error) { toast('Could not remove the document: ' + error.message, 'error'); return }
+    if (onUpdateMor) onUpdateMor()
+  }
+
   const moveFinding = async (index: any, direction: any) => {
     const newFindings = [...findings]
     const swapIndex = index + direction
@@ -1816,6 +1847,24 @@ function FindingsTab({ propertyId, morId, currentMor, property, onCompleteMor, o
           placeholder="Notes about this MOR..."
           className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none"
         />
+      </div>
+
+      {/* MOR Documents — e.g. the closing letter. */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+        <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-400 mb-2">Documents</label>
+        <div className="flex flex-wrap items-center gap-2">
+          {parseAttachmentUrls(currentMor?.mor_documents).map((url: string, i: number) => (
+            <span key={i} className="inline-flex items-center gap-1.5 bg-slate-50 rounded-md pl-2.5 pr-1.5 py-1">
+              <button onClick={async () => { const err = await openStoredFile(url); if (err) toast(err, 'error') }} className="inline-flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800"><Icon name="paperclip" size={14} />{attachmentFileName(url)}</button>
+              <button onClick={() => removeMorDocument(url)} className="text-slate-300 hover:text-red-500" title="Remove document"><Icon name="x" size={13} /></button>
+            </span>
+          ))}
+          <label className="cursor-pointer inline-flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-800 border border-dashed border-slate-300 hover:border-indigo-400 rounded-md px-2.5 py-1">
+            <Icon name="upload" size={14} /> Upload document(s)
+            <input type="file" multiple className="hidden" onChange={async (e: any) => { await uploadMorDocuments(e.target.files); e.target.value = '' }} />
+          </label>
+        </div>
+        <p className="text-xs text-slate-400 mt-2">Attach MOR-level documents here, such as the closing letter.</p>
       </div>
 
       {/* History */}
