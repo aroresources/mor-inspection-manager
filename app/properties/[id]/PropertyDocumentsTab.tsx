@@ -13,7 +13,7 @@ import { Button, Icon } from '../../components/ui'
 const uid = () => { try { if (typeof crypto !== 'undefined' && (crypto as any).randomUUID) return (crypto as any).randomUUID() } catch {} return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}` }
 
 // A company-wide default bundle stored in company_doc_settings.settings (one jsonb).
-interface CompanyDoc { schedule?: Record<string, ScheduleChoice>; overrides?: Record<string, string>; customItems?: any[]; version?: string; effectiveDate?: string }
+interface CompanyDoc { schedule?: Record<string, ScheduleChoice>; overrides?: Record<string, string>; customItems?: any[] }
 
 // ---------------------------------------------------------------------------
 // Composition: resolve the template into a flat list of render blocks.
@@ -183,18 +183,10 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
   }
 
   // --- Scope-aware active config (what the editors read/write) -------------
-  const curSettings: EivSettings = scope === 'company'
-    ? { schedule: co.schedule, version: co.version, effectiveDate: co.effectiveDate }
-    : settings
+  const curSettings: EivSettings = scope === 'company' ? { schedule: co.schedule } : settings
   const curOverrides = scope === 'company' ? (co.overrides || {}) : overrides
   const curCustom = scope === 'company' ? (co.customItems || []) : customItems
 
-  // Set a top-level policy field (version / effectiveDate), scope-aware.
-  const setPolicyField = (k: 'version' | 'effectiveDate', v: string) => {
-    const val = v || undefined
-    if (scope === 'company') setCo({ ...co, [k]: val })
-    else setSettings({ ...settings, [k]: val })
-  }
   const saveOverrides = (next: Record<string, string>) => {
     if (scope === 'company') setCo({ ...co, overrides: next })
     else setOverrides(next)
@@ -217,8 +209,6 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
   }
   const effOverrides = { ...(co.overrides || {}), ...overrides }
   const effCustom = [...(co.customItems || []), ...customItems]
-  const effVersion = settings.version ?? co.version ?? ''
-  const effEffectiveDate = settings.effectiveDate ?? co.effectiveDate ?? ''
 
   const setMerge = (k: string, v: string) => setSettings({ ...settings, merge: { ...(settings.merge || {}), [k]: v } })
 
@@ -264,7 +254,7 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
   const esc = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   const title = 'EIV Policies & Procedures'
   const headerLines = [merge.sitename, merge.company, merge.address, merge.phone].filter(Boolean)
-  const metaLine = [effEffectiveDate && `Effective ${effEffectiveDate}`, effVersion && `Version ${effVersion}`].filter(Boolean).join(' · ')
+  const metaLine = `Effective ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`
 
   const generatePDF = () => {
     const blocks = composeEiv(merge, effOverrides, effCustom)
@@ -499,34 +489,6 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
               ))}
             </tbody>
           </table>
-        </div>
-      </div>
-
-      {/* Policy details */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
-        <h3 className="text-sm font-semibold text-slate-800 mb-1">Policy details {isCompany && <span className="ml-1 text-xs font-normal text-indigo-600">· company default</span>}</h3>
-        <p className="text-xs text-slate-500 mb-3">Shown on the title page of the generated document. {isCompany ? 'These become the default for every company property.' : 'Leave blank to inherit the company default.'}</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">Version</label>
-            <input
-              key={`${scope}-ver-${formRev}`}
-              defaultValue={curSettings.version || ''}
-              onBlur={(e: any) => { if (e.target.value !== (curSettings.version || '')) setPolicyField('version', e.target.value) }}
-              placeholder={!isCompany && co.version ? `Company default: ${co.version}` : 'e.g. v4'}
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">Effective / revised date</label>
-            <input
-              key={`${scope}-eff-${formRev}`}
-              defaultValue={curSettings.effectiveDate || ''}
-              onBlur={(e: any) => { if (e.target.value !== (curSettings.effectiveDate || '')) setPolicyField('effectiveDate', e.target.value) }}
-              placeholder={!isCompany && co.effectiveDate ? `Company default: ${co.effectiveDate}` : 'e.g. March 2026'}
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none"
-            />
-          </div>
         </div>
       </div>
 

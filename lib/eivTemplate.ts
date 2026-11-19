@@ -5,7 +5,6 @@
 // Variable parts:
 //   - {{mergeKey}} tokens  -> entity merge fields (name/address/phone/company)
 //   - the EIV Schedule     -> per-property frequency (quarterly ▸ monthly) + filing
-//   - policy version + effective date (company default, property override)
 // Everything else is fixed HUD text. No per-person or per-site specifics are
 // embedded in the body (role-only language, generic storage wording).
 
@@ -21,8 +20,6 @@ export interface ScheduleChoice { frequency?: 'Quarterly' | 'Monthly'; file?: bo
 export interface EivSettings {
   merge?: Record<string, string>
   schedule?: Record<string, ScheduleChoice>
-  version?: string
-  effectiveDate?: string
 }
 
 export const EIV_MERGE_FIELDS = [
