@@ -292,22 +292,23 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
     if (!w) { toast('Please allow pop-ups to print.', 'warning'); return }
     w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>EIV Report Schedule${merge.sitename ? ' — ' + esc(merge.sitename) : ''}</title><style>
       *{box-sizing:border-box;}
-      body{font-family:ui-sans-serif,'Segoe UI',Arial,sans-serif;color:#1e1b4b;margin:0;padding:42px;}
-      .poster-head{text-align:center;margin:0 0 28px;}
-      .poster-kicker{font-size:40px;font-weight:800;letter-spacing:.5px;color:#1e1b4b;line-height:1.05;}
-      .poster-sub{font-size:19px;color:#4338ca;font-weight:600;margin-top:10px;}
-      .poster-note{font-size:12px;color:#9ca3af;text-transform:uppercase;letter-spacing:3px;margin-top:8px;}
-      .sched{border-collapse:separate;border-spacing:0;width:100%;font-size:15px;border:1.5px solid #c7c7dd;border-radius:16px;overflow:hidden;}
-      .sched th{background:#312e81;color:#fff;font-size:13px;letter-spacing:.7px;text-transform:uppercase;padding:16px 20px;text-align:left;}
-      .sched td{padding:15px 20px;border-top:1px solid #ececf3;vertical-align:top;line-height:1.5;}
+      @page{size:landscape;margin:11mm;}
+      html,body{height:100%;}
+      body{font-family:ui-sans-serif,'Segoe UI',Arial,sans-serif;color:#1e1b4b;margin:0;padding:22px 30px;}
+      .poster-head{text-align:center;margin:0 0 16px;}
+      .poster-kicker{font-size:32px;font-weight:800;letter-spacing:.5px;color:#1e1b4b;line-height:1.05;}
+      .poster-sub{font-size:16px;color:#4338ca;font-weight:600;margin-top:6px;}
+      .poster-note{font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:3px;margin-top:4px;}
+      .sched{border-collapse:separate;border-spacing:0;width:100%;font-size:13px;border:1.5px solid #c7c7dd;border-radius:14px;overflow:hidden;}
+      .sched th{background:#312e81;color:#fff;font-size:12px;letter-spacing:.6px;text-transform:uppercase;padding:9px 16px;text-align:left;}
+      .sched td{padding:8px 16px;border-top:1px solid #ececf3;vertical-align:top;line-height:1.4;}
       .sched tr.odd td{background:#f7f7fc;}
-      .sched td.rep{font-weight:700;color:#1e1b4b;width:33%;}
-      .sched td.freq{width:24%;color:#111;}
+      .sched td.rep{font-weight:700;color:#1e1b4b;width:30%;}
+      .sched td.freq{width:26%;color:#111;}
       .sched td.file{color:#374151;}
-      .sched td.file strong{color:#312e81;display:inline-block;min-width:92px;}
-      .sched tr.grp td{background:#4338ca;color:#fff;font-weight:700;text-transform:uppercase;letter-spacing:.9px;font-size:12.5px;padding:12px 20px;}
-      .legend{margin-top:22px;font-size:12.5px;color:#6b7280;line-height:1.6;}
-      @page{margin:14mm;}
+      .sched td.file strong{color:#312e81;display:inline-block;min-width:96px;}
+      .sched tr.grp td{background:#4338ca;color:#fff;font-weight:700;text-transform:uppercase;letter-spacing:.8px;font-size:11.5px;padding:7px 16px;}
+      .legend{margin-top:12px;font-size:11.5px;color:#6b7280;line-height:1.5;}
       @media print{tr{page-break-inside:avoid;}}
     </style></head><body>${schedulePosterInnerHtml()}<script>window.onload=function(){setTimeout(function(){window.print()},250)}<\/script></body></html>`)
     w.document.close()
