@@ -41,21 +41,23 @@ export interface ScheduleRow {
   optIn?: boolean
   fixed?: boolean
 }
+// fileText uses "\n" to break the cell into lines and " → " to mark a bold
+// label (e.g. Summary / Detail), so reports with two filings read clearly.
 export const EIV_SCHEDULE: ScheduleRow[] = [
   { group: 'Income Reports' },
-  { key: 'income_summary', report: 'Income Summary Report', freq: 'MI/IC (within 90 days), AR, IR', fileText: 'Tenant file, together with supporting docs', fixed: true },
-  { key: 'income_report', report: 'Income Report', freq: 'MI/IC (within 90 days), AR, IR', fileText: 'Tenant file, together with the applicable 50059', fixed: true },
-  { key: 'income_discrepancy', report: 'Income Discrepancy Report', freq: 'MI/IC (within 90 days), AR, IR', fileText: 'Tenant file, together with supporting docs', fixed: true },
+  { key: 'income_summary', report: 'Income Summary Report', freq: 'MI/IC (within 90 days), AR, IR', fileText: 'Tenant file (with supporting docs)', fixed: true },
+  { key: 'income_report', report: 'Income Report', freq: 'MI/IC (within 90 days), AR, IR', fileText: 'Tenant file (with the applicable HUD-50059)', fixed: true },
+  { key: 'income_discrepancy', report: 'Income Discrepancy Report', freq: 'MI/IC (within 90 days), AR, IR', fileText: 'Tenant file (with supporting docs)', fixed: true },
   { key: 'no_income_50059', report: 'No Income Reported on 50059', freq: 'Quarterly', monthlyOption: true, fileText: 'Not required', fileOption: true },
   { key: 'no_income_hhs_ssa', report: 'No Income Reported by HHS or SSA', freq: 'Quarterly', monthlyOption: true, fileText: 'Not required', fileOption: true },
-  { key: 'new_hires', report: 'New Hires Report', freq: 'Quarterly', monthlyOption: true, fileText: 'Summary → New Hires Report Master File; Detail → tenant file, with supporting docs' },
+  { key: 'new_hires', report: 'New Hires Report', freq: 'Quarterly', monthlyOption: true, fileText: 'Summary → New Hires Report Master File\nDetail → Tenant file (with supporting docs)' },
   { group: 'Verification Reports' },
-  { key: 'existing_tenant', report: 'Existing Tenant Search', freq: 'When processing applicant for admission (all members)', fixed: true, fileText: 'If not admitted → kept with the application; if admitted → tenant file, with supporting docs' },
-  { key: 'multiple_subsidy', report: 'Multiple Subsidy', freq: 'Quarterly', monthlyOption: true, fileText: 'Summary → Multiple Subsidy Master File; Detail → tenant file, with supporting docs' },
-  { key: 'deceased', report: 'Deceased Tenant Report', freq: 'Quarterly', monthlyOption: true, fileText: 'Summary → Deceased Tenant Report Master File; docs → tenant file' },
+  { key: 'existing_tenant', report: 'Existing Tenant Search', freq: 'When processing applicant for admission (all members)', fixed: true, fileText: 'If admitted → Tenant file (with supporting docs)\nIf not admitted → Kept with the application' },
+  { key: 'multiple_subsidy', report: 'Multiple Subsidy', freq: 'Quarterly', monthlyOption: true, fileText: 'Summary → Multiple Subsidy Master File\nDetail → Tenant file (with supporting docs)' },
+  { key: 'deceased', report: 'Deceased Tenant Report', freq: 'Quarterly', monthlyOption: true, fileText: 'Summary → Deceased Tenant Report Master File\nDetail → Tenant file (tenant documentation)' },
   { group: 'Identity Verification Reports' },
-  { key: 'failed_prescreen', report: 'Failed EIV Pre-Screening Report', freq: 'Monthly', fixed: true, fileText: 'Failed EIV Pre-Screening Master File; docs → tenant file' },
-  { key: 'failed_verification', report: 'Failed Verification Report', freq: 'Monthly', fixed: true, fileText: 'Failed Verification Master File; docs → tenant file' },
+  { key: 'failed_prescreen', report: 'Failed EIV Pre-Screening Report', freq: 'Monthly', fixed: true, fileText: 'Master → Failed EIV Pre-Screening Master File\nDetail → Tenant file (tenant documentation)' },
+  { key: 'failed_verification', report: 'Failed Verification Report', freq: 'Monthly', fixed: true, fileText: 'Summary → Failed Verification Master File\nDetail → Tenant file (tenant documentation)' },
   { key: 'not_verified', report: 'Number of Households Not-Verified', freq: 'Optional', optIn: true, fileText: 'Not required' },
 ]
 

@@ -82,6 +82,13 @@ const mergeSchedules = (a?: Record<string, ScheduleChoice>, b?: Record<string, S
   return out
 }
 
+// A filing cell can be multi-line ("\n") with a bold label marked by " → ".
+const filingLines = (s: string): string[] => String(s || '').split('\n')
+const filingParts = (line: string): [string | null, string] => {
+  const i = line.indexOf(' → ')
+  return i >= 0 ? [line.slice(0, i), line.slice(i + 3)] : [null, line]
+}
+
 type Scope = 'property' | 'company'
 
 export default function PropertyDocumentsTab({ propertyId, property, onDirtyChange }: any) {
@@ -256,6 +263,56 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
   const headerLines = [merge.sitename, merge.company, merge.address, merge.phone].filter(Boolean)
   const metaLine = `Effective ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`
 
+  const filingHtml = (s: string) => filingLines(s).map((ln) => { const [lbl, rest] = filingParts(ln); return lbl ? `<strong>${esc(lbl)}</strong> ${esc(rest)}` : esc(rest) }).join('<br>')
+
+  // The schedule poster's inner HTML, shared by the full document and the
+  // standalone "print the schedule" output.
+  const schedulePosterInnerHtml = () => {
+    let html = `<div class="poster"><div class="poster-head"><div class="poster-kicker">EIV Report Schedule</div>`
+    html += `<div class="poster-sub">${esc(merge.sitename || 'Property')}${merge.company ? ' · ' + esc(merge.company) : ''}</div>`
+    html += `<div class="poster-note">Post for staff reference</div></div>`
+    html += `<table class="sched"><thead><tr><th class="rep">Report</th><th class="freq">How often</th><th>Where it is filed / retained</th></tr></thead><tbody>`
+    let alt = 0
+    for (const row of scheduleData(effSettings)) {
+      if ((row as any).group) { html += `<tr class="grp"><td colspan="3">${esc((row as any).group)}</td></tr>`; alt = 0 }
+      else {
+        html += `<tr class="${alt % 2 ? 'odd' : ''}"><td class="rep">${esc((row as any).report)}</td><td class="freq">${esc((row as any).freq)}</td><td class="file">${filingHtml((row as any).filing)}</td></tr>`
+        alt++
+      }
+    }
+    html += `</tbody></table>`
+    html += `<div class="legend"><strong>Key:</strong> MI = Move-In · IC = Initial Certification · AR = Annual Recertification · IR = Interim Recertification. “Quarterly” reports may be run monthly at this property’s option.</div>`
+    html += `</div>`
+    return html
+  }
+
+  // Standalone: print just the schedule poster (wall-ready).
+  const generateSchedulePoster = () => {
+    const w = window.open('', '_blank')
+    if (!w) { toast('Please allow pop-ups to print.', 'warning'); return }
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>EIV Report Schedule${merge.sitename ? ' — ' + esc(merge.sitename) : ''}</title><style>
+      *{box-sizing:border-box;}
+      body{font-family:ui-sans-serif,'Segoe UI',Arial,sans-serif;color:#1e1b4b;margin:0;padding:42px;}
+      .poster-head{text-align:center;margin:0 0 28px;}
+      .poster-kicker{font-size:40px;font-weight:800;letter-spacing:.5px;color:#1e1b4b;line-height:1.05;}
+      .poster-sub{font-size:19px;color:#4338ca;font-weight:600;margin-top:10px;}
+      .poster-note{font-size:12px;color:#9ca3af;text-transform:uppercase;letter-spacing:3px;margin-top:8px;}
+      .sched{border-collapse:separate;border-spacing:0;width:100%;font-size:15px;border:1.5px solid #c7c7dd;border-radius:16px;overflow:hidden;}
+      .sched th{background:#312e81;color:#fff;font-size:13px;letter-spacing:.7px;text-transform:uppercase;padding:16px 20px;text-align:left;}
+      .sched td{padding:15px 20px;border-top:1px solid #ececf3;vertical-align:top;line-height:1.5;}
+      .sched tr.odd td{background:#f7f7fc;}
+      .sched td.rep{font-weight:700;color:#1e1b4b;width:33%;}
+      .sched td.freq{width:24%;color:#111;}
+      .sched td.file{color:#374151;}
+      .sched td.file strong{color:#312e81;display:inline-block;min-width:92px;}
+      .sched tr.grp td{background:#4338ca;color:#fff;font-weight:700;text-transform:uppercase;letter-spacing:.9px;font-size:12.5px;padding:12px 20px;}
+      .legend{margin-top:22px;font-size:12.5px;color:#6b7280;line-height:1.6;}
+      @page{margin:14mm;}
+      @media print{tr{page-break-inside:avoid;}}
+    </style></head><body>${schedulePosterInnerHtml()}<script>window.onload=function(){setTimeout(function(){window.print()},250)}<\/script></body></html>`)
+    w.document.close()
+  }
+
   const generatePDF = () => {
     const blocks = composeEiv(merge, effOverrides, effCustom)
     let body = `<h1>${esc(title)}</h1><p class="sub">for the use of HUD’s Enterprise Income Verification (EIV) System</p>`
@@ -276,23 +333,7 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
         body += `</table>`
       }
       else if (b.k === 'pagebreak') body += `<div class="pb"></div>`
-      else if (b.k === 'schedulePoster') {
-        body += `<div class="poster"><div class="poster-head"><div class="poster-kicker">EIV Report Schedule</div>`
-        body += `<div class="poster-sub">${esc(merge.sitename || 'Property')}${merge.company ? ' · ' + esc(merge.company) : ''}</div>`
-        body += `<div class="poster-note">Post for staff reference</div></div>`
-        body += `<table class="sched"><thead><tr><th class="rep">Report</th><th class="freq">How often</th><th>Where it is filed / retained</th></tr></thead><tbody>`
-        let alt = 0
-        for (const row of scheduleData(effSettings)) {
-          if ((row as any).group) { body += `<tr class="grp"><td colspan="3">${esc((row as any).group)}</td></tr>`; alt = 0 }
-          else {
-            body += `<tr class="${alt % 2 ? 'odd' : ''}"><td class="rep">${esc((row as any).report)}</td><td class="freq">${esc((row as any).freq)}</td><td class="file">${esc((row as any).filing)}</td></tr>`
-            alt++
-          }
-        }
-        body += `</tbody></table>`
-        body += `<div class="legend"><strong>Key:</strong> MI = Move-In · IC = Initial Certification · AR = Annual Recertification · IR = Interim Recertification. “Quarterly” reports may be run monthly at this property’s option.</div>`
-        body += `</div>`
-      }
+      else if (b.k === 'schedulePoster') body += schedulePosterInnerHtml()
     }
     const w = window.open('', '_blank')
     if (!w) { toast('Please allow pop-ups to print.', 'warning'); return }
@@ -316,7 +357,8 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
       .sched tr.odd td{background:#f7f7fc;}
       .sched td.rep{font-weight:700;color:#1e1b4b;width:38%;}
       .sched td.freq{width:24%;color:#111;}
-      .sched td.file{color:#444;}
+      .sched td.file{color:#444;line-height:1.5;}
+      .sched td.file strong{color:#312e81;}
       .sched tr.grp td{background:#4338ca;color:#fff;font-weight:700;text-transform:uppercase;letter-spacing:.8px;font-size:12px;padding:10px 16px;border-top:none;}
       .legend{margin-top:16px;font-size:12px;color:#6b7280;line-height:1.5;}
       @media print{h2{page-break-after:avoid;}tr{page-break-inside:avoid;}.poster{padding-top:0;}}
@@ -354,6 +396,13 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
         const margin = { top: 90, bottom: 90, left: 140, right: 140 } as any
         const headCell = (t: string, w: number) => new TableCell({ width: { size: w, type: WidthType.PERCENTAGE }, shading: { fill: '312E81' } as any, margins: margin, children: [new Paragraph({ children: [new TextRun({ text: t.toUpperCase(), bold: true, color: 'FFFFFF', size: 18 })] })] })
         const dataCell = (t: string, w: number, strong = false) => new TableCell({ width: { size: w, type: WidthType.PERCENTAGE }, margins: margin, children: [new Paragraph({ children: [new TextRun({ text: t, bold: strong, color: strong ? '1E1B4B' : '222222', size: 21 })] })] })
+        // Filing cell: one paragraph per line, bold label before " → ".
+        const filingCell = (s: string, w: number) => new TableCell({ width: { size: w, type: WidthType.PERCENTAGE }, margins: margin, children: filingLines(s).map((ln) => {
+          const [lbl, rest] = filingParts(ln)
+          return new Paragraph({ spacing: { after: 20 }, children: lbl
+            ? [new TextRun({ text: lbl + ' ', bold: true, color: '312E81', size: 19 }), new TextRun({ text: rest, size: 19 })]
+            : [new TextRun({ text: rest, size: 19 })] })
+        }) })
         const groupRow = (t: string) => new TableRow({ children: [new TableCell({ columnSpan: 3, shading: { fill: '4338CA' } as any, margins: { ...margin, top: 70, bottom: 70 }, children: [new Paragraph({ children: [new TextRun({ text: t.toUpperCase(), bold: true, color: 'FFFFFF', size: 18 })] })] })] })
 
         children.push(new Paragraph({ pageBreakBefore: true, alignment: AlignmentType.CENTER, spacing: { after: 60 }, children: [new TextRun({ text: 'EIV Report Schedule', bold: true, size: 48, color: '1E1B4B' })] }))
@@ -363,7 +412,7 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
         const rows = [new TableRow({ tableHeader: true, children: [headCell('Report', 38), headCell('How often', 24), headCell('Where it is filed / retained', 38)] })]
         for (const row of scheduleData(effSettings)) {
           if ((row as any).group) rows.push(groupRow((row as any).group))
-          else rows.push(new TableRow({ children: [dataCell((row as any).report, 38, true), dataCell((row as any).freq, 24), dataCell((row as any).filing, 38)] }))
+          else rows.push(new TableRow({ children: [dataCell((row as any).report, 38, true), dataCell((row as any).freq, 24), filingCell((row as any).filing, 38)] }))
         }
         const thin = { style: BorderStyle.SINGLE, size: 2, color: 'D4D4E4' }
         children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: { top: thin, bottom: thin, left: thin, right: thin, insideHorizontal: thin, insideVertical: thin } as any, rows }))
@@ -397,6 +446,7 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
             {dirty && <button onClick={discard} disabled={saving} className="text-sm text-slate-500 hover:text-slate-700 px-2 py-1.5">Discard</button>}
             <Button variant="primary" onClick={save} disabled={!dirty || saving}>{saving ? 'Saving…' : 'Save'}</Button>
             <span className="w-px h-6 bg-slate-200 mx-1 hidden sm:inline-block" />
+            <Button variant="neutral" onClick={generateSchedulePoster}><Icon name="calendar" /> Schedule</Button>
             <Button variant="neutral" onClick={generateWord}><Icon name="file" /> Word</Button>
             <Button variant="neutral" onClick={generatePDF}><Icon name="download" /> PDF</Button>
           </div>
@@ -478,7 +528,10 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
                     ) : <span className="text-slate-600">{r.freq}</span>}
                   </td>
                   <td className="py-2 text-slate-600 text-xs">
-                    {scheduleFiling(r, scope === 'company' ? curSettings : effSettings)}
+                    {filingLines(scheduleFiling(r, scope === 'company' ? curSettings : effSettings)).map((ln, i) => {
+                      const [lbl, rest] = filingParts(ln)
+                      return <span key={i} className="block">{lbl && <span className="font-semibold text-indigo-900">{lbl} </span>}{rest}</span>
+                    })}
                     {r.fileOption && (
                       <label className="ml-2 inline-flex items-center gap-1 text-xs text-indigo-600">
                         <input type="checkbox" checked={!!shownChoice(r.key!).file} onChange={(e: any) => setSchedule(r.key!, { file: e.target.checked })} /> file it
