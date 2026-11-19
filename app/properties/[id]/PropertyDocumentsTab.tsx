@@ -5,15 +5,15 @@ import { useToast } from '../../components/ToastProvider'
 import { saveAs } from 'file-saver'
 import { Document, Packer, Paragraph, TextRun, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle } from 'docx'
 import {
-  EIV_SECTIONS, EIV_SCHEDULE, EIV_ROLES, scheduleFrequency, scheduleFiling, scheduleIncluded,
-  type EivSettings, type ListItem, type ScheduleRow, type ScheduleChoice, type RosterEntry,
+  EIV_SECTIONS, EIV_SCHEDULE, scheduleFrequency, scheduleFiling, scheduleIncluded,
+  type EivSettings, type ListItem, type ScheduleRow, type ScheduleChoice,
 } from '../../../lib/eivTemplate'
 import { Button, Icon } from '../../components/ui'
 
 const uid = () => { try { if (typeof crypto !== 'undefined' && (crypto as any).randomUUID) return (crypto as any).randomUUID() } catch {} return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}` }
 
 // A company-wide default bundle stored in company_doc_settings.settings (one jsonb).
-interface CompanyDoc { storageDetail?: string; schedule?: Record<string, ScheduleChoice>; roster?: RosterEntry[]; overrides?: Record<string, string>; customItems?: any[] }
+interface CompanyDoc { schedule?: Record<string, ScheduleChoice>; overrides?: Record<string, string>; customItems?: any[]; version?: string; effectiveDate?: string }
 
 // ---------------------------------------------------------------------------
 // Composition: resolve the template into a flat list of render blocks.
@@ -23,27 +23,24 @@ type RBlock =
   | { k: 'h3'; text: string }
   | { k: 'p'; text: string }
   | { k: 'li'; text: string; level: number }
-  | { k: 'roster'; rows: { name: string; role: string }[] }
   | { k: 'schedule' }
   | { k: 'pagebreak' }
   | { k: 'schedulePoster' }
 
-const resolveText = (text: string, merge: Record<string, string>, settings: EivSettings) =>
-  text
-    .replace(/\{\{(\w+)\}\}/g, (_: string, k: string) => merge[k] || `[${k}]`)
-    .replace(/\[\[storage\]\]/g, 'secure, locked storage location in a secure area' + (settings.storageDetail ? ` (specifically, ${settings.storageDetail})` : ''))
+const resolveText = (text: string, merge: Record<string, string>) =>
+  text.replace(/\{\{(\w+)\}\}/g, (_: string, k: string) => merge[k] || `[${k}]`)
 
-const pushListItems = (out: RBlock[], items: ListItem[], merge: Record<string, string>, settings: EivSettings, level = 0) => {
+const pushListItems = (out: RBlock[], items: ListItem[], merge: Record<string, string>, level = 0) => {
   for (const it of items) {
-    if (typeof it === 'string') out.push({ k: 'li', text: resolveText(it, merge, settings), level })
+    if (typeof it === 'string') out.push({ k: 'li', text: resolveText(it, merge), level })
     else {
-      out.push({ k: 'li', text: resolveText(it.text, merge, settings), level })
-      if (it.sub) pushListItems(out, it.sub, merge, settings, level + 1)
+      out.push({ k: 'li', text: resolveText(it.text, merge), level })
+      if (it.sub) pushListItems(out, it.sub, merge, level + 1)
     }
   }
 }
 
-function composeEiv(merge: Record<string, string>, settings: EivSettings, overrides: Record<string, string>, customItems: any[]): RBlock[] {
+function composeEiv(merge: Record<string, string>, overrides: Record<string, string>, customItems: any[]): RBlock[] {
   const out: RBlock[] = []
   for (const section of EIV_SECTIONS) {
     // The EIV Schedule gets its own page as a large, post-on-the-wall reference sheet.
@@ -58,10 +55,9 @@ function composeEiv(merge: Record<string, string>, settings: EivSettings, overri
       for (const para of ov.split(/\n{2,}/)) if (para.trim()) out.push({ k: 'p', text: para.trim() })
     } else {
       for (const b of section.blocks) {
-        if (b.k === 'p') out.push({ k: 'p', text: resolveText(b.text, merge, settings) })
+        if (b.k === 'p') out.push({ k: 'p', text: resolveText(b.text, merge) })
         else if (b.k === 'h') out.push({ k: 'h3', text: b.text })
-        else if (b.k === 'ul') pushListItems(out, b.items, merge, settings)
-        else if (b.k === 'roster') { if ((settings.roster || []).length) out.push({ k: 'roster', rows: settings.roster! }) }
+        else if (b.k === 'ul') pushListItems(out, b.items, merge)
         else if (b.k === 'schedule') out.push({ k: 'schedule' })
       }
     }
@@ -188,14 +184,16 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
 
   // --- Scope-aware active config (what the editors read/write) -------------
   const curSettings: EivSettings = scope === 'company'
-    ? { storageDetail: co.storageDetail, schedule: co.schedule, roster: co.roster }
+    ? { schedule: co.schedule, version: co.version, effectiveDate: co.effectiveDate }
     : settings
   const curOverrides = scope === 'company' ? (co.overrides || {}) : overrides
   const curCustom = scope === 'company' ? (co.customItems || []) : customItems
 
-  const saveSettings = (next: EivSettings) => {
-    if (scope === 'company') setCo({ ...co, storageDetail: next.storageDetail, schedule: next.schedule, roster: next.roster })
-    else setSettings(next)
+  // Set a top-level policy field (version / effectiveDate), scope-aware.
+  const setPolicyField = (k: 'version' | 'effectiveDate', v: string) => {
+    const val = v || undefined
+    if (scope === 'company') setCo({ ...co, [k]: val })
+    else setSettings({ ...settings, [k]: val })
   }
   const saveOverrides = (next: Record<string, string>) => {
     if (scope === 'company') setCo({ ...co, overrides: next })
@@ -215,12 +213,12 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
   }
   const effSettings: EivSettings = {
     merge: settings.merge,
-    storageDetail: settings.storageDetail ?? co.storageDetail,
-    roster: (settings.roster && settings.roster.length) ? settings.roster : (co.roster || []),
     schedule: mergeSchedules(co.schedule, settings.schedule),
   }
   const effOverrides = { ...(co.overrides || {}), ...overrides }
   const effCustom = [...(co.customItems || []), ...customItems]
+  const effVersion = settings.version ?? co.version ?? ''
+  const effEffectiveDate = settings.effectiveDate ?? co.effectiveDate ?? ''
 
   const setMerge = (k: string, v: string) => setSettings({ ...settings, merge: { ...(settings.merge || {}), [k]: v } })
 
@@ -233,15 +231,9 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
     else setSettings({ ...settings, schedule: { ...(settings.schedule || {}), [key]: { ...(settings.schedule?.[key] || {}), ...patch } } })
   }
 
-  // --- Roster (scope-aware) ----------------------------------------------
-  const roster = curSettings.roster || []
-  const addRoster = () => saveSettings({ ...curSettings, roster: [...roster, { name: '', role: EIV_ROLES[1] }] })
-  const updateRoster = (i: number, patch: any) => saveSettings({ ...curSettings, roster: roster.map((r, idx) => (idx === i ? { ...r, ...patch } : r)) })
-  const removeRoster = (i: number) => saveSettings({ ...curSettings, roster: roster.filter((_, idx) => idx !== i) })
-
   // --- Overrides ----------------------------------------------------------
   const defaultSectionText = (sectionId: string) => {
-    const blocks = composeEiv(merge, effSettings, {}, []) // rendered with no overrides
+    const blocks = composeEiv(merge, {}, []) // rendered with no overrides
     const lines: string[] = []
     let inSection = false
     for (const b of blocks) {
@@ -271,18 +263,20 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
   // --- Generation ---------------------------------------------------------
   const esc = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   const title = 'EIV Policies & Procedures'
-  const headerLines = [merge.sitename, merge.address, merge.phone].filter(Boolean)
+  const headerLines = [merge.sitename, merge.company, merge.address, merge.phone].filter(Boolean)
+  const metaLine = [effEffectiveDate && `Effective ${effEffectiveDate}`, effVersion && `Version ${effVersion}`].filter(Boolean).join(' · ')
 
   const generatePDF = () => {
-    const blocks = composeEiv(merge, effSettings, effOverrides, effCustom)
+    const blocks = composeEiv(merge, effOverrides, effCustom)
     let body = `<h1>${esc(title)}</h1><p class="sub">for the use of HUD’s Enterprise Income Verification (EIV) System</p>`
-    body += `<p class="hdr">${headerLines.map(esc).join('<br>')}</p><hr>`
+    body += `<p class="hdr">${headerLines.map(esc).join('<br>')}</p>`
+    if (metaLine) body += `<p class="meta">${esc(metaLine)}</p>`
+    body += `<hr>`
     for (const b of blocks) {
       if (b.k === 'h2') body += `<h2>${esc(b.text)}</h2>`
       else if (b.k === 'h3') body += `<h3>${esc(b.text)}</h3>`
       else if (b.k === 'p') body += `<p>${esc(b.text)}</p>`
       else if (b.k === 'li') body += `<p class="li${b.level}">• ${esc(b.text)}</p>`
-      else if (b.k === 'roster') body += `<table><tr><th>Name</th><th>Role</th></tr>${b.rows.map((r) => `<tr><td>${esc(r.name)}</td><td>${esc(r.role)}</td></tr>`).join('')}</table>`
       else if (b.k === 'schedule') {
         body += `<table><tr><th>Report</th><th>Frequency</th><th>Filed / retained in</th></tr>`
         for (const row of scheduleData(effSettings)) {
@@ -306,7 +300,7 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
           }
         }
         body += `</tbody></table>`
-        body += `<div class="legend"><strong>Key:</strong> MI = Move-In · AR = Annual Recertification · IR = Interim Recertification. “Quarterly” reports may be run monthly at this property’s option.</div>`
+        body += `<div class="legend"><strong>Key:</strong> MI = Move-In · IC = Initial Certification · AR = Annual Recertification · IR = Interim Recertification. “Quarterly” reports may be run monthly at this property’s option.</div>`
         body += `</div>`
       }
     }
@@ -314,7 +308,7 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
     if (!w) { toast('Please allow pop-ups to print.', 'warning'); return }
     w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>
       body{font-family:Arial,Helvetica,sans-serif;color:#111;font-size:12px;line-height:1.5;margin:28px;}
-      h1{font-size:22px;margin:0;} .sub{color:#555;margin:2px 0 8px;} .hdr{color:#333;margin:0 0 6px;}
+      h1{font-size:22px;margin:0;} .sub{color:#555;margin:2px 0 8px;} .hdr{color:#333;margin:0 0 2px;} .meta{color:#777;font-size:11px;margin:0 0 6px;}
       h2{font-size:16px;margin:20px 0 6px;border-bottom:2px solid #333;padding-bottom:3px;}
       h3{font-size:13px;margin:12px 0 4px;color:#1d4ed8;} p{margin:0 0 6px;} .li0{margin-left:18px;} .li1{margin-left:40px;}
       table{border-collapse:collapse;width:100%;margin:8px 0 14px;} th,td{border:1px solid #999;padding:5px 7px;text-align:left;vertical-align:top;}
@@ -341,11 +335,12 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
   }
 
   const generateWord = async () => {
-    const blocks = composeEiv(merge, effSettings, effOverrides, effCustom)
+    const blocks = composeEiv(merge, effOverrides, effCustom)
     const children: any[] = []
     children.push(new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: title, bold: true, size: 40 })] }))
     children.push(new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'for the use of HUD’s Enterprise Income Verification (EIV) System', italics: true, size: 20 })] }))
     for (const line of headerLines) children.push(new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: line, size: 20 })] }))
+    if (metaLine) children.push(new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: metaLine, size: 16, color: '777777' })] }))
     children.push(new Paragraph({ children: [] }))
 
     const cell = (t: string, head = false) => new TableCell({ width: { size: 33, type: WidthType.PERCENTAGE }, children: [new Paragraph({ children: [new TextRun({ text: t, bold: head, size: 18 })] })] })
@@ -355,10 +350,7 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
       else if (b.k === 'h3') children.push(new Paragraph({ spacing: { before: 160 }, children: [new TextRun({ text: b.text, bold: true, size: 24, color: '1D4ED8' })] }))
       else if (b.k === 'p') children.push(new Paragraph({ spacing: { after: 80 }, children: [new TextRun({ text: b.text, size: 22 })] }))
       else if (b.k === 'li') children.push(new Paragraph({ spacing: { after: 40 }, indent: { left: 360 + b.level * 360 }, children: [new TextRun({ text: (b.level ? '◦ ' : '• ') + b.text, size: 22 })] }))
-      else if (b.k === 'roster') {
-        children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [new TableRow({ children: [cell('Name', true), cell('Role', true)] }), ...b.rows.map((r) => new TableRow({ children: [cell(r.name), cell(r.role)] }))] }))
-        children.push(new Paragraph({ children: [] }))
-      } else if (b.k === 'schedule') {
+      else if (b.k === 'schedule') {
         const rows = [new TableRow({ children: [cell('Report', true), cell('Frequency', true), cell('Filed / retained in', true)] })]
         for (const row of scheduleData(effSettings)) {
           if ((row as any).group) rows.push(new TableRow({ children: [new TableCell({ columnSpan: 3, shading: { fill: 'EEEEFF' } as any, children: [new Paragraph({ children: [new TextRun({ text: (row as any).group, bold: true, size: 18 })] })] })] }))
@@ -385,7 +377,7 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
         }
         const thin = { style: BorderStyle.SINGLE, size: 2, color: 'D4D4E4' }
         children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: { top: thin, bottom: thin, left: thin, right: thin, insideHorizontal: thin, insideVertical: thin } as any, rows }))
-        children.push(new Paragraph({ spacing: { before: 200 }, children: [new TextRun({ text: 'Key: MI = Move-In · AR = Annual Recertification · IR = Interim Recertification. “Quarterly” reports may be run monthly at this property’s option.', size: 16, color: '6B7280' })] }))
+        children.push(new Paragraph({ spacing: { before: 200 }, children: [new TextRun({ text: 'Key: MI = Move-In · IC = Initial Certification · AR = Annual Recertification · IR = Interim Recertification. “Quarterly” reports may be run monthly at this property’s option.', size: 16, color: '6B7280' })] }))
       }
     }
     const blob = await Packer.toBlob(new Document({ sections: [{ children }] }))
@@ -510,38 +502,31 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
         </div>
       </div>
 
-      {/* Storage location + roster */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
-        <div>
-          <h3 className="text-sm font-semibold text-slate-800 mb-1">Physical storage location {isCompany && <span className="ml-1 text-xs font-normal text-indigo-600">· company default</span>}</h3>
-          <p className="text-xs text-slate-500 mb-2">Default: “secure, locked storage location in a secure area.” Add specifics only if you want.</p>
-          <input
-            key={`${scope}-storage-${formRev}`}
-            defaultValue={curSettings.storageDetail || ''}
-            onBlur={(e: any) => { if (e.target.value !== (curSettings.storageDetail || '')) saveSettings({ ...curSettings, storageDetail: e.target.value || undefined }) }}
-            placeholder={!isCompany && co.storageDetail ? `Company default: ${co.storageDetail}` : "e.g. locked cabinet in the manager's office"}
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none"
-          />
-          {!isCompany && co.storageDetail && !settings.storageDetail && (
-            <p className="text-[11px] text-indigo-500 mt-1">Inheriting the company default: “{co.storageDetail}”.</p>
-          )}
-        </div>
-        <div>
-          <h3 className="text-sm font-semibold text-slate-800 mb-1">EIV staff roster (optional) {isCompany && <span className="ml-1 text-xs font-normal text-indigo-600">· company default</span>}</h3>
-          <p className="text-xs text-slate-500 mb-2">Leave empty to keep role-only language (no names), so you don’t regenerate when staff change. Add names only if you want a roster in the document.</p>
-          {!isCompany && !roster.length && (co.roster || []).length > 0 && (
-            <p className="text-[11px] text-indigo-500 mb-2">Inheriting the company roster ({co.roster!.length} {co.roster!.length === 1 ? 'person' : 'people'}). Add someone here to override it for this property.</p>
-          )}
-          {roster.map((r, i) => (
-            <div key={i} className="flex gap-2 mb-2">
-              <input value={r.name} onChange={(e: any) => updateRoster(i, { name: e.target.value })} placeholder="Name" className="flex-1 border border-slate-300 rounded-lg px-2 py-1 text-sm" />
-              <select value={r.role} onChange={(e: any) => updateRoster(i, { role: e.target.value })} className="border border-slate-300 rounded-lg px-2 py-1 text-sm">
-                {EIV_ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
-              </select>
-              <button onClick={() => removeRoster(i)} className="text-slate-300 hover:text-red-500 text-xs px-1">✕</button>
-            </div>
-          ))}
-          <button onClick={addRoster} className="text-xs font-medium text-indigo-600 hover:text-indigo-800">+ Add person</button>
+      {/* Policy details */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+        <h3 className="text-sm font-semibold text-slate-800 mb-1">Policy details {isCompany && <span className="ml-1 text-xs font-normal text-indigo-600">· company default</span>}</h3>
+        <p className="text-xs text-slate-500 mb-3">Shown on the title page of the generated document. {isCompany ? 'These become the default for every company property.' : 'Leave blank to inherit the company default.'}</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Version</label>
+            <input
+              key={`${scope}-ver-${formRev}`}
+              defaultValue={curSettings.version || ''}
+              onBlur={(e: any) => { if (e.target.value !== (curSettings.version || '')) setPolicyField('version', e.target.value) }}
+              placeholder={!isCompany && co.version ? `Company default: ${co.version}` : 'e.g. v4'}
+              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Effective / revised date</label>
+            <input
+              key={`${scope}-eff-${formRev}`}
+              defaultValue={curSettings.effectiveDate || ''}
+              onBlur={(e: any) => { if (e.target.value !== (curSettings.effectiveDate || '')) setPolicyField('effectiveDate', e.target.value) }}
+              placeholder={!isCompany && co.effectiveDate ? `Company default: ${co.effectiveDate}` : 'e.g. March 2026'}
+              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none"
+            />
+          </div>
         </div>
       </div>
 
