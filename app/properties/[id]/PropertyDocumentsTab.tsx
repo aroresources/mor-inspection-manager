@@ -309,8 +309,18 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
       .sched td.file strong{color:#312e81;display:inline-block;min-width:96px;}
       .sched tr.grp td{background:#4338ca;color:#fff;font-weight:700;text-transform:uppercase;letter-spacing:.8px;font-size:11.5px;padding:7px 16px;}
       .legend{margin-top:12px;font-size:11.5px;color:#6b7280;line-height:1.5;}
-      @media print{tr{page-break-inside:avoid;}}
-    </style></head><body>${schedulePosterInnerHtml()}<script>window.onload=function(){setTimeout(function(){window.print()},250)}<\/script></body></html>`)
+      #wrap{overflow:hidden;}
+      #fit{transform-origin:top left;}
+    </style></head><body><div id="wrap"><div id="fit">${schedulePosterInnerHtml()}</div></div><script>
+      window.onload=function(){
+        var fit=document.getElementById('fit'), wrap=document.getElementById('wrap');
+        // Conservative printable area for Letter/A4 landscape at 96dpi (minus margins).
+        var availH=700, availW=1000;
+        var s=Math.min(1, availH/fit.scrollHeight, availW/fit.scrollWidth);
+        if(s<1){ fit.style.transform='scale('+s+')'; wrap.style.height=(fit.scrollHeight*s)+'px'; wrap.style.width=(fit.scrollWidth*s)+'px'; }
+        setTimeout(function(){window.print()},300);
+      };
+    <\/script></body></html>`)
     w.document.close()
   }
 
