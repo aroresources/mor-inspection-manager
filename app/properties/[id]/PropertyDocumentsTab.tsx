@@ -9,6 +9,9 @@ import {
   type EivSettings, type ListItem, type ScheduleRow, type ScheduleChoice,
 } from '../../../lib/eivTemplate'
 import { Button, Icon } from '../../components/ui'
+import { EIV_CITES, EIV_FN_BY_KEY } from '../../../lib/eivFootnotes'
+
+const fnNorm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
 
 const uid = () => { try { if (typeof crypto !== 'undefined' && (crypto as any).randomUUID) return (crypto as any).randomUUID() } catch {} return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}` }
 
@@ -18,33 +21,49 @@ interface CompanyDoc { schedule?: Record<string, ScheduleChoice>; overrides?: Re
 // ---------------------------------------------------------------------------
 // Composition: resolve the template into a flat list of render blocks.
 // ---------------------------------------------------------------------------
+type Endnote = { n: number; text: string }
 type RBlock =
-  | { k: 'h2'; text: string }
-  | { k: 'h3'; text: string }
-  | { k: 'p'; text: string }
-  | { k: 'li'; text: string; level: number }
+  | { k: 'h2'; text: string; cites?: number[] }
+  | { k: 'h3'; text: string; cites?: number[] }
+  | { k: 'p'; text: string; cites?: number[] }
+  | { k: 'li'; text: string; level: number; cites?: number[] }
   | { k: 'schedule' }
   | { k: 'pagebreak' }
   | { k: 'schedulePoster' }
+  | { k: 'endnotes'; notes: Endnote[] }
 
 const resolveText = (text: string, merge: Record<string, string>) =>
   text.replace(/\{\{(\w+)\}\}/g, (_: string, k: string) => merge[k] || `[${k}]`)
 
-const pushListItems = (out: RBlock[], items: ListItem[], merge: Record<string, string>, level = 0) => {
+type AddCites = (sourceText: string) => number[]
+const pushListItems = (out: RBlock[], items: ListItem[], merge: Record<string, string>, addCites: AddCites, level = 0) => {
   for (const it of items) {
-    if (typeof it === 'string') out.push({ k: 'li', text: resolveText(it, merge), level })
+    if (typeof it === 'string') out.push({ k: 'li', text: resolveText(it, merge), level, cites: addCites(it) })
     else {
-      out.push({ k: 'li', text: resolveText(it.text, merge), level })
-      if (it.sub) pushListItems(out, it.sub, merge, level + 1)
+      out.push({ k: 'li', text: resolveText(it.text, merge), level, cites: addCites(it.text) })
+      if (it.sub) pushListItems(out, it.sub, merge, addCites, level + 1)
     }
   }
 }
 
-function composeEiv(merge: Record<string, string>, overrides: Record<string, string>, customItems: any[]): RBlock[] {
+// withCites attaches HUD endnote markers (EIV_FN_BY_KEY keyed on the raw
+// template text) and returns the collected endnotes in document order.
+function composeEiv(merge: Record<string, string>, overrides: Record<string, string>, customItems: any[], withCites = false): { blocks: RBlock[]; endnotes: Endnote[] } {
   const out: RBlock[] = []
+  const endnotes: Endnote[] = []
+  let counter = 0
+  const addCites: AddCites = (sourceText) => {
+    if (!withCites) return []
+    const ids = EIV_FN_BY_KEY[fnNorm(sourceText)]
+    if (!ids || !ids.length) return []
+    return ids.map((id) => { counter++; endnotes.push({ n: counter, text: EIV_CITES[id] || '' }); return counter })
+  }
   for (const section of EIV_SECTIONS) {
     // The EIV Schedule gets its own page as a large, post-on-the-wall reference sheet.
     if (section.id === 'eiv_schedule') {
+      // Register any schedule-section citations (e.g. the "Use of EIV Reports" note).
+      for (const b of section.blocks) if (b.k === 'p') addCites(b.text)
+      if (withCites && endnotes.length) out.push({ k: 'endnotes', notes: endnotes.slice() })
       out.push({ k: 'pagebreak' })
       out.push({ k: 'schedulePoster' })
       continue
@@ -55,9 +74,9 @@ function composeEiv(merge: Record<string, string>, overrides: Record<string, str
       for (const para of ov.split(/\n{2,}/)) if (para.trim()) out.push({ k: 'p', text: para.trim() })
     } else {
       for (const b of section.blocks) {
-        if (b.k === 'p') out.push({ k: 'p', text: resolveText(b.text, merge) })
-        else if (b.k === 'h') out.push({ k: 'h3', text: b.text })
-        else if (b.k === 'ul') pushListItems(out, b.items, merge)
+        if (b.k === 'p') out.push({ k: 'p', text: resolveText(b.text, merge), cites: addCites(b.text) })
+        else if (b.k === 'h') out.push({ k: 'h3', text: b.text, cites: addCites(b.text) })
+        else if (b.k === 'ul') pushListItems(out, b.items, merge, addCites)
         else if (b.k === 'schedule') out.push({ k: 'schedule' })
       }
     }
@@ -66,7 +85,7 @@ function composeEiv(merge: Record<string, string>, overrides: Record<string, str
       out.push({ k: 'li', text: ci.text.trim(), level: 0 })
     }
   }
-  return out
+  return { blocks: out, endnotes }
 }
 
 // Schedule rows resolved for the chosen settings.
@@ -230,7 +249,7 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
 
   // --- Overrides ----------------------------------------------------------
   const defaultSectionText = (sectionId: string) => {
-    const blocks = composeEiv(merge, {}, []) // rendered with no overrides
+    const { blocks } = composeEiv(merge, {}, []) // rendered with no overrides, no cites
     const lines: string[] = []
     let inSection = false
     for (const b of blocks) {
@@ -313,17 +332,23 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
     w.document.close()
   }
 
+  const sup = (cites?: number[]) => (cites && cites.length ? `<sup>${cites.join(',')}</sup>` : '')
+
   const generatePDF = () => {
-    const blocks = composeEiv(merge, effOverrides, effCustom)
+    const { blocks } = composeEiv(merge, effOverrides, effCustom, true)
     let body = `<h1>${esc(title)}</h1><p class="sub">for the use of HUD’s Enterprise Income Verification (EIV) System</p>`
     body += `<p class="hdr">${headerLines.map(esc).join('<br>')}</p>`
     if (metaLine) body += `<p class="meta">${esc(metaLine)}</p>`
     body += `<hr>`
     for (const b of blocks) {
       if (b.k === 'h2') body += `<h2>${esc(b.text)}</h2>`
-      else if (b.k === 'h3') body += `<h3>${esc(b.text)}</h3>`
-      else if (b.k === 'p') body += `<p>${esc(b.text)}</p>`
-      else if (b.k === 'li') body += `<p class="li${b.level}">• ${esc(b.text)}</p>`
+      else if (b.k === 'h3') body += `<h3>${esc(b.text)}${sup(b.cites)}</h3>`
+      else if (b.k === 'p') body += `<p>${esc(b.text)}${sup(b.cites)}</p>`
+      else if (b.k === 'li') body += `<p class="li${b.level}">• ${esc(b.text)}${sup(b.cites)}</p>`
+      else if (b.k === 'endnotes') {
+        body += `<h2>Notes</h2>`
+        for (const n of b.notes) body += `<p class="en"><span class="enn">${n.n}.</span> ${esc(n.text)}</p>`
+      }
       else if (b.k === 'schedule') {
         body += `<table><tr><th>Report</th><th>Frequency</th><th>Filed / retained in</th></tr>`
         for (const row of scheduleData(effSettings)) {
@@ -342,6 +367,8 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
       h1{font-size:22px;margin:0;} .sub{color:#555;margin:2px 0 8px;} .hdr{color:#333;margin:0 0 2px;} .meta{color:#777;font-size:11px;margin:0 0 6px;}
       h2{font-size:16px;margin:20px 0 6px;border-bottom:2px solid #333;padding-bottom:3px;}
       h3{font-size:13px;margin:12px 0 4px;color:#1d4ed8;} p{margin:0 0 6px;} .li0{margin-left:18px;} .li1{margin-left:40px;}
+      sup{font-size:8px;color:#555;vertical-align:super;margin-left:1px;}
+      .en{font-size:10px;color:#444;margin:0 0 3px;line-height:1.4;} .enn{color:#312e81;font-weight:bold;}
       table{border-collapse:collapse;width:100%;margin:8px 0 14px;} th,td{border:1px solid #999;padding:5px 7px;text-align:left;vertical-align:top;}
       th{background:#f0f0f0;} .grp{background:#eef;font-weight:bold;}
       /* EIV Schedule — its own landscape page, matching the standalone poster */
@@ -368,8 +395,9 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
   }
 
   const generateWord = async () => {
-    const blocks = composeEiv(merge, effOverrides, effCustom)
+    const { blocks } = composeEiv(merge, effOverrides, effCustom, true)
     const children: any[] = []
+    const supRuns = (cites?: number[]) => (cites && cites.length ? [new TextRun({ text: cites.join(','), superScript: true, size: 14, color: '555555' })] : [])
     children.push(new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: title, bold: true, size: 40 })] }))
     children.push(new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'for the use of HUD’s Enterprise Income Verification (EIV) System', italics: true, size: 20 })] }))
     for (const line of headerLines) children.push(new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: line, size: 20 })] }))
@@ -383,9 +411,13 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
 
     for (const b of blocks) {
       if (b.k === 'h2') children.push(new Paragraph({ spacing: { before: 300, after: 80 }, border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: '333333' } }, children: [new TextRun({ text: b.text, bold: true, size: 28 })] }))
-      else if (b.k === 'h3') children.push(new Paragraph({ spacing: { before: 160 }, children: [new TextRun({ text: b.text, bold: true, size: 24, color: '1D4ED8' })] }))
-      else if (b.k === 'p') children.push(new Paragraph({ spacing: { after: 80 }, children: [new TextRun({ text: b.text, size: 22 })] }))
-      else if (b.k === 'li') children.push(new Paragraph({ spacing: { after: 40 }, indent: { left: 360 + b.level * 360 }, children: [new TextRun({ text: (b.level ? '◦ ' : '• ') + b.text, size: 22 })] }))
+      else if (b.k === 'h3') children.push(new Paragraph({ spacing: { before: 160 }, children: [new TextRun({ text: b.text, bold: true, size: 24, color: '1D4ED8' }), ...supRuns(b.cites)] }))
+      else if (b.k === 'p') children.push(new Paragraph({ spacing: { after: 80 }, children: [new TextRun({ text: b.text, size: 22 }), ...supRuns(b.cites)] }))
+      else if (b.k === 'li') children.push(new Paragraph({ spacing: { after: 40 }, indent: { left: 360 + b.level * 360 }, children: [new TextRun({ text: (b.level ? '◦ ' : '• ') + b.text, size: 22 }), ...supRuns(b.cites)] }))
+      else if (b.k === 'endnotes') {
+        children.push(new Paragraph({ spacing: { before: 300, after: 80 }, border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: '333333' } }, children: [new TextRun({ text: 'Notes', bold: true, size: 28 })] }))
+        for (const nt of b.notes) children.push(new Paragraph({ spacing: { after: 30 }, children: [new TextRun({ text: nt.n + '. ', bold: true, size: 16, color: '312E81' }), new TextRun({ text: nt.text, size: 18 })] }))
+      }
       else if (b.k === 'schedule') {
         const rows = [new TableRow({ children: [cell('Report', true), cell('Frequency', true), cell('Filed / retained in', true)] })]
         for (const row of scheduleData(effSettings)) {
