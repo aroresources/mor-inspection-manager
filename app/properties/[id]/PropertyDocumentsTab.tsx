@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { useToast } from '../../components/ToastProvider'
 import { saveAs } from 'file-saver'
-import { Document, Packer, Paragraph, TextRun, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle } from 'docx'
+import { Document, Packer, Paragraph, TextRun, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle, PageOrientation } from 'docx'
 import {
   EIV_SECTIONS, EIV_SCHEDULE, scheduleFrequency, scheduleFiling, scheduleIncluded,
   type EivSettings, type ListItem, type ScheduleRow, type ScheduleChoice,
@@ -344,24 +344,25 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
       h3{font-size:13px;margin:12px 0 4px;color:#1d4ed8;} p{margin:0 0 6px;} .li0{margin-left:18px;} .li1{margin-left:40px;}
       table{border-collapse:collapse;width:100%;margin:8px 0 14px;} th,td{border:1px solid #999;padding:5px 7px;text-align:left;vertical-align:top;}
       th{background:#f0f0f0;} .grp{background:#eef;font-weight:bold;}
-      /* EIV Schedule poster (its own page) */
-      .pb{page-break-before:always;height:0;}
-      .poster{padding-top:6px;}
-      .poster-head{text-align:center;margin:0 0 20px;}
-      .poster-kicker{font-size:30px;font-weight:800;color:#1e1b4b;letter-spacing:.5px;line-height:1.1;}
-      .poster-sub{font-size:15px;color:#4338ca;font-weight:600;margin-top:6px;}
-      .poster-note{font-size:12px;color:#9ca3af;text-transform:uppercase;letter-spacing:2px;margin-top:4px;}
-      .sched{border-collapse:separate;border-spacing:0;width:100%;margin:0;font-size:14px;border:1px solid #d4d4e4;border-radius:12px;overflow:hidden;}
-      .sched th{background:#312e81;color:#fff;font-size:12px;letter-spacing:.6px;text-transform:uppercase;padding:13px 16px;border:none;}
-      .sched td{padding:13px 16px;border:none;border-top:1px solid #ececf3;vertical-align:top;font-size:14px;}
+      /* EIV Schedule — its own landscape page, matching the standalone poster */
+      @page sched{size:landscape;margin:10mm;}
+      .pb{display:none;}
+      .poster{break-before:page;page:sched;}
+      .poster-head{text-align:center;margin:0 0 12px;}
+      .poster-kicker{font-size:27px;font-weight:800;color:#1e1b4b;letter-spacing:.5px;line-height:1.05;}
+      .poster-sub{font-size:15px;color:#4338ca;font-weight:600;margin-top:5px;}
+      .poster-note{font-size:10.5px;color:#9ca3af;text-transform:uppercase;letter-spacing:3px;margin-top:3px;}
+      .sched{border-collapse:separate;border-spacing:0;width:100%;margin:0;font-size:12.5px;border:1.5px solid #c7c7dd;border-radius:12px;overflow:hidden;}
+      .sched th{background:#312e81;color:#fff;font-size:11px;letter-spacing:.6px;text-transform:uppercase;padding:7px 14px;border:none;text-align:left;}
+      .sched td{padding:5px 14px;border:none;border-top:1px solid #ececf3;vertical-align:top;font-size:12.5px;line-height:1.35;}
       .sched tr.odd td{background:#f7f7fc;}
-      .sched td.rep{font-weight:700;color:#1e1b4b;width:38%;}
-      .sched td.freq{width:24%;color:#111;}
-      .sched td.file{color:#444;line-height:1.5;}
-      .sched td.file strong{color:#312e81;}
-      .sched tr.grp td{background:#4338ca;color:#fff;font-weight:700;text-transform:uppercase;letter-spacing:.8px;font-size:12px;padding:10px 16px;border-top:none;}
-      .legend{margin-top:16px;font-size:12px;color:#6b7280;line-height:1.5;}
-      @media print{h2{page-break-after:avoid;}tr{page-break-inside:avoid;}.poster{padding-top:0;}}
+      .sched td.rep{font-weight:700;color:#1e1b4b;width:30%;}
+      .sched td.freq{width:26%;color:#111;}
+      .sched td.file{color:#374151;}
+      .sched td.file strong{color:#312e81;display:inline-block;min-width:88px;}
+      .sched tr.grp td{background:#4338ca;color:#fff;font-weight:700;text-transform:uppercase;letter-spacing:.8px;font-size:11px;padding:5px 14px;border-top:none;}
+      .legend{margin-top:10px;font-size:11px;color:#6b7280;line-height:1.5;}
+      @media print{h2{page-break-after:avoid;}tr{page-break-inside:avoid;}}
     </style></head><body>${body}<script>window.onload=function(){setTimeout(function(){window.print()},250)}<\/script></body></html>`)
     w.document.close()
   }
@@ -376,6 +377,9 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
     children.push(new Paragraph({ children: [] }))
 
     const cell = (t: string, head = false) => new TableCell({ width: { size: 33, type: WidthType.PERCENTAGE }, children: [new Paragraph({ children: [new TextRun({ text: t, bold: head, size: 18 })] })] })
+
+    // The EIV Schedule goes on its own landscape section (built separately).
+    const posterChildren: any[] = []
 
     for (const b of blocks) {
       if (b.k === 'h2') children.push(new Paragraph({ spacing: { before: 300, after: 80 }, border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: '333333' } }, children: [new TextRun({ text: b.text, bold: true, size: 28 })] }))
@@ -393,33 +397,40 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
       } else if (b.k === 'pagebreak') {
         // handled together with the poster below
       } else if (b.k === 'schedulePoster') {
-        const margin = { top: 90, bottom: 90, left: 140, right: 140 } as any
-        const headCell = (t: string, w: number) => new TableCell({ width: { size: w, type: WidthType.PERCENTAGE }, shading: { fill: '312E81' } as any, margins: margin, children: [new Paragraph({ children: [new TextRun({ text: t.toUpperCase(), bold: true, color: 'FFFFFF', size: 18 })] })] })
-        const dataCell = (t: string, w: number, strong = false) => new TableCell({ width: { size: w, type: WidthType.PERCENTAGE }, margins: margin, children: [new Paragraph({ children: [new TextRun({ text: t, bold: strong, color: strong ? '1E1B4B' : '222222', size: 21 })] })] })
+        const margin = { top: 50, bottom: 50, left: 120, right: 120 } as any
+        const headCell = (t: string, w: number) => new TableCell({ width: { size: w, type: WidthType.PERCENTAGE }, shading: { fill: '312E81' } as any, margins: margin, children: [new Paragraph({ children: [new TextRun({ text: t.toUpperCase(), bold: true, color: 'FFFFFF', size: 16 })] })] })
+        const dataCell = (t: string, w: number, strong = false) => new TableCell({ width: { size: w, type: WidthType.PERCENTAGE }, margins: margin, children: [new Paragraph({ children: [new TextRun({ text: t, bold: strong, color: strong ? '1E1B4B' : '222222', size: 19 })] })] })
         // Filing cell: one paragraph per line, bold label before " → ".
         const filingCell = (s: string, w: number) => new TableCell({ width: { size: w, type: WidthType.PERCENTAGE }, margins: margin, children: filingLines(s).map((ln) => {
           const [lbl, rest] = filingParts(ln)
-          return new Paragraph({ spacing: { after: 20 }, children: lbl
-            ? [new TextRun({ text: lbl + ' ', bold: true, color: '312E81', size: 19 }), new TextRun({ text: rest, size: 19 })]
-            : [new TextRun({ text: rest, size: 19 })] })
+          return new Paragraph({ spacing: { after: 10 }, children: lbl
+            ? [new TextRun({ text: lbl + ' ', bold: true, color: '312E81', size: 18 }), new TextRun({ text: rest, size: 18 })]
+            : [new TextRun({ text: rest, size: 18 })] })
         }) })
-        const groupRow = (t: string) => new TableRow({ children: [new TableCell({ columnSpan: 3, shading: { fill: '4338CA' } as any, margins: { ...margin, top: 70, bottom: 70 }, children: [new Paragraph({ children: [new TextRun({ text: t.toUpperCase(), bold: true, color: 'FFFFFF', size: 18 })] })] })] })
+        const groupRow = (t: string) => new TableRow({ children: [new TableCell({ columnSpan: 3, shading: { fill: '4338CA' } as any, margins: { ...margin, top: 40, bottom: 40 }, children: [new Paragraph({ children: [new TextRun({ text: t.toUpperCase(), bold: true, color: 'FFFFFF', size: 16 })] })] })] })
 
-        children.push(new Paragraph({ pageBreakBefore: true, alignment: AlignmentType.CENTER, spacing: { after: 60 }, children: [new TextRun({ text: 'EIV Report Schedule', bold: true, size: 48, color: '1E1B4B' })] }))
-        children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 20 }, children: [new TextRun({ text: [merge.sitename, merge.company].filter(Boolean).join(' · ') || 'Property', bold: true, size: 22, color: '4338CA' })] }))
-        children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 220 }, children: [new TextRun({ text: 'POST FOR STAFF REFERENCE', size: 16, color: '9CA3AF' })] }))
+        posterChildren.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 40 }, children: [new TextRun({ text: 'EIV Report Schedule', bold: true, size: 36, color: '1E1B4B' })] }))
+        posterChildren.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 16 }, children: [new TextRun({ text: [merge.sitename, merge.company].filter(Boolean).join(' · ') || 'Property', bold: true, size: 20, color: '4338CA' })] }))
+        posterChildren.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 140 }, children: [new TextRun({ text: 'POST FOR STAFF REFERENCE', size: 14, color: '9CA3AF' })] }))
 
-        const rows = [new TableRow({ tableHeader: true, children: [headCell('Report', 38), headCell('How often', 24), headCell('Where it is filed / retained', 38)] })]
+        const rows = [new TableRow({ tableHeader: true, children: [headCell('Report', 30), headCell('How often', 26), headCell('Where it is filed / retained', 44)] })]
         for (const row of scheduleData(effSettings)) {
           if ((row as any).group) rows.push(groupRow((row as any).group))
-          else rows.push(new TableRow({ children: [dataCell((row as any).report, 38, true), dataCell((row as any).freq, 24), filingCell((row as any).filing, 38)] }))
+          else rows.push(new TableRow({ children: [dataCell((row as any).report, 30, true), dataCell((row as any).freq, 26), filingCell((row as any).filing, 44)] }))
         }
         const thin = { style: BorderStyle.SINGLE, size: 2, color: 'D4D4E4' }
-        children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: { top: thin, bottom: thin, left: thin, right: thin, insideHorizontal: thin, insideVertical: thin } as any, rows }))
-        children.push(new Paragraph({ spacing: { before: 200 }, children: [new TextRun({ text: 'Key: MI = Move-In · IC = Initial Certification · AR = Annual Recertification · IR = Interim Recertification. “Quarterly” reports may be run monthly at this property’s option.', size: 16, color: '6B7280' })] }))
+        posterChildren.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: { top: thin, bottom: thin, left: thin, right: thin, insideHorizontal: thin, insideVertical: thin } as any, rows }))
+        posterChildren.push(new Paragraph({ spacing: { before: 140 }, children: [new TextRun({ text: 'Key: MI = Move-In · IC = Initial Certification · AR = Annual Recertification · IR = Interim Recertification. “Quarterly” reports may be run monthly at this property’s option.', size: 14, color: '6B7280' })] }))
       }
     }
-    const blob = await Packer.toBlob(new Document({ sections: [{ children }] }))
+    const sections: any[] = [{ children }]
+    if (posterChildren.length) {
+      sections.push({
+        properties: { page: { size: { orientation: PageOrientation.LANDSCAPE }, margin: { top: 720, bottom: 720, left: 720, right: 720 } } },
+        children: posterChildren,
+      })
+    }
+    const blob = await Packer.toBlob(new Document({ sections }))
     saveAs(blob, `EIV-Policy-and-Procedure-${(property?.name || 'Property').replace(/[^a-zA-Z0-9]/g, '_')}.docx`)
   }
 
