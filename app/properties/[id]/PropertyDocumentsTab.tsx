@@ -292,35 +292,24 @@ export default function PropertyDocumentsTab({ propertyId, property, onDirtyChan
     if (!w) { toast('Please allow pop-ups to print.', 'warning'); return }
     w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>EIV Report Schedule${merge.sitename ? ' — ' + esc(merge.sitename) : ''}</title><style>
       *{box-sizing:border-box;}
-      @page{size:landscape;margin:11mm;}
-      html,body{height:100%;}
-      body{font-family:ui-sans-serif,'Segoe UI',Arial,sans-serif;color:#1e1b4b;margin:0;padding:22px 30px;}
-      .poster-head{text-align:center;margin:0 0 16px;}
-      .poster-kicker{font-size:32px;font-weight:800;letter-spacing:.5px;color:#1e1b4b;line-height:1.05;}
-      .poster-sub{font-size:16px;color:#4338ca;font-weight:600;margin-top:6px;}
-      .poster-note{font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:3px;margin-top:4px;}
-      .sched{border-collapse:separate;border-spacing:0;width:100%;font-size:13px;border:1.5px solid #c7c7dd;border-radius:14px;overflow:hidden;}
-      .sched th{background:#312e81;color:#fff;font-size:12px;letter-spacing:.6px;text-transform:uppercase;padding:9px 16px;text-align:left;}
-      .sched td{padding:8px 16px;border-top:1px solid #ececf3;vertical-align:top;line-height:1.4;}
+      @page{size:landscape;margin:10mm;}
+      body{font-family:ui-sans-serif,'Segoe UI',Arial,sans-serif;color:#1e1b4b;margin:0;padding:14px 26px;}
+      .poster-head{text-align:center;margin:0 0 12px;}
+      .poster-kicker{font-size:27px;font-weight:800;letter-spacing:.5px;color:#1e1b4b;line-height:1.05;}
+      .poster-sub{font-size:15px;color:#4338ca;font-weight:600;margin-top:5px;}
+      .poster-note{font-size:10.5px;color:#9ca3af;text-transform:uppercase;letter-spacing:3px;margin-top:3px;}
+      .sched{border-collapse:separate;border-spacing:0;width:100%;font-size:12.5px;border:1.5px solid #c7c7dd;border-radius:12px;overflow:hidden;}
+      .sched th{background:#312e81;color:#fff;font-size:11px;letter-spacing:.6px;text-transform:uppercase;padding:7px 14px;text-align:left;}
+      .sched td{padding:5px 14px;border-top:1px solid #ececf3;vertical-align:top;line-height:1.35;}
       .sched tr.odd td{background:#f7f7fc;}
       .sched td.rep{font-weight:700;color:#1e1b4b;width:30%;}
       .sched td.freq{width:26%;color:#111;}
       .sched td.file{color:#374151;}
-      .sched td.file strong{color:#312e81;display:inline-block;min-width:96px;}
-      .sched tr.grp td{background:#4338ca;color:#fff;font-weight:700;text-transform:uppercase;letter-spacing:.8px;font-size:11.5px;padding:7px 16px;}
-      .legend{margin-top:12px;font-size:11.5px;color:#6b7280;line-height:1.5;}
-      #wrap{overflow:hidden;}
-      #fit{transform-origin:top left;}
-    </style></head><body><div id="wrap"><div id="fit">${schedulePosterInnerHtml()}</div></div><script>
-      window.onload=function(){
-        var fit=document.getElementById('fit'), wrap=document.getElementById('wrap');
-        // Conservative printable area for Letter/A4 landscape at 96dpi (minus margins).
-        var availH=700, availW=1000;
-        var s=Math.min(1, availH/fit.scrollHeight, availW/fit.scrollWidth);
-        if(s<1){ fit.style.transform='scale('+s+')'; wrap.style.height=(fit.scrollHeight*s)+'px'; wrap.style.width=(fit.scrollWidth*s)+'px'; }
-        setTimeout(function(){window.print()},300);
-      };
-    <\/script></body></html>`)
+      .sched td.file strong{color:#312e81;display:inline-block;min-width:88px;}
+      .sched tr.grp td{background:#4338ca;color:#fff;font-weight:700;text-transform:uppercase;letter-spacing:.8px;font-size:11px;padding:5px 14px;}
+      .legend{margin-top:10px;font-size:11px;color:#6b7280;line-height:1.5;}
+      @media print{tr{page-break-inside:avoid;}}
+    </style></head><body>${schedulePosterInnerHtml()}<script>window.onload=function(){setTimeout(function(){window.print()},250)}<\/script></body></html>`)
     w.document.close()
   }
 
