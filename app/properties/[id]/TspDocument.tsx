@@ -200,7 +200,7 @@ export default function TspDocument({ propertyId, property, onDirtyChange }: any
       ['Program', prog],
       ['Occupancy designation', demo + (m('occupancyBasis') ? ` — ${m('occupancyBasis')}` : '')],
       ['State', st],
-      ['HUD project no.', m('hudProjectNo')],
+      ['HUD project no.', property?.section8_number || m('hudProjectNo')],
       ['HAP contract no.', m('hapContractNo')],
       ['Initial HAP effective date', m('hapEffectiveDate')],
       ['Number of units', m('numberOfUnits')],
@@ -355,7 +355,6 @@ export default function TspDocument({ propertyId, property, onDirtyChange }: any
           <Select label="Occupancy" value={s.demo || 'family'} onChange={v => setS(p => ({ ...p, demo: v as TspDemo }))} options={DEMOS} />
           <Select label="State module" value={s.state || 'other'} onChange={v => setS(p => ({ ...p, state: v as TspState }))} options={STATES} />
           <Select label="Program" value={s.program || 'section8'} onChange={v => setS(p => ({ ...p, program: v as TspProgram }))} options={PROGRAMS} />
-          <Field label="HUD project no." value={m('hudProjectNo')} onChange={v => setMerge('hudProjectNo', v)} />
           <Field label="HAP contract no." value={m('hapContractNo')} onChange={v => setMerge('hapContractNo', v)} />
           <Field label="Initial HAP effective date" value={m('hapEffectiveDate')} onChange={v => setMerge('hapEffectiveDate', v)} placeholder="e.g. 7/1/1983" />
           <Field label="Number of units" value={m('numberOfUnits')} onChange={v => setMerge('numberOfUnits', v)} />
