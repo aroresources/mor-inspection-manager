@@ -1,6 +1,7 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../../../lib/supabase'
+import TspDocument from './TspDocument'
 import { useToast } from '../../components/ToastProvider'
 import { saveAs } from 'file-saver'
 import { Document, Packer, Paragraph, TextRun, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle, PageOrientation } from 'docx'
@@ -110,7 +111,7 @@ const filingParts = (line: string): [string | null, string] => {
 
 type Scope = 'property' | 'company'
 
-export default function PropertyDocumentsTab({ propertyId, property, onDirtyChange }: any) {
+function EivDocument({ propertyId, property, onDirtyChange }: any) {
   const { toast } = useToast()
   const companyId = property?.company_id || null
   const [loading, setLoading] = useState(true)
@@ -655,6 +656,41 @@ function Info({ label, value }: any) {
     <div>
       <label className="block text-xs text-slate-500 mb-1">{label}</label>
       <p className="text-sm font-medium text-slate-800">{value}</p>
+    </div>
+  )
+}
+
+// Top-level tab: pick a document type, then mount the matching generator.
+// Each child owns its own state + dirty tracking; only one is mounted at a time.
+export default function PropertyDocumentsTab(props: any) {
+  const [docType, setDocType] = useState<'eiv' | 'tsp'>('eiv')
+  const dirtyRef = useRef(false)
+  const onDirtyChange = (d: boolean) => { dirtyRef.current = d; props.onDirtyChange?.(d) }
+  const switchTo = (t: 'eiv' | 'tsp') => {
+    if (t === docType) return
+    if (dirtyRef.current && !window.confirm('You have unsaved changes that will be lost. Switch document anyway?')) return
+    dirtyRef.current = false
+    props.onDirtyChange?.(false)
+    setDocType(t)
+  }
+  const tab = (t: 'eiv' | 'tsp', label: string) => (
+    <button
+      onClick={() => switchTo(t)}
+      className={`px-4 py-1.5 text-sm font-medium transition ${docType === t ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'} ${t === 'tsp' ? 'border-l border-slate-300' : ''}`}
+    >{label}</button>
+  )
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 flex flex-wrap items-center gap-3">
+        <span className="text-sm font-medium text-slate-500">Document</span>
+        <div className="inline-flex rounded-lg border border-slate-300 overflow-hidden">
+          {tab('eiv', 'EIV Policies & Procedures')}
+          {tab('tsp', 'Tenant Selection Plan')}
+        </div>
+      </div>
+      {docType === 'eiv'
+        ? <EivDocument {...props} onDirtyChange={onDirtyChange} />
+        : <TspDocument {...props} onDirtyChange={onDirtyChange} />}
     </div>
   )
 }
