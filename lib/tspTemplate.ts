@@ -651,6 +651,17 @@ export const TSP_CHOICES: Record<TspChoiceKey, ChoiceOption[]> = {
   ],
 }
 
+// Income limit is derived from the initial HAP contract date, not chosen:
+// effective on/after 10/1/1981 => very low-income (50% AMI); before => low (80%).
+// Defaults to very_low when the date is missing or unparseable.
+export function deriveIncomeLimit(hapEffectiveDate?: string): 'very_low' | 'low_income' {
+  if (hapEffectiveDate) {
+    const d = new Date(hapEffectiveDate)
+    if (!isNaN(d.getTime())) return d >= new Date(1981, 9, 1) ? 'very_low' : 'low_income'
+  }
+  return 'very_low'
+}
+
 // Default merge-token values so a draft renders cleanly before a property fills
 // in specifics. Overridden by settings.merge.
 export const TSP_DEFAULT_MERGE: Record<string, string> = {
@@ -731,7 +742,10 @@ function tspBlock(b: Block, s: TspSettings): ResolvedBlock[] {
     }
     case 'choice': {
       const opts = TSP_CHOICES[b.setting as TspChoiceKey] || []
-      const sel = s.choices?.[b.setting as TspChoiceKey]
+      // incomeLimit is always derived from the initial HAP date, never stored.
+      const sel = b.setting === 'incomeLimit'
+        ? deriveIncomeLimit(s.merge?.hapEffectiveDate)
+        : s.choices?.[b.setting as TspChoiceKey]
       const opt = opts.find(o => o.id === sel) || opts[0]
       return opt ? tspParas(opt.text, s) : []
     }

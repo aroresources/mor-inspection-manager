@@ -7,7 +7,7 @@ import JSZip from 'jszip'
 import { Document, Packer, Paragraph, TextRun, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle } from 'docx'
 import { Button, Icon } from '../../components/ui'
 import {
-  composeTsp, TSP_CHOICES, TSP_DEFAULT_UNIT_SIZE, TSP_SECTION_LIST, tspSectionText,
+  composeTsp, TSP_CHOICES, TSP_DEFAULT_UNIT_SIZE, TSP_SECTION_LIST, tspSectionText, deriveIncomeLimit,
   type TspSettings, type TspDemo, type TspState, type TspProgram,
   type TspFlag, type TspChoiceKey, type TspUploadKey,
   type ResolvedListItem, type UnitSizeRow, type TspCustomItem,
@@ -187,6 +187,7 @@ export default function TspDocument({ propertyId, property, onDirtyChange }: any
   const effSettings = (): TspSettings => ({
     ...s,
     merge: { propertyName: property?.name || '', ...(s.merge || {}) },
+    // Note: income limit is derived from the HAP date inside composeTsp.
   })
 
   // Identity rows shown on the cover.
@@ -324,6 +325,7 @@ export default function TspDocument({ propertyId, property, onDirtyChange }: any
 
   const stateOther = s.state !== 'nj'
   const incomeOther = s.choices?.incomeTargetingMethod === 'other'
+  const derivedLimit = deriveIncomeLimit(s.merge?.hapEffectiveDate)
   const transfersAllowed = s.choices?.inHouseTransferPolicy === 'transfer_list'
   const transferRatio = (s.choices?.transferAlternation || 'alternate') === 'ratio'
   const transferOther = s.choices?.transferAlternation === 'other'
@@ -369,7 +371,13 @@ export default function TspDocument({ propertyId, property, onDirtyChange }: any
       {/* Policy choices */}
       <Card title="Policy choices">
         <div className="grid grid-cols-1 gap-3">
-          <ChoiceSelect label="Income limit (§II.A)" k="incomeLimit" value={s.choices?.incomeLimit} onChange={setChoice} />
+          <div>
+            <span className="text-xs font-medium text-slate-500">Income limit (§II.A)</span>
+            <p className="text-sm text-slate-700 mt-1">
+              {derivedLimit === 'very_low' ? '50% AMI (very low-income)' : '80% AMI (low-income)'}
+              <span className="text-xs text-slate-400"> — derived from the Initial HAP effective date{m('hapEffectiveDate') ? '' : ' (defaulting to 50% until a date is entered)'}.</span>
+            </p>
+          </div>
           <ChoiceSelect label="40% income-targeting method (§II.B)" k="incomeTargetingMethod" value={s.choices?.incomeTargetingMethod} onChange={setChoice} />
           {incomeOther && (
             <label className="block">
