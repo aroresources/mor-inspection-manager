@@ -22,6 +22,7 @@ export interface When {
   program?: TspProgram[]
   flag?: string       // render only when this boolean setting is truthy
   notFlag?: string    // render only when this boolean setting is falsy
+  choiceEq?: { setting: string; value: string }  // render only when a choice equals value
 }
 
 export type ListItem = string | { text: string; sub?: ListItem[]; when?: When }
@@ -49,6 +50,7 @@ export type TspChoiceKey =
   | 'incomeTargetingMethod'  // #46
   | 'consent9887Timing'      // #30
   | 'inHouseTransferPolicy'  // #158
+  | 'transferAlternation'    // procedure when non-mandated transfers are allowed
 
 // Upload blocks: setting -> pasted/extracted text (empty => use fallback).
 export type TspUploadKey = 'screeningCriteria' | 'creditCriteria'   // #103/#104, #119
@@ -67,9 +69,12 @@ export interface TspSettings {
   choices?: Partial<Record<TspChoiceKey, string>>
   uploads?: Partial<Record<TspUploadKey, string>>
   unitSizeRows?: UnitSizeRow[]     // occupancy min/max per bedroom (table id 'unitSize')
+  overrides?: Record<string, string>   // sectionId -> replacement wording (blank => template)
+  customItems?: TspCustomItem[]        // property-specific items appended to a section
 }
 
 export interface UnitSizeRow { unit: string; min: string; max: string }
+export interface TspCustomItem { id: string; sectionId: string; text: string }
 
 // The full "disabled family" definition (comment #9), shown for elderly_disabled.
 const DISABLED_FAMILY_DEF: ListItem[] = [
@@ -529,6 +534,8 @@ export const TSP_SECTIONS: Section[] = [
       // Comment #158: how the property handles non-mandated / in-house transfers
       // and ranks them against new applicants is a per-property choice.
       { k: 'choice', setting: 'inHouseTransferPolicy' },
+      // Procedure for sharing vacancies, only when non-mandated transfers are allowed.
+      { k: 'choice', setting: 'transferAlternation', when: { choiceEq: { setting: 'inHouseTransferPolicy', value: 'transfer_list' } } },
       { k: 'ul', items: [
         'If, through no fault of the tenant, a unit becomes unfit for use (for example, fire or flood), the tenant may be placed in an available vacant unit ahead of the waiting list.',
         'If a resident qualifies for an optional transfer and does not want to transfer when the unit is available, their name will be placed at the bottom of the transfer list. If the transfer is mandated by HUD, refusal to move will be cause for termination of subsidy, and the resident will be required to pay the current approved market rent for the unit they occupy.',
@@ -630,7 +637,17 @@ export const TSP_CHOICES: Record<TspChoiceKey, ChoiceOption[]> = {
     { id: 'not_allowed', label: 'Not allowed (except hardship/RA/VAWA)',
       text: 'In-house transfers for reasons other than those above will not be allowed unless there are extenuating circumstances. VAWA emergency transfers and reasonable-accommodation transfers are always considered.' },
     { id: 'transfer_list', label: 'Allowed via a Transfer Waiting List',
-      text: 'This property allows in-house transfers and maintains a separate Transfer Waiting List. Non-mandated in-house transfer requests are placed on the Transfer Waiting List. Management-mandated transfers (over/under-housing and accessible-unit moves), VAWA emergency transfers, and reasonable-accommodation transfers are considered first; remaining non-mandated transfers are then considered together with, or after, new applicants on the main waiting list as capacity allows.' },
+      text: 'This property allows in-house transfers and maintains a separate Transfer Waiting List. Non-mandated in-house transfer requests are placed on the Transfer Waiting List. Management-mandated transfers (over/under-housing and accessible-unit moves), VAWA emergency transfers, and reasonable-accommodation transfers are considered first; remaining non-mandated transfers are then handled under the procedure below.' },
+  ],
+  // Procedure for sharing vacancies between the Transfer Waiting List and new
+  // applicants (only shown when non-mandated transfers are allowed).
+  transferAlternation: [
+    { id: 'alternate', label: 'Alternate: one transfer, one new applicant',
+      text: 'As units become available (after any mandated, VAWA emergency, and reasonable-accommodation transfers), management will alternate between selecting a household from the Transfer Waiting List and the next eligible applicant from the main waiting list — one transfer, then one new applicant, and so on — while remaining in compliance with the income-targeting requirements in Section II.B.' },
+    { id: 'ratio', label: 'Ratio: one transfer every N units',
+      text: 'As units become available (after any mandated, VAWA emergency, and reasonable-accommodation transfers), management will fill one unit from the Transfer Waiting List for every {{transferEvery}} units that become available, filling the remaining units from the main waiting list, while remaining in compliance with the income-targeting requirements in Section II.B.' },
+    { id: 'other', label: 'Other (describe)',
+      text: '{{transferOther}}' },
   ],
 }
 
@@ -641,6 +658,8 @@ export const TSP_DEFAULT_MERGE: Record<string, string> = {
   occupancyBasis: '[HAP contract / Regulatory Agreement / HUD-approved designation]',
   otherPreferences: 'This property has no other preferences.',
   smallerUnitHoldYears: '3',
+  transferEvery: '3',
+  transferOther: '[Describe the property’s transfer/new-applicant selection procedure.]',
   incomeTargetingOther: '[Describe the property’s alternative income-targeting method.]',
   lookbackViolentFelony: '7',
   lookbackFelonyDrug: '5',
@@ -680,6 +699,7 @@ function tspWhen(when: When | undefined, s: TspSettings): boolean {
   if (when.program && (!s.program || !when.program.includes(s.program))) return false
   if (when.flag && !s.flags?.[when.flag as TspFlag]) return false
   if (when.notFlag && s.flags?.[when.notFlag as TspFlag]) return false
+  if (when.choiceEq && s.choices?.[when.choiceEq.setting as TspChoiceKey] !== when.choiceEq.value) return false
   return true
 }
 
@@ -730,9 +750,36 @@ function tspBlock(b: Block, s: TspSettings): ResolvedBlock[] {
 export function composeTsp(settings: TspSettings): ResolvedSection[] {
   return TSP_SECTIONS
     .filter(sec => tspWhen(sec.when, settings))
-    .map(sec => ({
-      num: sec.num,
-      title: sec.title,
-      blocks: sec.blocks.flatMap(b => tspBlock(b, settings)),
-    }))
+    .map(sec => {
+      const ov = settings.overrides?.[sec.id]
+      // An override replaces the section body with the user's own wording.
+      const blocks: ResolvedBlock[] = (ov && ov.trim())
+        ? tspParas(ov, settings)
+        : sec.blocks.flatMap(b => tspBlock(b, settings))
+      // Property-specific items are appended to the end of their section.
+      for (const c of settings.customItems || []) {
+        if (c.sectionId === sec.id && c.text.trim()) blocks.push(...tspParas(c.text, settings))
+      }
+      return { num: sec.num, title: sec.title, blocks }
+    })
+}
+
+// Section list (id/num/title) for building settings UIs.
+export const TSP_SECTION_LIST = TSP_SECTIONS.map(s => ({ id: s.id, num: s.num, title: s.title }))
+
+// Render a section's default wording (no citations) as editable plain text,
+// for prefilling the "edit section wording" box.
+export function tspSectionText(sectionId: string, settings: TspSettings): string {
+  const sec = TSP_SECTIONS.find(s => s.id === sectionId)
+  if (!sec) return ''
+  const lines: string[] = []
+  const walk = (items: ResolvedListItem[], depth = 0) => {
+    for (const it of items) { lines.push(`${'   '.repeat(depth)}- ${it.text}`); if (it.sub) walk(it.sub, depth + 1) }
+  }
+  for (const b of sec.blocks.flatMap(bl => tspBlock(bl, settings))) {
+    if (b.k === 'h' || b.k === 'p') lines.push(b.text)
+    else if (b.k === 'ul') walk(b.items)
+    else if (b.k === 'table') lines.push('[Unit-size table]')
+  }
+  return lines.join('\n\n')
 }

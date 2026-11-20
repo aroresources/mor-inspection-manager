@@ -7,15 +7,16 @@ import JSZip from 'jszip'
 import { Document, Packer, Paragraph, TextRun, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle } from 'docx'
 import { Button, Icon } from '../../components/ui'
 import {
-  composeTsp, TSP_CHOICES, TSP_DEFAULT_UNIT_SIZE,
+  composeTsp, TSP_CHOICES, TSP_DEFAULT_UNIT_SIZE, TSP_SECTION_LIST, tspSectionText,
   type TspSettings, type TspDemo, type TspState, type TspProgram,
   type TspFlag, type TspChoiceKey, type TspUploadKey,
-  type ResolvedListItem, type UnitSizeRow,
+  type ResolvedListItem, type UnitSizeRow, type TspCustomItem,
 } from '../../../lib/tspTemplate'
 import { TSP_CITES, TSP_FN_BY_KEY } from '../../../lib/tspFootnotes'
 
 // ---- small helpers ---------------------------------------------------------
 const esc = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+const uid = () => { try { if (typeof crypto !== 'undefined' && (crypto as any).randomUUID) return (crypto as any).randomUUID() } catch {} return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}` }
 const decodeXml = (s: string) =>
   s.replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(parseInt(d, 10)))
@@ -86,6 +87,8 @@ export default function TspDocument({ propertyId, property, onDirtyChange }: any
   const [saving, setSaving] = useState(false)
   const [s, setS] = useState<TspSettings>({})
   const [saved, setSaved] = useState<TspSettings>({})
+  const [editSection, setEditSection] = useState<string>('')
+  const [overrideDraft, setOverrideDraft] = useState<string>('')
 
   useEffect(() => { load() }, [propertyId])
 
@@ -128,6 +131,26 @@ export default function TspDocument({ propertyId, property, onDirtyChange }: any
   const setChoice = (k: TspChoiceKey, v: string) => setS(p => ({ ...p, choices: { ...(p.choices || {}), [k]: v } }))
   const setUpload = (k: TspUploadKey, v: string) => setS(p => ({ ...p, uploads: { ...(p.uploads || {}), [k]: v } }))
   const m = (k: string) => s.merge?.[k] || ''
+
+  // ---- section overrides ("edit section wording") -------------------------
+  const openEdit = (sectionId: string) => {
+    setEditSection(sectionId)
+    setOverrideDraft(s.overrides?.[sectionId] ?? tspSectionText(sectionId, effSettings()))
+  }
+  const saveEdit = () => {
+    setS(p => ({ ...p, overrides: { ...(p.overrides || {}), [editSection]: overrideDraft } }))
+    setEditSection('')
+  }
+  const clearOverride = (sectionId: string) => setS(p => {
+    const n = { ...(p.overrides || {}) }; delete n[sectionId]; return { ...p, overrides: n }
+  })
+
+  // ---- property-specific items --------------------------------------------
+  const customItems: TspCustomItem[] = s.customItems || []
+  const setCustom = (next: TspCustomItem[]) => setS(p => ({ ...p, customItems: next }))
+  const addCustom = () => setCustom([...customItems, { id: uid(), sectionId: TSP_SECTION_LIST[0].id, text: '' }])
+  const updateCustom = (id: string, patch: Partial<TspCustomItem>) => setCustom(customItems.map(c => c.id === id ? { ...c, ...patch } : c))
+  const removeCustom = (id: string) => setCustom(customItems.filter(c => c.id !== id))
 
   // ---- unit-size rows ------------------------------------------------------
   const rows: UnitSizeRow[] = s.unitSizeRows && s.unitSizeRows.length ? s.unitSizeRows : TSP_DEFAULT_UNIT_SIZE
@@ -301,6 +324,9 @@ export default function TspDocument({ propertyId, property, onDirtyChange }: any
 
   const stateOther = s.state !== 'nj'
   const incomeOther = s.choices?.incomeTargetingMethod === 'other'
+  const transfersAllowed = s.choices?.inHouseTransferPolicy === 'transfer_list'
+  const transferRatio = (s.choices?.transferAlternation || 'alternate') === 'ratio'
+  const transferOther = s.choices?.transferAlternation === 'other'
 
   return (
     <div className="space-y-4">
@@ -353,6 +379,20 @@ export default function TspDocument({ propertyId, property, onDirtyChange }: any
           )}
           <ChoiceSelect label="HUD-9887 timing — member turning 18 mid-year (§I)" k="consent9887Timing" value={s.choices?.consent9887Timing} onChange={setChoice} />
           <ChoiceSelect label="In-house / non-mandated transfers (§VI)" k="inHouseTransferPolicy" value={s.choices?.inHouseTransferPolicy} onChange={setChoice} />
+          {transfersAllowed && (
+            <div className="pl-3 border-l-2 border-indigo-100 space-y-2">
+              <ChoiceSelect label="Transfer vs. new-applicant procedure" k="transferAlternation" value={s.choices?.transferAlternation} onChange={setChoice} />
+              {transferRatio && (
+                <Field label="One transfer for every N units" value={m('transferEvery')} onChange={v => setMerge('transferEvery', v)} placeholder="3" />
+              )}
+              {transferOther && (
+                <label className="block">
+                  <span className="text-xs font-medium text-slate-500">Describe the transfer/new-applicant procedure</span>
+                  <textarea className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" rows={3} value={m('transferOther')} onChange={e => setMerge('transferOther', e.target.value)} />
+                </label>
+              )}
+            </div>
+          )}
         </div>
       </Card>
 
@@ -422,6 +462,54 @@ export default function TspDocument({ propertyId, property, onDirtyChange }: any
             </div>
           ))}
           <button className="text-sm text-indigo-600 font-medium" onClick={addRow}>+ Add unit size</button>
+        </div>
+      </Card>
+
+      {/* Edit section wording */}
+      <Card title="Edit section wording">
+        <p className="text-xs text-slate-500 mb-3">Replace the generated wording of any section with your own. An overridden section prints your text verbatim (HUD citations are not added to it). Clear an override to return to the generated text.</p>
+        <div className="divide-y divide-slate-100">
+          {TSP_SECTION_LIST.map(sec => {
+            const overridden = !!s.overrides?.[sec.id]
+            return (
+              <div key={sec.id} className="flex items-center justify-between py-2 gap-2">
+                <span className="text-sm text-slate-700">{sec.num}. {sec.title}{overridden && <span className="ml-2 text-xs text-amber-600 font-medium">edited</span>}</span>
+                <span className="flex gap-2 shrink-0">
+                  {overridden && <button className="text-xs text-slate-500 hover:text-red-500" onClick={() => clearOverride(sec.id)}>Reset</button>}
+                  <button className="text-xs text-indigo-600 font-medium" onClick={() => openEdit(sec.id)}>{overridden ? 'Edit' : 'Override'}</button>
+                </span>
+              </div>
+            )
+          })}
+        </div>
+        {editSection && (
+          <div className="mt-3 border-t border-slate-100 pt-3">
+            <div className="text-xs font-medium text-slate-500 mb-1">Editing: {TSP_SECTION_LIST.find(x => x.id === editSection)?.num}. {TSP_SECTION_LIST.find(x => x.id === editSection)?.title}</div>
+            <textarea className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono" rows={12} value={overrideDraft} onChange={e => setOverrideDraft(e.target.value)} />
+            <div className="flex gap-2 mt-2">
+              <Button variant="primary" onClick={saveEdit}>Save wording</Button>
+              <Button variant="ghost" onClick={() => setEditSection('')}>Cancel</Button>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {/* Property-specific items */}
+      <Card title="Property-specific items">
+        <p className="text-xs text-slate-500 mb-3">Add extra paragraphs that are appended to the end of a section (for example, a house rule or a property-specific note).</p>
+        <div className="space-y-3">
+          {customItems.map(c => (
+            <div key={c.id} className="rounded-lg border border-slate-200 p-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <select className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm bg-white" value={c.sectionId} onChange={e => updateCustom(c.id, { sectionId: e.target.value })}>
+                  {TSP_SECTION_LIST.map(sec => <option key={sec.id} value={sec.id}>{sec.num}. {sec.title}</option>)}
+                </select>
+                <button className="ml-auto text-slate-400 hover:text-red-500 text-lg" onClick={() => removeCustom(c.id)} title="Remove">×</button>
+              </div>
+              <textarea className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" rows={3} placeholder="Item text…" value={c.text} onChange={e => updateCustom(c.id, { text: e.target.value })} />
+            </div>
+          ))}
+          <button className="text-sm text-indigo-600 font-medium" onClick={addCustom}>+ Add property-specific item</button>
         </div>
       </Card>
 
