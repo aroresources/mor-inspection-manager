@@ -21,7 +21,7 @@ export interface VawaFill { key: string; label: string; help?: string }
 export const VAWA_5380_FILLS: VawaFill[] = [
   { key: 'langContact', label: 'Language-assistance contact', help: 'Covered housing provider contact info (HOPWA: grantee name + contact).' },
   { key: 'langWebsite', label: 'Language-assistance website (optional)' },
-  { key: 'transferContact', label: 'Emergency-transfer request instructions', help: 'How to request an emergency transfer or read the transfer plan.' },
+  { key: 'transferContact', label: 'Emergency-transfer request instructions', help: 'Enter specific contact information, website, and/or instructions for requesting an emergency transfer or a copy of the applicable VAWA emergency transfer plan.' },
   { key: 'raContact', label: 'Reasonable-accommodation contact', help: 'Staff member to contact to request an accommodation.' },
   { key: 'fheoOffice', label: 'Local HUD FHEO field office', help: 'Office + contact info for VAWA-rights complaints.' },
   { key: 'advocacyContact', label: 'Local advocacy / legal-aid contact' },
