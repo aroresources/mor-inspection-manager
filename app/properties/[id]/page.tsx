@@ -494,7 +494,7 @@ function DocumentsTab({ propertyId, morId }: any) {
     </div>
   )
 }
-function TasksTab({ propertyId, morId, mors, currentMor, onUpdateMor }: any) {
+function TasksTab({ propertyId, morId, mors, currentMor, onUpdateMor, property }: any) {
   const { toast, confirm } = useToast()
   const [tasks, setTasks] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -568,6 +568,51 @@ function TasksTab({ propertyId, morId, mors, currentMor, onUpdateMor }: any) {
       toast(err?.message ? `Could not summarize: ${err.message}` : 'Could not summarize. Please try again.', 'error')
     }
     setSummaryBusy(false); setSummaryMsg('')
+  }
+
+  // --- Tenant MOR inspection notice (from the "Send Notice to tenants" card) ---
+  const noticeIsAvailable = (t: any) => /notice/i.test(t?.title || '') && /tenant/i.test(t?.title || '')
+  const noticeDateStr = () => (currentMor?.mor_date ? formatDate(currentMor.mor_date) : '____________')
+  const propName = () => property?.name || '____________'
+  const todayStr = () => new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+  const noticeLines = () => [
+    `Please be aware that on ${noticeDateStr()}, ${propName()} will have a Management Occupancy Review (MOR).`,
+    'As part of this review, the inspector may need to enter your unit. The inspector will be accompanied by management/maintenance at all times.',
+    'Please consider this your 48 hour notice.',
+  ]
+  const generateNoticeWord = async () => {
+    const R = (text: string, opts: any = {}) => new TextRun({ text, size: 24, ...opts })
+    const kids: any[] = [
+      new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 120 }, children: [R('MOR Inspection Notice', { bold: true, size: 32 })] }),
+      new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 320 }, children: [R(todayStr(), { size: 22 })] }),
+      new Paragraph({ spacing: { after: 240 }, children: [R('ATTENTION ALL TENANTS:', { bold: true })] }),
+      ...noticeLines().map(t => new Paragraph({ spacing: { after: 220 }, children: [R(t)] })),
+      new Paragraph({ spacing: { before: 700 }, children: [new TextRun({ text: ' '.repeat(42), underline: {}, size: 24 }), R('      '), new TextRun({ text: ' '.repeat(20), underline: {}, size: 24 })] }),
+      new Paragraph({ children: [R('Property Manager'), R(' '.repeat(40)), R('Date')] }),
+    ]
+    const doc = new Document({ sections: [{ properties: { page: { margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 } } }, children: kids }] })
+    saveAs(await Packer.toBlob(doc), `MOR Inspection Notice — ${property?.name || 'property'}.docx`)
+  }
+  const generateNoticePDF = () => {
+    const esc = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    const w = window.open('', '_blank')
+    if (!w) { toast('Please allow pop-ups to print.', 'warning'); return }
+    const body = `<h1>MOR Inspection Notice</h1><p class="date">${esc(todayStr())}</p>`
+      + `<p class="attn">ATTENTION ALL TENANTS:</p>`
+      + noticeLines().map(t => `<p>${esc(t)}</p>`).join('')
+      + `<div class="sig"><div><div class="line"></div>Property Manager</div><div><div class="line short"></div>Date</div></div>`
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>MOR Inspection Notice — ${esc(property?.name || '')}</title><style>
+      *{box-sizing:border-box;} @page{margin:1in;}
+      body{font-family:'Calibri','Segoe UI',Arial,sans-serif;color:#111;font-size:13pt;line-height:1.5;max-width:7in;margin:0 auto;padding:18px;}
+      h1{text-align:center;font-size:20pt;margin:0 0 6px;}
+      .date{text-align:center;margin:0 0 28px;}
+      .attn{font-weight:bold;margin:0 0 16px;}
+      p{margin:0 0 14px;}
+      .sig{display:flex;gap:40px;margin-top:70px;}
+      .sig .line{border-bottom:1px solid #000;height:1.4em;width:260px;margin-bottom:3px;}
+      .sig .line.short{width:150px;}
+    </style></head><body>${body}<script>window.onload=function(){setTimeout(function(){window.print()},300)}<\/script></body></html>`)
+    w.document.close()
   }
 
   // Order by sort_order (falling back to created_at). Resilient to the
@@ -833,6 +878,16 @@ function TasksTab({ propertyId, morId, mors, currentMor, onUpdateMor }: any) {
             }
           >
             <div className="space-y-4">
+              {noticeIsAvailable(task) && (
+                <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3">
+                  <div className="text-sm font-medium text-slate-700">Generate the 48-hour tenant notice</div>
+                  <p className="text-xs text-slate-500 mt-0.5">Uses this property’s name{currentMor?.mor_date ? ` and the MOR date (${formatDate(currentMor.mor_date)})` : ' (set the MOR date to fill it in)'}.</p>
+                  <div className="flex gap-2 mt-2">
+                    <Button variant="neutral" onClick={generateNoticePDF}><Icon name="file" /> Print / PDF</Button>
+                    <Button variant="neutral" onClick={generateNoticeWord}><Icon name="file" /> Word</Button>
+                  </div>
+                </div>
+              )}
               <label className="flex items-center gap-2 text-sm text-slate-600">
                 <input type="checkbox" className="accent-indigo-600" checked={task.completed} onChange={(e: any) => updateTask(task.id, { completed: e.target.checked })} />
                 Completed
@@ -2809,7 +2864,7 @@ const fetchMors = async () => {
                 </label>
               </div>
             </div>
-            <TasksTab propertyId={id} morId={currentMorId} mors={mors} currentMor={currentMor} onUpdateMor={fetchMors} />
+            <TasksTab propertyId={id} morId={currentMorId} mors={mors} currentMor={currentMor} onUpdateMor={fetchMors} property={property} />
           </div>
         )}
 
