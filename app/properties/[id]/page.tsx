@@ -6,7 +6,6 @@ import JSZip from 'jszip'
 import { saveAs } from 'file-saver'
 import { Document, Packer, Paragraph, TextRun, AlignmentType, BorderStyle } from 'docx'
 import { useToast } from '../../components/ToastProvider'
-import PreventiveMaintenanceTab from './PreventiveMaintenanceTab'
 import PropertyDocumentsTab from './PropertyDocumentsTab'
 import { Card, CardBody, StatusBadge, MetaChip, Button, SectionCard, Drawer, SortableList, SortableRow, DragHandle, Icon, type Tone } from '../../components/ui'
 import { parseDate, formatDate } from '../../../lib/dateUtils'
@@ -2529,7 +2528,7 @@ const fetchMors = async () => {
     </div>
   )
 
-  const tabs = ['Overview', 'Preventive Maintenance Plan', 'Property Documents', ...(mors.length > 0 ? ['MOR Binder', 'Prep', 'Meetings', 'Findings'] : [])]
+  const tabs = ['Overview', 'Property Documents', ...(mors.length > 0 ? ['MOR Binder', 'Prep', 'Meetings', 'Findings'] : [])]
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -2779,12 +2778,8 @@ const fetchMors = async () => {
           </div>
         )}
 
-        {activeTab === 'preventive maintenance plan' && (
-          <PreventiveMaintenanceTab propertyId={id} property={property} onSaved={fetchProperty} />
-        )}
-
         {activeTab === 'property documents' && (
-          <PropertyDocumentsTab propertyId={id} property={property} onDirtyChange={(d: boolean) => { docsDirtyRef.current = d }} />
+          <PropertyDocumentsTab propertyId={id} property={property} onSaved={fetchProperty} onDirtyChange={(d: boolean) => { docsDirtyRef.current = d }} />
         )}
 
         {activeTab === 'mor binder' && (

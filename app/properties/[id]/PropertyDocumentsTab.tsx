@@ -3,6 +3,7 @@ import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../../../lib/supabase'
 import TspDocument from './TspDocument'
 import VawaDocument from './VawaDocument'
+import PreventiveMaintenanceTab from './PreventiveMaintenanceTab'
 import { useToast } from '../../components/ToastProvider'
 import { saveAs } from 'file-saver'
 import { Document, Packer, Paragraph, TextRun, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle, PageOrientation } from 'docx'
@@ -664,17 +665,18 @@ function Info({ label, value }: any) {
 // Top-level tab: pick a document type, then mount the matching generator.
 // Each child owns its own state + dirty tracking; only one is mounted at a time.
 export default function PropertyDocumentsTab(props: any) {
-  const [docType, setDocType] = useState<'eiv' | 'tsp' | 'vawa'>('eiv')
+  type DocType = 'eiv' | 'tsp' | 'vawa' | 'pm'
+  const [docType, setDocType] = useState<DocType>('eiv')
   const dirtyRef = useRef(false)
   const onDirtyChange = (d: boolean) => { dirtyRef.current = d; props.onDirtyChange?.(d) }
-  const switchTo = (t: 'eiv' | 'tsp' | 'vawa') => {
+  const switchTo = (t: DocType) => {
     if (t === docType) return
     if (dirtyRef.current && !window.confirm('You have unsaved changes that will be lost. Switch document anyway?')) return
     dirtyRef.current = false
     props.onDirtyChange?.(false)
     setDocType(t)
   }
-  const tab = (t: 'eiv' | 'tsp' | 'vawa', label: string, first = false) => (
+  const tab = (t: DocType, label: string, first = false) => (
     <button
       onClick={() => switchTo(t)}
       className={`px-4 py-1.5 text-sm font-medium transition ${docType === t ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'} ${first ? '' : 'border-l border-slate-300'}`}
@@ -684,12 +686,14 @@ export default function PropertyDocumentsTab(props: any) {
     <div className="space-y-4">
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 flex flex-wrap items-center gap-3">
         <span className="text-sm font-medium text-slate-500">Document</span>
-        <div className="inline-flex rounded-lg border border-slate-300 overflow-hidden">
-          {tab('eiv', 'EIV Policies & Procedures', true)}
+        <div className="inline-flex rounded-lg border border-slate-300 overflow-hidden flex-wrap">
+          {tab('pm', 'Preventive Maintenance Plan', true)}
+          {tab('eiv', 'EIV Policies & Procedures')}
           {tab('tsp', 'Tenant Selection Plan')}
           {tab('vawa', 'VAWA Notices')}
         </div>
       </div>
+      {docType === 'pm' && <PreventiveMaintenanceTab propertyId={props.propertyId} property={props.property} onSaved={props.onSaved} />}
       {docType === 'eiv' && <EivDocument {...props} onDirtyChange={onDirtyChange} />}
       {docType === 'tsp' && <TspDocument {...props} onDirtyChange={onDirtyChange} />}
       {docType === 'vawa' && <VawaDocument {...props} onDirtyChange={onDirtyChange} />}
