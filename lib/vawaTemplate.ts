@@ -67,7 +67,7 @@ export const VAWA_DEFAULT_FILLS: Record<string, string> = {
   requireWrittenRequest: 'yes',
   docDeadlineDays: '14',
   requestContact: 'the property manager, in person at the management office or by phone',
-  localOrgs: 'To talk with a housing advocate, contact the National Domestic Violence Hotline at 1-800-799-7233 and local victim service providers.',
+  localOrgs: 'National Domestic Violence Hotline 1-800-799-7233',
   externalExamples: 'This would apply where the resident is referred to a different property with either a different contract number, different owner, or different management company.',
   internalExamples: 'This would apply where the resident transfers to a unit within the same property under the same contract number. This may be in the same building or a separate building in a scattered site.',
   internalImmediate: 'Upon receipt of a completed emergency transfer request, including any required certification or supporting documentation, and absent any conflicting or missing information, {{chpAcronym}} will approve or deny the request within one (1) business day. If approved and a safe unit is immediately available in the same project, the household will be offered the unit within twenty-four (24) hours of approval, or as soon as the tenant determines the proposed unit is safe.\n\nAt no time will staff disclose the tenant’s new unit number, building location, forwarding address, or other identifying transfer details except as required by law.\n\nEmergency transfer requests made under VAWA shall receive priority over all non-emergency tenant-initiated transfers and waiting list admissions, except for transfers required to address immediate life-threatening building hazards or legally mandated accessibility placements. Among VAWA emergency transfer requests, priority will be based on date and time of request, severity of safety risk, and unit size availability.',
@@ -266,8 +266,7 @@ export const VAWA_5381: VawaForm = {
 
     { k: 'h', text: 'Safety and Security of Tenants' },
     { k: 'p', text: 'When {{chpAcronym}} receives any inquiry or request regarding an emergency transfer, {{chpAcronym}} will encourage the person making the inquiry or request to take all reasonable precautions to be safe, including seeking guidance and assistance from a victim service provider. However, tenants are not required to receive guidance or assistance from a victim service provider.' },
-    { k: 'p', text: 'For additional information on VAWA and to find help in your area, visit https://www.hud.gov/vawa.' },
-    { k: 'p', text: '{{localOrgs}}' },
+    { k: 'p', text: 'For additional information on VAWA and to find help in your area, visit https://www.hud.gov/vawa. To talk with a housing advocate, contact {{localOrgs}}.' },
     { k: 'rich', fill: 'safetyMeasures' },
     { k: 'p', text: 'This plan is a required policy under 24 CFR 5.2005(e).' },
   ],
