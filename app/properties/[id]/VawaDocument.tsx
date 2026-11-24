@@ -5,7 +5,7 @@ import { useToast } from '../../components/ToastProvider'
 import { saveAs } from 'file-saver'
 import { Document, Packer, Paragraph, TextRun, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle } from 'docx'
 import { Button, Icon } from '../../components/ui'
-import { VAWA_FORMS, VAWA_FORM_BY_ID, VAWA_FILLS_BY_FORM, VAWA_DEFAULT_FILLS, vawaMerge, type VawaForm, type VawaFill } from '../../../lib/vawaTemplate'
+import { VAWA_FORMS, VAWA_FORM_BY_ID, VAWA_FILLS_BY_FORM, VAWA_DEFAULT_FILLS, vawaMerge, parseRich, type VawaForm, type VawaFill } from '../../../lib/vawaTemplate'
 
 const ALL_FILLS: VawaFill[] = Object.values(VAWA_FILLS_BY_FORM).flat()
 
@@ -40,8 +40,10 @@ export default function VawaDocument({ propertyId, property, onDirtyChange }: an
     // Seed prefilled defaults (e.g. the National DV Hotline) as real editable
     // text when nothing is set at either scope — so it can be edited or added to.
     // Kept in the saved baseline so opening the tab doesn't read as dirty.
+    const seedVal = (key: string) => (key === 'chpName' || key === 'chpAcronym')
+      ? (property?.name || VAWA_DEFAULT_FILLS[key]) : VAWA_DEFAULT_FILLS[key]
     for (const fl of ALL_FILLS) {
-      if (fl.prefill && !(pf[fl.key] || '').trim() && !(cf[fl.key] || '').trim()) pf[fl.key] = VAWA_DEFAULT_FILLS[fl.key]
+      if (fl.prefill && !(pf[fl.key] || '').trim() && !(cf[fl.key] || '').trim()) pf[fl.key] = seedVal(fl.key)
     }
     setPropFills(pf); setSavedProp(pf); setCoFills(cf); setSavedCo(cf); setLoading(false)
   }
@@ -109,6 +111,11 @@ export default function VawaDocument({ propertyId, property, onDirtyChange }: an
   const form: VawaForm | null = VAWA_FORM_BY_ID[activeForm] || null
   const fillsDefs: VawaFill[] = VAWA_FILLS_BY_FORM[activeForm] || []
   const fills = effFills()
+  // Resolve a rich fill: chosen value (or default) with nested tokens expanded.
+  const richVal = (key: string) => {
+    const raw = (fills[key] && fills[key].trim()) ? fills[key] : (VAWA_DEFAULT_FILLS[key] || '')
+    return vawaMerge(raw, fills)
+  }
 
   // ---- PDF (matches the plain HUD form look: Times New Roman, black) -------
   const generatePDF = () => {
@@ -126,6 +133,13 @@ export default function VawaDocument({ propertyId, property, onDirtyChange }: an
       if (b.k === 'h') body += `<h2>${esc(b.text)}</h2>`
       else if (b.k === 'p') body += `<p>${b.lead ? `<strong>${esc(b.lead)}</strong> ` : ''}${esc(vawaMerge(b.text, fills))}</p>`
       else if (b.k === 'ul') { body += '<ul>'; for (const it of b.items) body += `<li>${esc(vawaMerge(it, fills))}</li>`; body += '</ul>' }
+      else if (b.k === 'rich') {
+        if (b.lead) body += `<p class="richlead"><strong>${esc(b.lead)}</strong></p>`
+        for (const seg of parseRich(richVal(b.fill))) {
+          if (seg.type === 'p') body += `<p>${esc(seg.text)}</p>`
+          else { body += '<ul>'; for (const it of seg.items) body += `<li>${esc(it)}</li>`; body += '</ul>' }
+        }
+      }
       else if (b.k === 'table') {
         body += `<table class="grid"><thead><tr><th>${esc(b.headers[0])}</th><th>${esc(b.headers[1])}</th></tr></thead><tbody>`
         for (const [a, c] of b.rows) body += `<tr><td class="prog">${esc(a)}</td><td>${esc(c)}</td></tr>`
@@ -176,6 +190,12 @@ export default function VawaDocument({ propertyId, property, onDirtyChange }: an
         children.push(new Paragraph({ alignment: AlignmentType.JUSTIFIED, spacing: { after: 120 }, children: runs }))
       } else if (b.k === 'ul') {
         for (const it of b.items) children.push(new Paragraph({ bullet: { level: 0 }, alignment: AlignmentType.JUSTIFIED, spacing: { after: 60 }, children: [run(vawaMerge(it, fills))] }))
+      } else if (b.k === 'rich') {
+        if (b.lead) children.push(new Paragraph({ spacing: { before: 60, after: 60 }, children: [run(b.lead, { bold: true })] }))
+        for (const seg of parseRich(richVal(b.fill))) {
+          if (seg.type === 'p') children.push(new Paragraph({ alignment: AlignmentType.JUSTIFIED, spacing: { after: 120 }, children: [run(seg.text)] }))
+          else for (const it of seg.items) children.push(new Paragraph({ bullet: { level: 0 }, alignment: AlignmentType.JUSTIFIED, spacing: { after: 60 }, children: [run(it)] }))
+        }
       } else if (b.k === 'table') {
         const edge = { style: BorderStyle.SINGLE, size: 4, color: '000000' }
         const hdr = (t: string) => new TableCell({ shading: { fill: 'E6E6E6' } as any, margins: { top: 40, bottom: 40, left: 90, right: 90 }, children: [new Paragraph({ children: [run(t, { bold: true, size: 18 })] })] })
@@ -250,7 +270,7 @@ export default function VawaDocument({ propertyId, property, onDirtyChange }: an
               <label key={fl.key} className="block">
                 <span className="text-xs font-medium text-slate-500">{fl.label}{fl.optional && <span className="text-slate-400"> (optional)</span>}</span>
                 {fl.help && <span className="block text-xs text-slate-400">{fl.help}</span>}
-                <textarea className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50" rows={2}
+                <textarea className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50 font-mono" rows={fl.rich ? 8 : 2}
                   disabled={readOnly} value={curFills[fl.key] || ''} placeholder={placeholderFor(fl.key)}
                   onChange={e => setFill(fl.key, e.target.value)} />
               </label>
