@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../../../lib/supabase'
 import TspDocument from './TspDocument'
+import VawaDocument from './VawaDocument'
 import { useToast } from '../../components/ToastProvider'
 import { saveAs } from 'file-saver'
 import { Document, Packer, Paragraph, TextRun, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle, PageOrientation } from 'docx'
@@ -663,20 +664,20 @@ function Info({ label, value }: any) {
 // Top-level tab: pick a document type, then mount the matching generator.
 // Each child owns its own state + dirty tracking; only one is mounted at a time.
 export default function PropertyDocumentsTab(props: any) {
-  const [docType, setDocType] = useState<'eiv' | 'tsp'>('eiv')
+  const [docType, setDocType] = useState<'eiv' | 'tsp' | 'vawa'>('eiv')
   const dirtyRef = useRef(false)
   const onDirtyChange = (d: boolean) => { dirtyRef.current = d; props.onDirtyChange?.(d) }
-  const switchTo = (t: 'eiv' | 'tsp') => {
+  const switchTo = (t: 'eiv' | 'tsp' | 'vawa') => {
     if (t === docType) return
     if (dirtyRef.current && !window.confirm('You have unsaved changes that will be lost. Switch document anyway?')) return
     dirtyRef.current = false
     props.onDirtyChange?.(false)
     setDocType(t)
   }
-  const tab = (t: 'eiv' | 'tsp', label: string) => (
+  const tab = (t: 'eiv' | 'tsp' | 'vawa', label: string, first = false) => (
     <button
       onClick={() => switchTo(t)}
-      className={`px-4 py-1.5 text-sm font-medium transition ${docType === t ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'} ${t === 'tsp' ? 'border-l border-slate-300' : ''}`}
+      className={`px-4 py-1.5 text-sm font-medium transition ${docType === t ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'} ${first ? '' : 'border-l border-slate-300'}`}
     >{label}</button>
   )
   return (
@@ -684,13 +685,14 @@ export default function PropertyDocumentsTab(props: any) {
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 flex flex-wrap items-center gap-3">
         <span className="text-sm font-medium text-slate-500">Document</span>
         <div className="inline-flex rounded-lg border border-slate-300 overflow-hidden">
-          {tab('eiv', 'EIV Policies & Procedures')}
+          {tab('eiv', 'EIV Policies & Procedures', true)}
           {tab('tsp', 'Tenant Selection Plan')}
+          {tab('vawa', 'VAWA Notices')}
         </div>
       </div>
-      {docType === 'eiv'
-        ? <EivDocument {...props} onDirtyChange={onDirtyChange} />
-        : <TspDocument {...props} onDirtyChange={onDirtyChange} />}
+      {docType === 'eiv' && <EivDocument {...props} onDirtyChange={onDirtyChange} />}
+      {docType === 'tsp' && <TspDocument {...props} onDirtyChange={onDirtyChange} />}
+      {docType === 'vawa' && <VawaDocument {...props} onDirtyChange={onDirtyChange} />}
     </div>
   )
 }
