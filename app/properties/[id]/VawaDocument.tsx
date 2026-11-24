@@ -189,15 +189,14 @@ export default function VawaDocument({ propertyId, property, onDirtyChange }: an
 
   // ---- Word (Times New Roman, plain) --------------------------------------
   const run = (text: string, opts: any = {}) => new TextRun({ text, font: TNR, size: 22, ...opts })
-  const generateWord = async () => {
-    if (!form) return
+  const buildWordBlob = async (f: VawaForm) => {
     const children: any[] = []
-    if (form.omb) children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 40 }, children: [run(form.omb, { size: 17 })] }))
-    children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 20 }, children: [run(form.title, { bold: true, size: 28 })] }))
-    if (form.subtitle) children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 20 }, children: [run(form.subtitle, { bold: true, size: 23 })] }))
+    if (f.omb) children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 40 }, children: [run(f.omb, { size: 17 })] }))
+    children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 20 }, children: [run(f.title, { bold: true, size: 28 })] }))
+    if (f.subtitle) children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 20 }, children: [run(f.subtitle, { bold: true, size: 23 })] }))
     if (property?.name) children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 60 }, children: [run(property.name, { italics: true, size: 20 })] }))
     children.push(new Paragraph({ border: { bottom: { color: '000000', space: 1, style: BorderStyle.SINGLE, size: 6 } }, spacing: { after: 160 }, children: [] }))
-    for (const b of form.blocks) {
+    for (const b of f.blocks) {
       if (!showBlock(b, fills)) continue
       if (b.k === 'h') {
         children.push(new Paragraph({ spacing: { before: 160, after: 80 }, children: [run(b.text, { bold: true, size: 24 })] }))
@@ -236,9 +235,16 @@ export default function VawaDocument({ propertyId, property, onDirtyChange }: an
         children.push(new Paragraph({ spacing: { after: 120 }, children: [] }))
       }
     }
-    children.push(new Paragraph({ spacing: { before: 160 }, border: { top: { color: '000000', space: 1, style: BorderStyle.SINGLE, size: 6 } }, children: [run(`Form ${form.code}`, { size: 17 })] }))
+    children.push(new Paragraph({ spacing: { before: 160 }, border: { top: { color: '000000', space: 1, style: BorderStyle.SINGLE, size: 6 } }, children: [run(`Form ${f.code}`, { size: 17 })] }))
     const doc = new Document({ sections: [{ properties: { page: { margin: { top: 1440, bottom: 1300, left: 1440, right: 1440 } } }, children }] })
-    saveAs(await Packer.toBlob(doc), `${form.code} — ${property?.name || 'property'}.docx`)
+    return Packer.toBlob(doc)
+  }
+  const wordName = (f: VawaForm) => `${f.code} — ${property?.name || 'property'}.docx`
+  const generateWord = async () => { if (form) saveAs(await buildWordBlob(form), wordName(form)) }
+  const generateAllWord = async () => {
+    const ready = VAWA_FORMS.filter(f => f.ready).map(f => VAWA_FORM_BY_ID[f.id]).filter(Boolean)
+    for (const f of ready) { saveAs(await buildWordBlob(f), wordName(f)); await new Promise(r => setTimeout(r, 400)) }
+    toast(`Generated ${ready.length} VAWA forms.`, 'success')
   }
 
   if (loading) return <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 text-slate-500">Loading…</div>
@@ -258,6 +264,7 @@ export default function VawaDocument({ propertyId, property, onDirtyChange }: an
             <Button variant="primary" onClick={save} disabled={saving || !dirty}>{saving ? 'Saving…' : 'Save'}</Button>
             <Button variant="neutral" onClick={generatePDF} disabled={!form}><Icon name="file" /> Print / PDF</Button>
             <Button variant="neutral" onClick={generateWord} disabled={!form}><Icon name="file" /> Word</Button>
+            <Button variant="neutral" onClick={generateAllWord}><Icon name="file" /> All 4 (Word)</Button>
           </div>
         </div>
         {/* Scope switcher */}
