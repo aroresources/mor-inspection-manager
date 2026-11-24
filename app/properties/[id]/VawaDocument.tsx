@@ -5,7 +5,9 @@ import { useToast } from '../../components/ToastProvider'
 import { saveAs } from 'file-saver'
 import { Document, Packer, Paragraph, TextRun, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle } from 'docx'
 import { Button, Icon } from '../../components/ui'
-import { VAWA_5380, VAWA_5380_FILLS, VAWA_FORMS, VAWA_DEFAULT_FILLS, vawaMerge, type VawaForm } from '../../../lib/vawaTemplate'
+import { VAWA_FORMS, VAWA_FORM_BY_ID, VAWA_FILLS_BY_FORM, VAWA_DEFAULT_FILLS, vawaMerge, type VawaForm, type VawaFill } from '../../../lib/vawaTemplate'
+
+const ALL_FILLS: VawaFill[] = Object.values(VAWA_FILLS_BY_FORM).flat()
 
 const esc = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 const TNR = 'Times New Roman'
@@ -38,7 +40,7 @@ export default function VawaDocument({ propertyId, property, onDirtyChange }: an
     // Seed prefilled defaults (e.g. the National DV Hotline) as real editable
     // text when nothing is set at either scope — so it can be edited or added to.
     // Kept in the saved baseline so opening the tab doesn't read as dirty.
-    for (const fl of VAWA_5380_FILLS) {
+    for (const fl of ALL_FILLS) {
       if (fl.prefill && !(pf[fl.key] || '').trim() && !(cf[fl.key] || '').trim()) pf[fl.key] = VAWA_DEFAULT_FILLS[fl.key]
     }
     setPropFills(pf); setSavedProp(pf); setCoFills(cf); setSavedCo(cf); setLoading(false)
@@ -88,20 +90,24 @@ export default function VawaDocument({ propertyId, property, onDirtyChange }: an
   // Effective (resolved) values: property over company over built-in default.
   const effFills = (): Record<string, string> => {
     const out: Record<string, string> = {}
-    for (const fl of VAWA_5380_FILLS) {
+    for (const fl of ALL_FILLS) {
       const pv = (propFills[fl.key] || '').trim()
       const cv = (coFills[fl.key] || '').trim()
       out[fl.key] = pv || cv || ''   // vawaMerge fills blanks with VAWA_DEFAULT_FILLS
     }
     return out
   }
+  const flagOn = (eff: Record<string, string>, key?: string) => !!key && eff[key] === 'yes'
+  const showBlock = (b: any, eff: Record<string, string>) =>
+    (!b.when?.flag || flagOn(eff, b.when.flag)) && (!b.when?.notFlag || !flagOn(eff, b.when.notFlag))
   // Placeholder shown in an empty box: inherited company value (property scope) or the built-in default.
   const placeholderFor = (key: string) => {
     if (scope === 'property' && (coFills[key] || '').trim()) return `Company default: ${coFills[key]}`
     return VAWA_DEFAULT_FILLS[key] || ''
   }
 
-  const form: VawaForm | null = activeForm === '5380' ? VAWA_5380 : null
+  const form: VawaForm | null = VAWA_FORM_BY_ID[activeForm] || null
+  const fillsDefs: VawaFill[] = VAWA_FILLS_BY_FORM[activeForm] || []
   const fills = effFills()
 
   // ---- PDF (matches the plain HUD form look: Times New Roman, black) -------
@@ -116,7 +122,9 @@ export default function VawaDocument({ propertyId, property, onDirtyChange }: an
     if (property?.name) body += `<p class="site">${esc(property.name)}</p>`
     body += `<hr>`
     for (const b of form.blocks) {
-      if (b.k === 'p') body += `<p>${b.lead ? `<strong>${esc(b.lead)}</strong> ` : ''}${esc(vawaMerge(b.text, fills))}</p>`
+      if (!showBlock(b, fills)) continue
+      if (b.k === 'h') body += `<h2>${esc(b.text)}</h2>`
+      else if (b.k === 'p') body += `<p>${b.lead ? `<strong>${esc(b.lead)}</strong> ` : ''}${esc(vawaMerge(b.text, fills))}</p>`
       else if (b.k === 'ul') { body += '<ul>'; for (const it of b.items) body += `<li>${esc(vawaMerge(it, fills))}</li>`; body += '</ul>' }
       else if (b.k === 'table') {
         body += `<table class="grid"><thead><tr><th>${esc(b.headers[0])}</th><th>${esc(b.headers[1])}</th></tr></thead><tbody>`
@@ -131,6 +139,7 @@ export default function VawaDocument({ propertyId, property, onDirtyChange }: an
       body{font-family:'Times New Roman',Times,serif;color:#000;line-height:1.35;font-size:11pt;margin:0;}
       .omb{text-align:center;font-size:8.5pt;margin:0 0 6px;}
       h1{font-size:14pt;font-weight:bold;text-align:center;margin:0 0 2px;}
+      h2{font-size:12pt;font-weight:bold;margin:14px 0 6px;}
       .sub{text-align:center;font-weight:bold;font-size:11.5pt;margin:0 0 2px;}
       .site{text-align:center;font-size:10pt;font-style:italic;margin:2px 0 0;}
       hr{border:none;border-top:1px solid #000;margin:8px 0 12px;}
@@ -157,7 +166,10 @@ export default function VawaDocument({ propertyId, property, onDirtyChange }: an
     if (property?.name) children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 60 }, children: [run(property.name, { italics: true, size: 20 })] }))
     children.push(new Paragraph({ border: { bottom: { color: '000000', space: 1, style: BorderStyle.SINGLE, size: 6 } }, spacing: { after: 160 }, children: [] }))
     for (const b of form.blocks) {
-      if (b.k === 'p') {
+      if (!showBlock(b, fills)) continue
+      if (b.k === 'h') {
+        children.push(new Paragraph({ spacing: { before: 160, after: 80 }, children: [run(b.text, { bold: true, size: 24 })] }))
+      } else if (b.k === 'p') {
         const runs: any[] = []
         if (b.lead) runs.push(run(b.lead + ' ', { bold: true }))
         if (b.text) runs.push(run(vawaMerge(b.text, fills)))
@@ -224,12 +236,19 @@ export default function VawaDocument({ propertyId, property, onDirtyChange }: an
       {form ? (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
           <h4 className="text-sm font-semibold text-slate-700 mb-1">{form.code} — fill-in items {scope === 'company' && <span className="text-xs font-normal text-indigo-600">(company default)</span>}</h4>
-          <p className="text-xs text-slate-500 mb-4">These replace the bracketed placeholders in the notice. Blank items inherit the {scope === 'property' ? 'company default, then the ' : ''}HUD default. Leave the website blank to drop the “or go to …” clause.</p>
+          <p className="text-xs text-slate-500 mb-4">These replace the bracketed placeholders in the notice. Blank items inherit the {scope === 'property' ? 'company default, then the ' : ''}HUD default. Any items left blank print the HUD bracket text, so review before finalizing.</p>
           {readOnly && <p className="text-xs text-amber-600 mb-3">You don’t have permission to edit company defaults — switch to “This property.”</p>}
           <div className="grid grid-cols-1 gap-3">
-            {VAWA_5380_FILLS.map(fl => (
+            {fillsDefs.map(fl => fl.kind === 'flag' ? (
+              <label key={fl.key} className="flex items-start gap-2">
+                <input type="checkbox" className="mt-1" disabled={readOnly}
+                  checked={(curFills[fl.key] || '') === 'yes'}
+                  onChange={e => setFill(fl.key, e.target.checked ? 'yes' : '')} />
+                <span className="text-sm text-slate-700">{fl.label}{fl.help && <span className="block text-xs text-slate-400">{fl.help}</span>}</span>
+              </label>
+            ) : (
               <label key={fl.key} className="block">
-                <span className="text-xs font-medium text-slate-500">{fl.label}</span>
+                <span className="text-xs font-medium text-slate-500">{fl.label}{fl.optional && <span className="text-slate-400"> (optional)</span>}</span>
                 {fl.help && <span className="block text-xs text-slate-400">{fl.help}</span>}
                 <textarea className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50" rows={2}
                   disabled={readOnly} value={curFills[fl.key] || ''} placeholder={placeholderFor(fl.key)}

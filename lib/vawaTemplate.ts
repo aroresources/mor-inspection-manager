@@ -2,10 +2,12 @@
 // notices reproduced verbatim; only the bracketed inserts are editable, via
 // {{token}} fill-ins. 5380 is encoded; 5381/5382/5383 to follow.
 
+export interface VawaWhen { flag?: string; notFlag?: string }
 export type VawaBlock =
-  | { k: 'p'; lead?: string; text?: string }   // optional bold lead-in + body
-  | { k: 'ul'; items: string[] }
-  | { k: 'table'; headers: [string, string]; rows: [string, string][] }
+  | { k: 'p'; lead?: string; text?: string; when?: VawaWhen }   // optional bold lead-in + body
+  | { k: 'h'; text: string; when?: VawaWhen }                   // bold section heading
+  | { k: 'ul'; items: string[]; when?: VawaWhen }
+  | { k: 'table'; headers: [string, string]; rows: [string, string][]; when?: VawaWhen }
 
 export interface VawaForm {
   id: string
@@ -16,8 +18,8 @@ export interface VawaForm {
   blocks: VawaBlock[]
 }
 
-// Editable bracket inserts (the only per-property fields on the 5380).
-export interface VawaFill { key: string; label: string; help?: string; prefill?: boolean }
+// Editable bracket inserts. kind:'flag' renders a checkbox (value 'yes'/'').
+export interface VawaFill { key: string; label: string; help?: string; prefill?: boolean; kind?: 'text' | 'flag'; optional?: boolean }
 export const VAWA_5380_FILLS: VawaFill[] = [
   { key: 'langContact', label: 'Language-assistance contact', help: 'Covered housing provider contact info (HOPWA: grantee name + contact).' },
   { key: 'langWebsite', label: 'Language-assistance website (optional)' },
@@ -35,6 +37,22 @@ export const VAWA_DEFAULT_FILLS: Record<string, string> = {
   raContact: '[insert appropriate staff member contact information]',
   fheoOffice: '[insert local HUD FHEO field office & contact information]',
   advocacyContact: 'National Domestic Violence Hotline 1-800-799-7233',
+  // 5381 (Emergency Transfer Plan)
+  chpName: '[name of covered housing provider]',
+  chpAcronym: '[CHP]',
+  programName: '[name of program or rental assistance]',
+  internalImmediate: '[insert the provider’s policies for internal transfers when a safe unit is immediately available — including time frames for approving or denying a request once a full request is received, possible internal transfer options (without disclosing the victim’s location), and priority status relative to other tenants seeking transfers]',
+  internalNotImmediate: '[insert the provider’s policies for internal transfers when a safe unit is not immediately available — including time frames, possible options (without disclosing the victim’s location), and priority status relative to other tenants seeking transfers]',
+  externalTransfers: '[insert the provider’s policies for external transfers — including the provider’s role in facilitating them, any transfer agreements with outside providers, referrals to community partners and affordable housing, time frames for approving or denying a request, and priority given to VAWA victims seeking external transfers into the property]',
+  voucherAssistance: '[insert policies and procedures for assisting tenants with Housing Choice Vouchers or other tenant-based rental assistance who qualify for an emergency transfer to move quickly with that assistance]',
+  requestContact: '[insert specific contact information, website, e-mail address, and/or instructions for requesting an emergency transfer]',
+  docDeadlineDays: '14',
+  priorityMeasure: '[insert the measure of priority given to VAWA emergency transfers relative to other categories of tenants seeking transfers and individuals seeking placement on waiting lists]',
+  confidentialityMeasures: '[insert the specific measures used to ensure the location of the victim’s unit is never disclosed to a person who committed or threatened to commit the VAWA violence/abuse]',
+  availabilityPolicy: '[insert the provider’s policy for making this plan available upon request and, when feasible, publicly available]',
+  localOrgs: '[insert contact information for local organizations offering assistance to victims of domestic violence, dating violence, sexual assault, or stalking]',
+  externalExamples: '',
+  internalExamples: '',
 }
 
 const BIFURCATION_ROWS: [string, string][] = [
@@ -125,21 +143,122 @@ export const VAWA_5380: VawaForm = {
   ],
 }
 
+// ---- HUD-5381 Emergency Transfer Plan -------------------------------------
+// HUD "model" plan: the drafting notes (which must not appear in the adopted
+// plan) are surfaced as field help, not printed. Site-specific policies are
+// {{tokens}}; the written-request subsection is gated on requireWrittenRequest.
+export const VAWA_5381_FILLS: VawaFill[] = [
+  { key: 'chpName', label: 'Covered housing provider — full name', help: 'Full legal name (HOPWA providers: the grantee name).' },
+  { key: 'chpAcronym', label: 'Covered housing provider — short name/acronym', help: 'Used throughout the plan, e.g. ARO.' },
+  { key: 'programName', label: 'Program / rental assistance name', help: 'The program HUD oversees for VAWA compliance.' },
+  { key: 'internalImmediate', label: 'Policy — internal transfer, safe unit immediately available', help: 'Time frames to approve/deny once a full request is received, options (without revealing the victim’s location), and priority vs. other transfers.' },
+  { key: 'internalNotImmediate', label: 'Policy — internal transfer, safe unit not immediately available', help: 'Time frames, options, and priority vs. other transfers.' },
+  { key: 'externalTransfers', label: 'Policy — external transfers', help: 'Provider’s role, transfer agreements, referrals, time frames, and priority for incoming VAWA victims.' },
+  { key: 'voucherAssistance', label: 'Policy — tenant-based voucher assistance', help: 'How HCV / tenant-based assistance tenants move quickly with that assistance.' },
+  { key: 'requestContact', label: 'How to request an emergency transfer', help: 'Specific contact info, website, e-mail, and/or instructions.' },
+  { key: 'requireWrittenRequest', label: 'Require a written emergency-transfer request', kind: 'flag', help: 'If on, the plan states what a written request must include (HUD-5383 may be used). Requests may otherwise be oral.' },
+  { key: 'docDeadlineDays', label: 'Documentation deadline (business days)', help: 'Must be at least 14 business days (weekends/holidays excluded).' },
+  { key: 'priorityMeasure', label: 'Priority given to VAWA emergency transfers', help: 'The measure of priority vs. other transfers and waiting-list applicants. Internal transfers must get at least any priority given to other emergency transfers.' },
+  { key: 'confidentialityMeasures', label: 'Confidentiality measures (protecting the victim’s location)', help: 'Specific measures ensuring the victim’s unit location is never disclosed to the perpetrator.' },
+  { key: 'availabilityPolicy', label: 'How the plan is made available', help: 'Policy for making the plan available on request and, when feasible, publicly available.' },
+  { key: 'localOrgs', label: 'Local victim-assistance organizations', help: 'Contact information for local organizations assisting victims.' },
+  { key: 'externalExamples', label: 'External-transfer examples (optional)', optional: true, help: 'Appended to the definition as “For example, …”.' },
+  { key: 'internalExamples', label: 'Internal-transfer examples (optional)', optional: true, help: 'Appended to the definition as “For example, …”.' },
+]
+
+export const VAWA_5381: VawaForm = {
+  id: '5381', code: 'HUD-5381',
+  title: 'Emergency Transfer Plan for Victims of Domestic Violence, Dating Violence, Sexual Assault, and Stalking',
+  omb: 'U.S. Department of Housing and Urban Development · OMB Approval No. 2577-0286',
+  blocks: [
+    { k: 'p', text: '{{chpName}} is concerned about the safety of its tenants, and such concern extends to tenants who are victims of domestic violence, dating violence, sexual assault, or stalking. In accordance with the Violence Against Women Act of 1994, as amended (“VAWA”), {{chpAcronym}} allows any tenant who is a victim of domestic violence, dating violence, sexual assault, or stalking to request an emergency transfer from the tenant’s current unit to another unit. VAWA protections are not limited to women. Victims cannot be discriminated against on the basis of any protected characteristic, including race, color, national origin, religion, sex, familial status, disability, or age.' },
+    { k: 'p', text: 'This plan identifies tenants who are eligible for an emergency transfer, the documentation needed to request an emergency transfer, confidentiality protections, how an emergency transfer may occur, and guidance regarding safety and security. The plan is based on Federal regulations at 24 CFR part 5, subpart L, related program regulations, and the model emergency transfer plan published by HUD. HUD is the Federal agency that oversees that {{programName}} is in compliance with VAWA.' },
+
+    { k: 'h', text: 'Definitions' },
+    { k: 'p', lead: 'External emergency transfer', text: 'refers to an emergency relocation of a tenant to another unit where the tenant would be categorized as a new applicant; that is, the tenant must undergo an application process in order to reside in the new unit.{{externalExamplesClause}}' },
+    { k: 'p', lead: 'Internal emergency transfer', text: 'refers to an emergency relocation of a tenant to another unit where the tenant would not be categorized as a new applicant; that is, the tenant may reside in the new unit without having to undergo an application process.{{internalExamplesClause}}' },
+    { k: 'p', lead: 'Safe unit', text: 'refers to a unit that the victim of VAWA violence/abuse believes is safe.' },
+    { k: 'p', lead: 'VAWA violence/abuse', text: 'means an incident or incidents of domestic violence, dating violence, sexual assault, or stalking, as those terms are defined in 24 CFR 5.2003 and the “Certification of Domestic Violence, Dating Violence, Sexual Assault, or Stalking” (Form HUD-5382).' },
+
+    { k: 'h', text: 'Eligibility for Emergency Transfers' },
+    { k: 'p', text: 'A tenant may seek an emergency transfer to another unit if they or their household member is a victim of VAWA violence/abuse, as outlined in the “Notice of Occupancy Rights Under the Violence Against Women Act,” Form HUD-5380. This emergency transfer plan provides further information on emergency transfers, and {{chpAcronym}} must provide a copy if requested. {{chpAcronym}} may ask for submission of a written request for an emergency transfer, such as Form HUD-5383, to certify eligibility for the emergency transfer.' },
+    { k: 'p', text: 'A tenant is eligible for an emergency transfer if:' },
+    { k: 'ul', items: [
+      'The tenant (or their household member) is a victim of VAWA violence/abuse;',
+      'The tenant expressly requests the emergency transfer; AND',
+      'EITHER the tenant reasonably believes that there is a threat of imminent harm from further violence, including trauma, if they (or their household member) stay in the same dwelling unit;',
+      'OR if the tenant (or their household member) is a victim of sexual assault, either the tenant reasonably believes that there is a threat of imminent harm from further violence, including trauma, if the tenant (or their household member) were to stay in the unit, or the sexual assault occurred on the premises and the tenant requested an emergency transfer within 90 days (including holidays and weekend days) of when that assault occurred.',
+    ] },
+    { k: 'p', text: '{{chpAcronym}}, in response to an emergency transfer request, should not evaluate whether the tenant is in good standing as part of the assessment or provision of an emergency transfer. Whether or not a tenant is in good standing does not impact their ability to request an emergency transfer under VAWA.' },
+
+    { k: 'h', text: 'Emergency Transfer Policies' },
+    { k: 'p', lead: 'Internal transfers when a safe unit is immediately available:', text: '{{internalImmediate}}' },
+    { k: 'p', lead: 'Internal transfers when a safe unit is not immediately available:', text: '{{internalNotImmediate}}' },
+    { k: 'p', lead: 'External transfers:', text: '{{externalTransfers}}' },
+    { k: 'p', text: '{{voucherAssistance}}' },
+    { k: 'p', text: 'VAWA provisions do not supersede eligibility or other occupancy requirements that may apply under a covered housing program. {{chpAcronym}} may be unable to transfer a tenant to a particular unit if the tenant cannot establish eligibility for that unit.' },
+
+    { k: 'h', text: 'Emergency Transfer Request Documentation' },
+    { k: 'p', text: 'To request an emergency transfer, the tenant shall notify {{requestContact}}. If {{chpAcronym}} does not already have documentation of the occurrence of domestic violence, dating violence, sexual assault, or stalking, {{chpAcronym}} may ask for this documentation in accordance with 24 CFR 5.2007. If {{chpAcronym}} requests documentation, the tenant will have at least {{docDeadlineDays}} business days (weekends and holidays excluded) to provide it. Unless {{chpAcronym}} receives documentation that contains conflicting information, as described in 24 CFR 5.2007(b)(2), {{chpAcronym}} cannot require third-party documentation to determine status as a VAWA victim for emergency transfer eligibility. {{chpAcronym}} will provide reasonable accommodations to this policy for individuals with disabilities.' },
+    { k: 'p', when: { flag: 'requireWrittenRequest' }, lead: 'Written request.', text: 'The tenant’s written request for an emergency transfer must include either:' },
+    { k: 'ul', when: { flag: 'requireWrittenRequest' }, items: [
+      'A statement expressing that the tenant reasonably believes that there is a threat of imminent harm from further violence, including trauma, if the tenant (or household member) stays in the same dwelling unit; OR',
+      'In the case of a tenant (or household member) who is a victim of sexual assault, either a statement that the tenant reasonably believes there is a threat of imminent harm from further violence or trauma if the tenant (or household member) stays in the same dwelling unit, or a statement that the sexual assault occurred on the premises and the tenant requested an emergency transfer within 90 days (including holidays and weekend days) of when the assault occurred.',
+    ] },
+    { k: 'p', when: { flag: 'requireWrittenRequest' }, text: 'Form HUD-5383 may be used for making a written request for an emergency transfer.' },
+
+    { k: 'h', text: 'Priority for Transfers' },
+    { k: 'p', text: 'Tenants who qualify for an emergency transfer under VAWA will be given the following priority over other categories of tenants seeking transfers and individuals seeking placement on waiting lists. {{priorityMeasure}}' },
+
+    { k: 'h', text: 'Confidentiality' },
+    { k: 'p', text: 'If a tenant inquires about or requests any VAWA protections or represents that they or a household member are a victim of VAWA violence/abuse entitled to VAWA protections, {{chpAcronym}} must keep any information they provide concerning the VAWA violence/abuse, their request for an emergency transfer, and their or a household member’s status as a victim strictly confidential. This information should be securely and separately kept from tenant files. All the information provided by or on behalf of the tenant to support an emergency transfer request, including information on the Certification Form (HUD-5382) and the Emergency Transfer Request Form (HUD-5383) (collectively referred to as “Confidential Information”) may only be accessed by {{chpAcronym}} employees or contractors if explicitly authorized by {{chpAcronym}} for reasons that specifically call for those individuals to have access to that information under applicable Federal, State, or local law.' },
+    { k: 'p', text: 'Confidential information must not be entered into any shared database or disclosed to any other entity or individual, except if:' },
+    { k: 'ul', items: [
+      'Written permission by the victim in a time-limited release;',
+      'Required for use in an eviction proceeding or hearing regarding termination of assistance; or',
+      'Otherwise required by applicable law.',
+    ] },
+    { k: 'p', text: 'In addition, HUD’s VAWA regulations require emergency transfer plans to provide strict confidentiality measures to ensure that the location of the victim’s dwelling unit is never disclosed to a person who committed or threatened to commit the VAWA violence/abuse. Accordingly, {{confidentialityMeasures}}' },
+
+    { k: 'h', text: 'Emergency Transfer Procedure' },
+    { k: 'p', text: '{{chpAcronym}} cannot specify how long it will take from the time a transfer request is approved until the tenant can be placed in a new, safe unit. {{chpAcronym}} will, however, act as quickly as possible to assist a tenant who qualifies for an emergency transfer. If {{chpAcronym}} identifies an available unit and the tenant believes that unit would not be safe, the tenant may request a transfer to a different unit. {{chpAcronym}} may be unable to transfer a tenant and their household to a particular unit if the tenant and their household has not established or cannot establish eligibility for that unit.' },
+    { k: 'p', text: 'If {{chpAcronym}} does not have any safe and available units for which the tenant is eligible, {{chpAcronym}} will assist the tenant in identifying other covered housing providers who may have safe and available units to which the tenant could move. At the tenant’s request, {{chpAcronym}} will also assist the tenant in contacting the local organizations offering assistance to victims of VAWA violence/abuse that are attached to this plan.' },
+
+    { k: 'h', text: 'Making the Emergency Transfer Plan Available' },
+    { k: 'p', text: '{{availabilityPolicy}}' },
+
+    { k: 'h', text: 'Safety and Security of Tenants' },
+    { k: 'p', text: 'When {{chpAcronym}} receives any inquiry or request regarding an emergency transfer, {{chpAcronym}} will encourage the person making the inquiry or request to take all reasonable precautions to be safe, including seeking guidance and assistance from a victim service provider. However, tenants are not required to receive guidance or assistance from a victim service provider.' },
+    { k: 'p', text: 'For additional information on VAWA and to find help in your area, visit https://www.hud.gov/vawa.' },
+    { k: 'p', text: '{{localOrgs}}' },
+    { k: 'p', text: 'This plan is a required policy under 24 CFR 5.2005(e).' },
+  ],
+}
+
 export const VAWA_FORMS: { id: string; code: string; label: string; ready: boolean }[] = [
   { id: '5380', code: 'HUD-5380', label: 'Notice of Occupancy Rights', ready: true },
-  { id: '5381', code: 'HUD-5381', label: 'Emergency Transfer Plan', ready: false },
+  { id: '5381', code: 'HUD-5381', label: 'Emergency Transfer Plan', ready: true },
   { id: '5382', code: 'HUD-5382', label: 'Certification (self-certification)', ready: false },
   { id: '5383', code: 'HUD-5383', label: 'Emergency Transfer Request', ready: false },
 ]
 
+export const VAWA_FORM_BY_ID: Record<string, VawaForm> = { '5380': VAWA_5380, '5381': VAWA_5381 }
+export const VAWA_FILLS_BY_FORM: Record<string, VawaFill[]> = { '5380': VAWA_5380_FILLS, '5381': VAWA_5381_FILLS }
+
 export function vawaMerge(text: string | undefined, fills: Record<string, string>): string {
   if (!text) return ''
   const map: Record<string, string> = { ...VAWA_DEFAULT_FILLS, ...fills }
-  // Derived: drop the "or go to <website>" clause entirely when no website given.
+  // Derived clauses that are omitted entirely when their field is blank.
   const site = (fills.langWebsite ?? '').trim()
-  const langGoToClause = site ? ` or go to ${site}` : ''
+  const ext = (fills.externalExamples ?? '').trim()
+  const intl = (fills.internalExamples ?? '').trim()
+  const derived: Record<string, string> = {
+    langGoToClause: site ? ` or go to ${site}` : '',
+    externalExamplesClause: ext ? ` For example, ${ext}` : '',
+    internalExamplesClause: intl ? ` For example, ${intl}` : '',
+  }
   return text.replace(/\{\{(\w+)\}\}/g, (_m, k) => {
-    if (k === 'langGoToClause') return langGoToClause            // may be empty on purpose
+    if (k in derived) return derived[k]                          // may be empty on purpose
     const v = map[k]
     return (v != null && v !== '') ? v : (VAWA_DEFAULT_FILLS[k] ?? `{{${k}}}`)
   })
