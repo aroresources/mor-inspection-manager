@@ -140,6 +140,18 @@ export default function VawaDocument({ propertyId, property, onDirtyChange }: an
           else { body += '<ul>'; for (const it of seg.items) body += `<li>${esc(it)}</li>`; body += '</ul>' }
         }
       }
+      else if (b.k === 'field') {
+        body += `<div class="fld"><span class="flab">${esc(b.label)}</span><span class="fline"></span></div>`
+        for (let i = 0; i < (b.blanks || 0); i++) body += `<div class="fullline"></div>`
+      }
+      else if (b.k === 'checks') {
+        body += '<div class="checks">'
+        for (const o of b.options) body += `<span class="chk">☐ ${esc(o)}</span>`
+        body += '</div>'
+      }
+      else if (b.k === 'sig') {
+        body += `<div class="fld"><span class="flab">Signature:</span><span class="fline"></span><span class="flab" style="margin-left:20px">Date:</span><span class="fline" style="max-width:160px"></span></div>`
+      }
       else if (b.k === 'table') {
         body += `<table class="grid"><thead><tr><th>${esc(b.headers[0])}</th><th>${esc(b.headers[1])}</th></tr></thead><tbody>`
         for (const [a, c] of b.rows) body += `<tr><td class="prog">${esc(a)}</td><td>${esc(c)}</td></tr>`
@@ -159,6 +171,12 @@ export default function VawaDocument({ propertyId, property, onDirtyChange }: an
       hr{border:none;border-top:1px solid #000;margin:8px 0 12px;}
       p{margin:0 0 8px;text-align:justify;}
       ul{margin:0 0 9px 26px;padding:0;} li{margin:0 0 5px;text-align:justify;}
+      .fld{display:flex;align-items:flex-end;gap:8px;margin:0 0 9px;}
+      .flab{white-space:nowrap;}
+      .fline{flex:1;border-bottom:1px solid #000;height:1.1em;}
+      .fullline{border-bottom:1px solid #000;height:1.1em;margin:0 0 9px;}
+      .checks{display:flex;flex-wrap:wrap;gap:6px 28px;margin:4px 0 12px;}
+      .chk{white-space:nowrap;}
       table.grid{border-collapse:collapse;width:100%;margin:6px 0 12px;font-size:10pt;}
       table.grid th{border:1px solid #000;background:#e6e6e6;text-align:left;padding:5px 7px;vertical-align:top;font-weight:bold;}
       table.grid td{border:1px solid #000;padding:5px 7px;vertical-align:top;}
@@ -196,6 +214,15 @@ export default function VawaDocument({ propertyId, property, onDirtyChange }: an
           if (seg.type === 'p') children.push(new Paragraph({ alignment: AlignmentType.JUSTIFIED, spacing: { after: 120 }, children: [run(seg.text)] }))
           else for (const it of seg.items) children.push(new Paragraph({ bullet: { level: 0 }, alignment: AlignmentType.JUSTIFIED, spacing: { after: 60 }, children: [run(it)] }))
         }
+      } else if (b.k === 'field') {
+        const ul = (n: number) => new TextRun({ text: ' '.repeat(n), underline: {}, font: TNR, size: 22 })
+        children.push(new Paragraph({ spacing: { after: 80 }, children: [run(b.label + ' '), ul(50)] }))
+        for (let i = 0; i < (b.blanks || 0); i++) children.push(new Paragraph({ spacing: { after: 80 }, children: [ul(95)] }))
+      } else if (b.k === 'checks') {
+        children.push(new Paragraph({ spacing: { after: 120 }, children: [run(b.options.map(o => '☐ ' + o).join('      '))] }))
+      } else if (b.k === 'sig') {
+        const ul = (n: number) => new TextRun({ text: ' '.repeat(n), underline: {}, font: TNR, size: 22 })
+        children.push(new Paragraph({ spacing: { before: 160, after: 40 }, children: [run('Signature: '), ul(42), run('      Date: '), ul(20)] }))
       } else if (b.k === 'table') {
         const edge = { style: BorderStyle.SINGLE, size: 4, color: '000000' }
         const hdr = (t: string) => new TableCell({ shading: { fill: 'E6E6E6' } as any, margins: { top: 40, bottom: 40, left: 90, right: 90 }, children: [new Paragraph({ children: [run(t, { bold: true, size: 18 })] })] })

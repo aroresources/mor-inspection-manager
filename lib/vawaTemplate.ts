@@ -11,6 +11,10 @@ export type VawaBlock =
   // rich: a multi-paragraph fill value (blank lines = paragraphs, "- " = bullets),
   // rendered under an optional bold label.
   | { k: 'rich'; lead?: string; fill: string; when?: VawaWhen }
+  // Fillable-form elements (completed by hand on the printed form).
+  | { k: 'field'; label: string; blanks?: number; when?: VawaWhen }   // label + underline(s)
+  | { k: 'checks'; options: string[]; when?: VawaWhen }               // ☐ option list
+  | { k: 'sig'; when?: VawaWhen }                                     // Signature / Date line
 
 export interface VawaForm {
   id: string
@@ -272,15 +276,120 @@ export const VAWA_5381: VawaForm = {
   ],
 }
 
+// ---- HUD-5382 & 5383 (tenant-completed forms) -----------------------------
+// Only three property inserts, shared with the 5380 (same keys => same values).
+const VAWA_CONTACT_FILLS: VawaFill[] = [
+  { key: 'langContact', label: 'Language-assistance contact', help: 'Covered housing provider contact info (HOPWA: grantee name + contact).' },
+  { key: 'langWebsite', label: 'Language-assistance website (optional)', optional: true },
+  { key: 'advocacyContact', label: 'Local advocacy / legal-aid contact', help: 'Replace or add your local advocacy and legal-aid organizations.', prefill: true },
+]
+export const VAWA_5382_FILLS = VAWA_CONTACT_FILLS
+export const VAWA_5383_FILLS = VAWA_CONTACT_FILLS
+
+// Reusable fixed notice blocks shared by 5382/5383.
+const VAWA_CONF_LANG_RA_HELP: VawaBlock[] = [
+  { k: 'p', lead: 'Will my information be kept confidential?', text: 'Whenever you ask for or about VAWA protections, your covered housing provider must keep any information you provide about the VAWA violence/abuse or the fact you (or a household member) are a victim, including the information on this form, strictly confidential. This information should be securely and separately kept from your other tenant files. This information can only be accessed by an employee/agent of your covered housing provider if (1) access is required for a specific reason, (2) your covered housing provider explicitly authorizes that person’s access for that reason, and (3) the authorization complies with applicable law. This information will not be given to anyone else or put in a database shared with anyone else, unless your covered housing provider (1) gets your written permission to do so for a limited time, (2) is required to do so as part of an eviction or termination hearing, or (3) is required to do so by law.' },
+  { k: 'p', text: 'In addition, your covered housing provider must keep your address strictly confidential to ensure that it is not disclosed to a person who committed or threatened to commit VAWA violence/abuse against you (or a household member).' },
+  { k: 'p', lead: 'What if I require this information in a language other than English?', text: 'To read this in Spanish or another language, please contact {{langContact}}{{langGoToClause}}. You can read translated VAWA forms at https://www.hud.gov/program_offices/administration/hudclips/forms/hud5a#4. If you speak or read in a language other than English, your covered housing provider must give you language assistance regarding your VAWA protections (for example, oral interpretation and/or written translation).' },
+  { k: 'p', lead: 'Can I request a reasonable accommodation?', text: 'If you have a disability, your covered housing provider must provide reasonable accommodations to rules, policies, practices, or services that may be necessary to allow you to equally benefit from VAWA protections (for example, giving you more time to submit documents or assistance with filling out forms). You may request a reasonable accommodation at any time, even for the first time during an eviction. If a provider is denying a specific reasonable accommodation because it is not reasonable, your covered housing provider must first engage in the interactive process with you to identify possible alternative accommodations. Your covered housing provider must also ensure effective communication with individuals with disabilities.' },
+  { k: 'p', lead: 'Need further help?', text: 'For additional information on VAWA and to find help in your area, visit https://www.hud.gov/vawa. To speak with a housing advocate, contact {{advocacyContact}}.' },
+]
+
+const CONTACT_METHOD_BLOCKS: VawaBlock[] = [
+  { k: 'p', text: 'If any contact information changes or is no longer a safe contact method, notify your covered housing provider.' },
+  { k: 'field', label: '☐ Phone — Phone number:' },
+  { k: 'p', text: 'Safe to receive a voicemail:   ☐ Yes   ☐ No' },
+  { k: 'field', label: '☐ E-mail — E-mail address:' },
+  { k: 'p', text: 'Safe to receive an email:   ☐ Yes   ☐ No' },
+  { k: 'field', label: '☐ Mail — Mailing address:' },
+  { k: 'p', text: 'Safe to receive mail from your housing provider:   ☐ Yes   ☐ No' },
+  { k: 'field', label: '☐ Other (please list):' },
+]
+
+export const VAWA_5382: VawaForm = {
+  id: '5382', code: 'HUD-5382',
+  title: 'Certification of Domestic Violence, Dating Violence, Sexual Assault, or Stalking',
+  omb: 'U.S. Department of Housing and Urban Development · OMB Approval No. 2577-0286 · Exp. 1/31/2028',
+  blocks: [
+    { k: 'p', lead: 'Confidentiality Note:', text: 'Any personal information you share in this form will be maintained by your covered housing provider according to the confidentiality provisions below.' },
+    { k: 'p', lead: 'Purpose of Form:', text: 'If you are a tenant of or applicant for housing assisted under a covered housing program, or if you are applying for or receiving transitional housing or rental assistance under a covered housing program, and ask for protection under the Violence Against Women Act (“VAWA”), you may use this form to comply with a covered housing provider’s request for written documentation of your status as a “victim.” This form is accompanied by a “Notice of Occupancy Rights Under the Violence Against Women Act,” Form HUD-5380.' },
+    { k: 'p', text: 'VAWA protects individuals and families regardless of a victim’s age, sex, or marital status.' },
+    { k: 'p', text: 'You are not expected and cannot be asked or required to claim, document, or prove victim status or VAWA violence/abuse other than as stated in “Notice of Occupancy Rights Under the Violence Against Women Act,” Form HUD-5380.' },
+    { k: 'p', text: 'This form is one of your available options for responding to a covered housing provider’s written request for documentation of victim status or the incident(s) of VAWA violence/abuse. If you choose, you may submit one of the types of third-party documentation described in Form HUD-5380, in the section titled “What do I need to document that I am a victim?”. Your covered housing provider must give you at least 14 business days (weekends and holidays do not count) to respond to their written request for this documentation.' },
+    ...VAWA_CONF_LANG_RA_HELP,
+    { k: 'h', text: 'To be completed by or on behalf of the victim of domestic violence, dating violence, sexual assault, or stalking' },
+    { k: 'field', label: '1. Name(s) of victim(s):' },
+    { k: 'field', label: '2. Your name (if different from victim’s):' },
+    { k: 'field', label: '3. Name(s) of other member(s) of the household:', blanks: 1 },
+    { k: 'field', label: '4. Name of the perpetrator (if known and can be safely disclosed):' },
+    { k: 'p', text: '5. What is the safest and most secure way to contact you? (You may choose more than one.)' },
+    ...CONTACT_METHOD_BLOCKS,
+    { k: 'field', label: '6. Anything else your housing provider should know to safely communicate with you?', blanks: 3 },
+    { k: 'h', text: 'Applicable definitions of domestic violence, dating violence, sexual assault, or stalking' },
+    { k: 'p', lead: 'Domestic violence', text: 'includes felony or misdemeanor crimes of violence committed by a current or former spouse or intimate partner of the victim, by a person with whom the victim shares a child in common, by a person who lives with or has lived with the victim as a spouse or intimate partner, by a person similarly situated to a spouse of the victim under the domestic or family violence laws of the jurisdiction, or by any other person against an adult or youth victim who is protected from that person’s acts under the domestic or family violence laws of the jurisdiction.' },
+    { k: 'p', lead: 'Spouse or intimate partner of the victim', text: 'includes a person who is or has been in a social relationship of a romantic or intimate nature with the victim, as determined by the length of the relationship, the type of the relationship, and the frequency of interaction between the persons involved in the relationship.' },
+    { k: 'p', lead: 'Dating violence', text: 'means violence committed by a person (1) who is or has been in a social relationship of a romantic or intimate nature with the victim; and (2) where the existence of such a relationship is determined based on a consideration of the following factors: (i) the length of the relationship; (ii) the type of relationship; and (iii) the frequency of interaction between the persons involved in the relationship.' },
+    { k: 'p', lead: 'Sexual assault', text: 'means any nonconsensual sexual act proscribed by Federal, tribal, or State law, including when the victim lacks capacity to consent.' },
+    { k: 'p', lead: 'Stalking', text: 'means engaging in a course of conduct directed at a specific person that would cause a reasonable person to (1) fear for the person’s individual safety or the safety of others, or (2) suffer substantial emotional distress.' },
+    { k: 'p', lead: 'Certification of Applicant or Tenant:', text: 'By signing below, I am certifying that the information provided on this form is true and correct to the best of my knowledge and recollection, and that one or more members of my household is or has been a victim of domestic violence, dating violence, sexual assault, or stalking as described in the applicable definitions above.' },
+    { k: 'sig' },
+  ],
+}
+
+export const VAWA_5383: VawaForm = {
+  id: '5383', code: 'HUD-5383',
+  title: 'Emergency Transfer Request for Victims of Domestic Violence, Dating Violence, Sexual Assault, or Stalking',
+  omb: 'U.S. Department of Housing and Urban Development · OMB Approval No. 2577-0286 · Exp. 1/31/2028',
+  blocks: [
+    { k: 'p', lead: 'Confidentiality Note:', text: 'Any personal information you share in this form will be maintained by your covered housing provider according to the confidentiality provisions below.' },
+    { k: 'p', lead: 'Purpose of Form:', text: 'If you are a tenant of housing assisted under a covered housing program, or if you are receiving transitional housing or rental assistance under a covered housing program, you may use this form to request an emergency transfer and certify that you qualify for an emergency transfer under the Violence Against Women Act (“VAWA”). This form refers to domestic violence, dating violence, sexual assault, or stalking as “VAWA violence/abuse.”' },
+    { k: 'p', text: 'VAWA protects individuals and families regardless of a victim’s age, sex, or marital status.' },
+    { k: 'p', text: 'You may request an emergency transfer when:' },
+    { k: 'ul', items: [
+      '1. You (or a household member) are a victim of VAWA violence/abuse;',
+      '2. You expressly request the emergency transfer; AND',
+      '3. EITHER (a) you reasonably believe that there is a threat of imminent harm from further violence, including trauma, if you (or a household member) stay in the same dwelling unit; or',
+      '(b) if you (or a household member) are a victim of sexual assault, either you reasonably believe there is a threat of imminent harm from further violence, including trauma, if you (or a household member) stay in the unit, or the sexual assault occurred on the premises and you request an emergency transfer within 90 days (including holidays and weekend days) of when that assault occurred.',
+    ] },
+    { k: 'p', text: 'A covered housing provider, in response to an emergency transfer request, should not evaluate whether you are in good standing as part of the assessment or provision of an emergency transfer. Whether or not you are in good standing does not impact your ability to request an emergency transfer under VAWA.' },
+    { k: 'p', text: 'However, submitting this form does not necessarily mean that you will receive an emergency transfer. See your covered housing provider’s VAWA Emergency Transfer Plan for more information about VAWA emergency transfers and see “Notice of Occupancy Rights Under the Violence Against Women Act,” Form HUD-5380, for additional housing rights you may be entitled to.' },
+    { k: 'p', lead: 'Am I required to submit any documentation to my covered housing provider?', text: 'Your covered housing provider may request documentation proving that you, or a household member, are a victim of VAWA violence/abuse, in addition to completing this emergency transfer request form. The request can be met by completing and submitting the VAWA Self-certification Form (Form HUD-5382), unless the covered housing provider receives conflicting information about the VAWA violence/abuse. If you have third-party documentation that demonstrates why you are eligible for an emergency transfer, you may, instead, choose to submit that documentation to your covered housing provider. See “Notice of Occupancy Rights Under the Violence Against Women Act,” Form HUD-5380, for more information.' },
+    ...VAWA_CONF_LANG_RA_HELP,
+    { k: 'h', text: 'To be completed by or on behalf of the tenant requesting an emergency transfer' },
+    { k: 'field', label: '1. Name(s) of victim(s):' },
+    { k: 'field', label: '2. Your name (if different from victim’s):' },
+    { k: 'field', label: '3. Name(s) of other household member(s):', blanks: 1 },
+    { k: 'field', label: '4. Name(s) of other household member(s) who would transfer with the victim:', blanks: 1 },
+    { k: 'field', label: '5. Name of the perpetrator (if known and can be safely disclosed):' },
+    { k: 'field', label: '6. Address of location from which the victim seeks to transfer:', blanks: 1 },
+    { k: 'field', label: '7. Current unit size (# of bedrooms):' },
+    { k: 'p', text: '8. What is the safest and most secure way to contact you? (You may choose more than one.)' },
+    ...CONTACT_METHOD_BLOCKS,
+    { k: 'field', label: '9. Anything else your housing provider should know to safely communicate with you?', blanks: 3 },
+    { k: 'p', text: '10. What features are requested for a safe unit? You may list here any information that would facilitate a suitable transfer, such as accessibility needs, and a description of where it is safe or unsafe for you to live. (Please note that the ability to provide an emergency transfer is based on unit availability.)' },
+    { k: 'checks', options: ['New Neighborhood', 'New Building', 'First Floor unit', 'Second Floor unit (and above)', 'Near an Exit', 'Well-lit hallways/walkways', '24-hour Security', 'Accessible unit'] },
+    { k: 'field', label: 'Other:', blanks: 1 },
+    { k: 'p', text: '11. To approve your request for an emergency transfer, your covered housing provider may require that you provide written documentation that you (or a household member) are a victim of VAWA violence/abuse. Your covered housing provider must make this request for documentation in writing. You can choose to submit any one of the following types of documentation:' },
+    { k: 'ul', items: [
+      'Form HUD-5382, Certification of Domestic Violence, Dating Violence, Sexual Assault, or Stalking, which asks your name and the perpetrator’s name (if known and safe to provide);',
+      'A document signed by a victim service provider, attorney, mental health professional, or medical professional who has helped you address the VAWA violence/abuse. The professional must state “under penalty of perjury” that he/she/they believe in the occurrence of the incident of VAWA violence/abuse and that it is covered by VAWA. Both you and the professional must sign the statement;',
+      'A police, administrative, or court record (such as a protective order) that shows you (or a household member) are a victim of VAWA violence/abuse; OR',
+      'If permitted by your covered housing provider, a statement or other evidence provided by you.',
+    ] },
+    { k: 'p', lead: 'Certification of Tenant:', text: 'By signing below, I am certifying that the information provided on this form is true and correct to the best of my knowledge and recollection, and that I meet the conditions described on this form to qualify for an emergency transfer.' },
+    { k: 'sig' },
+  ],
+}
+
 export const VAWA_FORMS: { id: string; code: string; label: string; ready: boolean }[] = [
   { id: '5380', code: 'HUD-5380', label: 'Notice of Occupancy Rights', ready: true },
   { id: '5381', code: 'HUD-5381', label: 'Emergency Transfer Plan', ready: true },
-  { id: '5382', code: 'HUD-5382', label: 'Certification (self-certification)', ready: false },
-  { id: '5383', code: 'HUD-5383', label: 'Emergency Transfer Request', ready: false },
+  { id: '5382', code: 'HUD-5382', label: 'Certification (self-certification)', ready: true },
+  { id: '5383', code: 'HUD-5383', label: 'Emergency Transfer Request', ready: true },
 ]
 
-export const VAWA_FORM_BY_ID: Record<string, VawaForm> = { '5380': VAWA_5380, '5381': VAWA_5381 }
-export const VAWA_FILLS_BY_FORM: Record<string, VawaFill[]> = { '5380': VAWA_5380_FILLS, '5381': VAWA_5381_FILLS }
+export const VAWA_FORM_BY_ID: Record<string, VawaForm> = { '5380': VAWA_5380, '5381': VAWA_5381, '5382': VAWA_5382, '5383': VAWA_5383 }
+export const VAWA_FILLS_BY_FORM: Record<string, VawaFill[]> = { '5380': VAWA_5380_FILLS, '5381': VAWA_5381_FILLS, '5382': VAWA_5382_FILLS, '5383': VAWA_5383_FILLS }
 
 export function vawaMerge(text: string | undefined, fills: Record<string, string>): string {
   if (!text) return ''
