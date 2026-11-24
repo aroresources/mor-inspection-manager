@@ -5,7 +5,7 @@ import { useToast } from '../../components/ToastProvider'
 import { saveAs } from 'file-saver'
 import { Document, Packer, Paragraph, TextRun, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle } from 'docx'
 import { Button, Icon } from '../../components/ui'
-import { VAWA_5380, VAWA_5380_FILLS, VAWA_FORMS, vawaMerge, type VawaForm } from '../../../lib/vawaTemplate'
+import { VAWA_5380, VAWA_5380_FILLS, VAWA_FORMS, VAWA_DEFAULT_FILLS, vawaMerge, type VawaForm } from '../../../lib/vawaTemplate'
 
 const esc = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 const BRAND = '312E81'
@@ -23,7 +23,12 @@ export default function VawaDocument({ propertyId, property, onDirtyChange }: an
     setLoading(true)
     const { data } = await supabase.from('property_doc_settings')
       .select('*').eq('property_id', propertyId).eq('doc_type', 'vawa').maybeSingle()
-    const f = (data?.settings as any)?.fills || {}
+    const f = { ...((data?.settings as any)?.fills || {}) }
+    // Seed prefilled defaults (e.g. the National DV Hotline) when not yet set,
+    // and treat them as the saved baseline so the form doesn't read as dirty.
+    for (const fl of VAWA_5380_FILLS) {
+      if (fl.prefill && (f[fl.key] == null || f[fl.key] === '')) f[fl.key] = VAWA_DEFAULT_FILLS[fl.key]
+    }
     setFills(f); setSaved(f); setLoading(false)
   }
 

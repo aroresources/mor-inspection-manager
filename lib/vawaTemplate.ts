@@ -17,14 +17,15 @@ export interface VawaForm {
 }
 
 // Editable bracket inserts (the only per-property fields on the 5380).
-export interface VawaFill { key: string; label: string; help?: string }
+export interface VawaFill { key: string; label: string; help?: string; prefill?: boolean }
 export const VAWA_5380_FILLS: VawaFill[] = [
   { key: 'langContact', label: 'Language-assistance contact', help: 'Covered housing provider contact info (HOPWA: grantee name + contact).' },
   { key: 'langWebsite', label: 'Language-assistance website (optional)' },
   { key: 'transferContact', label: 'Emergency-transfer request instructions', help: 'Enter specific contact information, website, and/or instructions for requesting an emergency transfer or a copy of the applicable VAWA emergency transfer plan.' },
   { key: 'raContact', label: 'Reasonable-accommodation contact', help: 'Staff member to contact to request an accommodation.' },
   { key: 'fheoOffice', label: 'Local HUD FHEO field office', help: 'Office + contact info for VAWA-rights complaints.' },
-  { key: 'advocacyContact', label: 'Local advocacy / legal-aid contact' },
+  // Pre-filled with the National DV Hotline; replace it or add local resources.
+  { key: 'advocacyContact', label: 'Local advocacy / legal-aid contact', help: 'Replace or add your local advocacy and legal-aid organizations.', prefill: true },
 ]
 
 export const VAWA_DEFAULT_FILLS: Record<string, string> = {
@@ -33,7 +34,7 @@ export const VAWA_DEFAULT_FILLS: Record<string, string> = {
   transferContact: '[enter specific contact information, website, and/or instructions for requesting an emergency transfer or a copy of the applicable VAWA emergency transfer plan]',
   raContact: '[insert appropriate staff member contact information]',
   fheoOffice: '[insert local HUD FHEO field office & contact information]',
-  advocacyContact: '[enter contact info for local advocacy and legal aid organizations]',
+  advocacyContact: 'National Domestic Violence Hotline 1-800-799-7233',
 }
 
 const BIFURCATION_ROWS: [string, string][] = [
