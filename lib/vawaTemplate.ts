@@ -30,7 +30,7 @@ export const VAWA_5380_FILLS: VawaFill[] = [
 
 export const VAWA_DEFAULT_FILLS: Record<string, string> = {
   langContact: '[covered housing provider contact information]',
-  langWebsite: '[website, if applicable]',
+  langWebsite: '',
   transferContact: '[enter specific contact information, website, and/or instructions for requesting an emergency transfer or a copy of the applicable VAWA emergency transfer plan]',
   raContact: '[insert appropriate staff member contact information]',
   fheoOffice: '[insert local HUD FHEO field office & contact information]',
@@ -62,7 +62,7 @@ export const VAWA_5380: VawaForm = {
   blocks: [
     { k: 'p', lead: 'When should I receive this form?', text: 'A covered housing provider must provide a copy of the Notice of Occupancy Rights Under The Violence Against Women Act (Form HUD-5380) and the Certification of Domestic Violence, Dating Violence, Sexual Assault, or Stalking (Form HUD-5382) when you are admitted as a tenant, when you receive an eviction or termination notice and prior to termination of tenancy, or when you are denied as an applicant. A covered housing provider may provide these forms at additional times.' },
     { k: 'p', lead: 'What is the Violence Against Women Act (“VAWA”)?', text: 'This notice describes protections that may apply to you as an applicant or a tenant under a housing program covered by a federal law called the Violence Against Women Act (“VAWA”). VAWA provides housing protections for victims of domestic violence, dating violence, sexual assault or stalking. VAWA protections must be in leases and other program documents, as applicable. VAWA protections may be raised at any time. You do not need to know the type or name of the program you are participating in or applying to in order to seek VAWA protections.' },
-    { k: 'p', lead: 'What if I require this information in a language other than English?', text: 'To read this information in Spanish or another language, please contact {{langContact}} or go to {{langWebsite}}. You can read translated VAWA forms at https://www.hud.gov/program_offices/administration/hudclips/forms/hud5a#4. If you speak or read in a language other than English, your covered housing provider must give you language assistance regarding your VAWA protections (for example, oral interpretation and/or written translation).' },
+    { k: 'p', lead: 'What if I require this information in a language other than English?', text: 'To read this information in Spanish or another language, please contact {{langContact}}{{langGoToClause}}. You can read translated VAWA forms at https://www.hud.gov/program_offices/administration/hudclips/forms/hud5a#4. If you speak or read in a language other than English, your covered housing provider must give you language assistance regarding your VAWA protections (for example, oral interpretation and/or written translation).' },
     { k: 'p', lead: 'What do the words in this notice mean?' },
     { k: 'ul', items: [
       'VAWA violence/abuse means one or more incidents of domestic violence, dating violence, sexual assault, or stalking.',
@@ -134,6 +134,13 @@ export const VAWA_FORMS: { id: string; code: string; label: string; ready: boole
 
 export function vawaMerge(text: string | undefined, fills: Record<string, string>): string {
   if (!text) return ''
-  const map = { ...VAWA_DEFAULT_FILLS, ...fills }
-  return text.replace(/\{\{(\w+)\}\}/g, (_m, k) => (map[k] != null && map[k] !== '' ? map[k] : (VAWA_DEFAULT_FILLS[k] ?? `{{${k}}}`)))
+  const map: Record<string, string> = { ...VAWA_DEFAULT_FILLS, ...fills }
+  // Derived: drop the "or go to <website>" clause entirely when no website given.
+  const site = (fills.langWebsite ?? '').trim()
+  const langGoToClause = site ? ` or go to ${site}` : ''
+  return text.replace(/\{\{(\w+)\}\}/g, (_m, k) => {
+    if (k === 'langGoToClause') return langGoToClause            // may be empty on purpose
+    const v = map[k]
+    return (v != null && v !== '') ? v : (VAWA_DEFAULT_FILLS[k] ?? `{{${k}}}`)
+  })
 }

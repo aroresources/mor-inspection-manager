@@ -8,31 +8,48 @@ import { Button, Icon } from '../../components/ui'
 import { VAWA_5380, VAWA_5380_FILLS, VAWA_FORMS, VAWA_DEFAULT_FILLS, vawaMerge, type VawaForm } from '../../../lib/vawaTemplate'
 
 const esc = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-const BRAND = '312E81'
+const TNR = 'Times New Roman'
+type Scope = 'property' | 'company'
 
 export default function VawaDocument({ propertyId, property, onDirtyChange }: any) {
   const { toast } = useToast()
+  const companyId = property?.company_id || null
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [role, setRole] = useState('')
+  const [scope, setScope] = useState<Scope>('property')
   const [activeForm, setActiveForm] = useState('5380')
-  const [fills, setFills] = useState<Record<string, string>>({})
-  const [saved, setSaved] = useState<Record<string, string>>({})
+  const [propFills, setPropFills] = useState<Record<string, string>>({})
+  const [coFills, setCoFills] = useState<Record<string, string>>({})
+  const [savedProp, setSavedProp] = useState<Record<string, string>>({})
+  const [savedCo, setSavedCo] = useState<Record<string, string>>({})
 
-  useEffect(() => { load() }, [propertyId])
+  useEffect(() => { load() }, [propertyId, companyId])
   const load = async () => {
     setLoading(true)
-    const { data } = await supabase.from('property_doc_settings')
-      .select('*').eq('property_id', propertyId).eq('doc_type', 'vawa').maybeSingle()
-    const f = { ...((data?.settings as any)?.fills || {}) }
-    // Seed prefilled defaults (e.g. the National DV Hotline) when not yet set,
-    // and treat them as the saved baseline so the form doesn't read as dirty.
+    const [{ data: { user } }, propRes, coRes] = await Promise.all([
+      supabase.auth.getUser(),
+      supabase.from('property_doc_settings').select('settings').eq('property_id', propertyId).eq('doc_type', 'vawa').maybeSingle(),
+      companyId ? supabase.from('company_doc_settings').select('settings').eq('company_id', companyId).eq('doc_type', 'vawa').maybeSingle() : Promise.resolve({ data: null } as any),
+    ])
+    if (user) { const { data: p } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle(); setRole(p?.role || '') }
+    const pf = { ...(((propRes.data?.settings as any)?.fills) || {}) }
+    const cf = ((coRes?.data?.settings as any)?.fills) || {}
+    // Seed prefilled defaults (e.g. the National DV Hotline) as real editable
+    // text when nothing is set at either scope — so it can be edited or added to.
+    // Kept in the saved baseline so opening the tab doesn't read as dirty.
     for (const fl of VAWA_5380_FILLS) {
-      if (fl.prefill && (f[fl.key] == null || f[fl.key] === '')) f[fl.key] = VAWA_DEFAULT_FILLS[fl.key]
+      if (fl.prefill && !(pf[fl.key] || '').trim() && !(cf[fl.key] || '').trim()) pf[fl.key] = VAWA_DEFAULT_FILLS[fl.key]
     }
-    setFills(f); setSaved(f); setLoading(false)
+    setPropFills(pf); setSavedProp(pf); setCoFills(cf); setSavedCo(cf); setLoading(false)
   }
 
-  const dirty = JSON.stringify(fills) !== JSON.stringify(saved)
+  const canEditCompany = role === 'super_admin' || role === 'asset_manager'
+  const readOnly = scope === 'company' && !canEditCompany
+  const propDirty = JSON.stringify(propFills) !== JSON.stringify(savedProp)
+  const coDirty = JSON.stringify(coFills) !== JSON.stringify(savedCo)
+  const dirty = propDirty || coDirty
+
   useEffect(() => { onDirtyChange?.(dirty) }, [dirty])
   useEffect(() => () => onDirtyChange?.(false), [])
   useEffect(() => {
@@ -41,89 +58,127 @@ export default function VawaDocument({ propertyId, property, onDirtyChange }: an
   }, [dirty])
 
   const save = async () => {
-    setSaving(true)
-    const { error } = await supabase.from('property_doc_settings').upsert(
-      { property_id: propertyId, doc_type: 'vawa', settings: { fills }, updated_at: new Date().toISOString() },
-      { onConflict: 'property_id,doc_type' })
+    setSaving(true); let ok = true
+    if (propDirty) {
+      const { error } = await supabase.from('property_doc_settings').upsert(
+        { property_id: propertyId, doc_type: 'vawa', settings: { fills: propFills }, updated_at: new Date().toISOString() },
+        { onConflict: 'property_id,doc_type' })
+      if (error) { ok = false; toast('Could not save. (' + error.message + ')', 'error') }
+    }
+    if (ok && coDirty) {
+      if (!companyId) { ok = false; toast('Assign this property to a company before saving company defaults.', 'warning') }
+      else {
+        const { error } = await supabase.from('company_doc_settings').upsert(
+          { company_id: companyId, doc_type: 'vawa', settings: { fills: coFills }, updated_at: new Date().toISOString() },
+          { onConflict: 'company_id,doc_type' })
+        if (error) { ok = false; toast('Could not save company default. (' + error.message + ')', 'error') }
+      }
+    }
     setSaving(false)
-    if (error) { toast('Could not save. (' + error.message + ')', 'error'); return }
-    setSaved(fills); toast('Saved.', 'success')
+    if (ok) { setSavedProp(propFills); setSavedCo(coFills); toast('Saved.', 'success') }
   }
-  const discard = () => setFills(saved)
-  const setFill = (k: string, v: string) => setFills(p => ({ ...p, [k]: v }))
+  const discard = () => { setPropFills(savedProp); setCoFills(savedCo) }
+
+  // Active-scope editing + inheritance.
+  const curFills = scope === 'company' ? coFills : propFills
+  const setFill = (k: string, v: string) => {
+    if (scope === 'company') setCoFills(p => ({ ...p, [k]: v }))
+    else setPropFills(p => ({ ...p, [k]: v }))
+  }
+  // Effective (resolved) values: property over company over built-in default.
+  const effFills = (): Record<string, string> => {
+    const out: Record<string, string> = {}
+    for (const fl of VAWA_5380_FILLS) {
+      const pv = (propFills[fl.key] || '').trim()
+      const cv = (coFills[fl.key] || '').trim()
+      out[fl.key] = pv || cv || ''   // vawaMerge fills blanks with VAWA_DEFAULT_FILLS
+    }
+    return out
+  }
+  // Placeholder shown in an empty box: inherited company value (property scope) or the built-in default.
+  const placeholderFor = (key: string) => {
+    if (scope === 'property' && (coFills[key] || '').trim()) return `Company default: ${coFills[key]}`
+    return VAWA_DEFAULT_FILLS[key] || ''
+  }
 
   const form: VawaForm | null = activeForm === '5380' ? VAWA_5380 : null
+  const fills = effFills()
 
-  // ---- PDF ----------------------------------------------------------------
+  // ---- PDF (matches the plain HUD form look: Times New Roman, black) -------
   const generatePDF = () => {
     if (!form) return
     const w = window.open('', '_blank')
     if (!w) { toast('Please allow pop-ups to print.', 'warning'); return }
-    let body = `<h1>${esc(form.title)}</h1>`
+    let body = ''
+    if (form.omb) body += `<p class="omb">${esc(form.omb)}</p>`
+    body += `<h1>${esc(form.title)}</h1>`
     if (form.subtitle) body += `<p class="sub">${esc(form.subtitle)}</p>`
-    if (form.omb) body += `<p class="omb">${esc(form.omb)} · Form ${esc(form.code)}</p>`
-    body += `<p class="site">${esc(property?.name || '')}</p><hr>`
+    if (property?.name) body += `<p class="site">${esc(property.name)}</p>`
+    body += `<hr>`
     for (const b of form.blocks) {
       if (b.k === 'p') body += `<p>${b.lead ? `<strong>${esc(b.lead)}</strong> ` : ''}${esc(vawaMerge(b.text, fills))}</p>`
       else if (b.k === 'ul') { body += '<ul>'; for (const it of b.items) body += `<li>${esc(vawaMerge(it, fills))}</li>`; body += '</ul>' }
       else if (b.k === 'table') {
         body += `<table class="grid"><thead><tr><th>${esc(b.headers[0])}</th><th>${esc(b.headers[1])}</th></tr></thead><tbody>`
-        for (const [a, c] of b.rows) body += `<tr><td>${esc(a)}</td><td>${esc(c)}</td></tr>`
+        for (const [a, c] of b.rows) body += `<tr><td class="prog">${esc(a)}</td><td>${esc(c)}</td></tr>`
         body += `</tbody></table>`
       }
     }
+    body += `<p class="formno">Form ${esc(form.code)}</p>`
     w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(form.code)}${property?.name ? ' — ' + esc(property.name) : ''}</title><style>
       *{box-sizing:border-box;}
-      @page{margin:18mm;}
-      body{font-family:'Georgia','Times New Roman',serif;color:#1e1b4b;line-height:1.5;font-size:12px;max-width:7.5in;margin:0 auto;padding:16px;}
-      h1{font-size:20px;text-align:center;color:#1e1b4b;margin:0 0 4px;}
-      .sub{text-align:center;font-weight:bold;margin:0 0 4px;}
-      .omb{text-align:center;color:#6b7280;font-size:10px;margin:0 0 6px;font-family:ui-sans-serif,'Segoe UI',Arial,sans-serif;}
-      .site{text-align:center;color:#4338ca;font-weight:600;margin:0 0 10px;font-family:ui-sans-serif,'Segoe UI',Arial,sans-serif;}
-      hr{border:none;border-top:2px solid #312e81;margin:8px 0 14px;}
-      p{margin:0 0 9px;text-align:justify;}
-      ul{margin:0 0 10px 18px;padding:0;} li{margin:0 0 5px;}
-      table.grid{border-collapse:collapse;width:100%;margin:6px 0 12px;font-size:11px;}
-      table.grid th{background:#312e81;color:#fff;text-align:left;padding:5px 8px;vertical-align:top;}
-      table.grid td{border:1px solid #d7d7e6;padding:5px 8px;vertical-align:top;}
-      table.grid td:first-child{font-weight:600;width:32%;}
-      @media print{tr{page-break-inside:avoid;}}
+      @page{margin:1in 1in 0.9in 1in;}
+      body{font-family:'Times New Roman',Times,serif;color:#000;line-height:1.35;font-size:11pt;margin:0;}
+      .omb{text-align:center;font-size:8.5pt;margin:0 0 6px;}
+      h1{font-size:14pt;font-weight:bold;text-align:center;margin:0 0 2px;}
+      .sub{text-align:center;font-weight:bold;font-size:11.5pt;margin:0 0 2px;}
+      .site{text-align:center;font-size:10pt;font-style:italic;margin:2px 0 0;}
+      hr{border:none;border-top:1px solid #000;margin:8px 0 12px;}
+      p{margin:0 0 8px;text-align:justify;}
+      ul{margin:0 0 9px 26px;padding:0;} li{margin:0 0 5px;text-align:justify;}
+      table.grid{border-collapse:collapse;width:100%;margin:6px 0 12px;font-size:10pt;}
+      table.grid th{border:1px solid #000;background:#e6e6e6;text-align:left;padding:5px 7px;vertical-align:top;font-weight:bold;}
+      table.grid td{border:1px solid #000;padding:5px 7px;vertical-align:top;}
+      table.grid td.prog{font-weight:bold;width:30%;}
+      .formno{text-align:left;font-size:9pt;margin:14px 0 0;border-top:1px solid #000;padding-top:3px;}
+      @media print{tr{page-break-inside:avoid;} ul,li{page-break-inside:avoid;}}
     </style></head><body>${body}<script>window.onload=function(){setTimeout(function(){window.print()},300)}<\/script></body></html>`)
     w.document.close()
   }
 
-  // ---- Word ---------------------------------------------------------------
+  // ---- Word (Times New Roman, plain) --------------------------------------
+  const run = (text: string, opts: any = {}) => new TextRun({ text, font: TNR, size: 22, ...opts })
   const generateWord = async () => {
     if (!form) return
     const children: any[] = []
-    children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 40 }, children: [new TextRun({ text: form.title, bold: true, size: 30, color: BRAND })] }))
-    if (form.subtitle) children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 40 }, children: [new TextRun({ text: form.subtitle, bold: true, size: 22 })] }))
-    if (form.omb) children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 40 }, children: [new TextRun({ text: `${form.omb} · Form ${form.code}`, size: 15, color: '6B7280' })] }))
-    children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 160 }, children: [new TextRun({ text: property?.name || '', bold: true, size: 20, color: '4338CA' })] }))
-    children.push(new Paragraph({ border: { bottom: { color: BRAND, space: 1, style: BorderStyle.SINGLE, size: 10 } }, spacing: { after: 160 }, children: [] }))
+    if (form.omb) children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 40 }, children: [run(form.omb, { size: 17 })] }))
+    children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 20 }, children: [run(form.title, { bold: true, size: 28 })] }))
+    if (form.subtitle) children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 20 }, children: [run(form.subtitle, { bold: true, size: 23 })] }))
+    if (property?.name) children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 60 }, children: [run(property.name, { italics: true, size: 20 })] }))
+    children.push(new Paragraph({ border: { bottom: { color: '000000', space: 1, style: BorderStyle.SINGLE, size: 6 } }, spacing: { after: 160 }, children: [] }))
     for (const b of form.blocks) {
       if (b.k === 'p') {
         const runs: any[] = []
-        if (b.lead) runs.push(new TextRun({ text: b.lead + ' ', bold: true, size: 20 }))
-        if (b.text) runs.push(new TextRun({ text: vawaMerge(b.text, fills), size: 20 }))
+        if (b.lead) runs.push(run(b.lead + ' ', { bold: true }))
+        if (b.text) runs.push(run(vawaMerge(b.text, fills)))
         children.push(new Paragraph({ alignment: AlignmentType.JUSTIFIED, spacing: { after: 120 }, children: runs }))
       } else if (b.k === 'ul') {
-        for (const it of b.items) children.push(new Paragraph({ bullet: { level: 0 }, spacing: { after: 60 }, children: [new TextRun({ text: vawaMerge(it, fills), size: 20 })] }))
+        for (const it of b.items) children.push(new Paragraph({ bullet: { level: 0 }, alignment: AlignmentType.JUSTIFIED, spacing: { after: 60 }, children: [run(vawaMerge(it, fills))] }))
       } else if (b.k === 'table') {
-        const hdr = (t: string) => new TableCell({ shading: { fill: BRAND } as any, margins: { top: 40, bottom: 40, left: 80, right: 80 }, children: [new Paragraph({ children: [new TextRun({ text: t, bold: true, color: 'FFFFFF', size: 16 })] })] })
-        const cell = (t: string, bold = false) => new TableCell({ margins: { top: 40, bottom: 40, left: 80, right: 80 }, children: [new Paragraph({ children: [new TextRun({ text: t, size: 16, bold })] })] })
+        const edge = { style: BorderStyle.SINGLE, size: 4, color: '000000' }
+        const hdr = (t: string) => new TableCell({ shading: { fill: 'E6E6E6' } as any, margins: { top: 40, bottom: 40, left: 90, right: 90 }, children: [new Paragraph({ children: [run(t, { bold: true, size: 18 })] })] })
+        const cell = (t: string, bold = false) => new TableCell({ margins: { top: 40, bottom: 40, left: 90, right: 90 }, children: [new Paragraph({ children: [run(t, { size: 18, bold })] })] })
         children.push(new Table({
-          width: { size: 100, type: WidthType.PERCENTAGE },
-          columnWidths: [3000, 6000],
-          rows: [
-            new TableRow({ tableHeader: true, children: [hdr(b.headers[0]), hdr(b.headers[1])] }),
-            ...b.rows.map(([a, c]) => new TableRow({ children: [cell(a, true), cell(c)] })),
-          ],
+          width: { size: 100, type: WidthType.PERCENTAGE }, columnWidths: [3000, 6500],
+          borders: { top: edge, bottom: edge, left: edge, right: edge, insideHorizontal: edge, insideVertical: edge },
+          rows: [new TableRow({ tableHeader: true, children: [hdr(b.headers[0]), hdr(b.headers[1])] }),
+            ...b.rows.map(([a, c]) => new TableRow({ children: [cell(a, true), cell(c)] }))],
         }))
         children.push(new Paragraph({ spacing: { after: 120 }, children: [] }))
       }
     }
-    const doc = new Document({ sections: [{ properties: { page: { margin: { top: 1000, bottom: 1000, left: 1000, right: 1000 } } }, children }] })
+    children.push(new Paragraph({ spacing: { before: 160 }, border: { top: { color: '000000', space: 1, style: BorderStyle.SINGLE, size: 6 } }, children: [run(`Form ${form.code}`, { size: 17 })] }))
+    const doc = new Document({ sections: [{ properties: { page: { margin: { top: 1440, bottom: 1300, left: 1440, right: 1440 } } }, children }] })
     saveAs(await Packer.toBlob(doc), `${form.code} — ${property?.name || 'property'}.docx`)
   }
 
@@ -146,11 +201,20 @@ export default function VawaDocument({ propertyId, property, onDirtyChange }: an
             <Button variant="neutral" onClick={generateWord} disabled={!form}><Icon name="file" /> Word</Button>
           </div>
         </div>
+        {/* Scope switcher */}
+        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+          <span className="text-sm font-medium text-slate-500">Editing</span>
+          <div className="inline-flex rounded-lg border border-slate-300 overflow-hidden text-sm">
+            <button onClick={() => setScope('property')} className={`px-3 py-1.5 ${scope === 'property' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>This property</button>
+            <button onClick={() => setScope('company')} className={`px-3 py-1.5 border-l border-slate-300 ${scope === 'company' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>Company default</button>
+          </div>
+          <span className="text-xs text-slate-400">{scope === 'company' ? 'Applies to every property in this company unless the property overrides it.' : 'Overrides the company default for this property only.'}</span>
+        </div>
         {/* Form sub-tabs */}
-        <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
+        <div className="mt-3 flex flex-wrap gap-2">
           {VAWA_FORMS.map(f => (
             <button key={f.id} onClick={() => setActiveForm(f.id)}
-              className={`px-3 py-1.5 rounded-lg text-sm border ${activeForm === f.id ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}>
+              className={`px-3 py-1.5 rounded-lg text-sm border ${activeForm === f.id ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}>
               {f.code} <span className="opacity-70">· {f.label}</span>{!f.ready && <span className="ml-1 text-xs opacity-60">(soon)</span>}
             </button>
           ))}
@@ -159,15 +223,17 @@ export default function VawaDocument({ propertyId, property, onDirtyChange }: an
 
       {form ? (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
-          <h4 className="text-sm font-semibold text-slate-700 mb-1">{form.code} — fill-in items</h4>
-          <p className="text-xs text-slate-500 mb-4">These replace the bracketed placeholders in the notice. Anything left blank prints the HUD placeholder text.</p>
+          <h4 className="text-sm font-semibold text-slate-700 mb-1">{form.code} — fill-in items {scope === 'company' && <span className="text-xs font-normal text-indigo-600">(company default)</span>}</h4>
+          <p className="text-xs text-slate-500 mb-4">These replace the bracketed placeholders in the notice. Blank items inherit the {scope === 'property' ? 'company default, then the ' : ''}HUD default. Leave the website blank to drop the “or go to …” clause.</p>
+          {readOnly && <p className="text-xs text-amber-600 mb-3">You don’t have permission to edit company defaults — switch to “This property.”</p>}
           <div className="grid grid-cols-1 gap-3">
             {VAWA_5380_FILLS.map(fl => (
               <label key={fl.key} className="block">
                 <span className="text-xs font-medium text-slate-500">{fl.label}</span>
                 {fl.help && <span className="block text-xs text-slate-400">{fl.help}</span>}
-                <textarea className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" rows={2}
-                  value={fills[fl.key] || ''} onChange={e => setFill(fl.key, e.target.value)} />
+                <textarea className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50" rows={2}
+                  disabled={readOnly} value={curFills[fl.key] || ''} placeholder={placeholderFor(fl.key)}
+                  onChange={e => setFill(fl.key, e.target.value)} />
               </label>
             ))}
           </div>
