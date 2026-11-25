@@ -39,21 +39,25 @@ const resolveText = (text: string, merge: Record<string, string>) =>
   text.replace(/\{\{(\w+)\}\}/g, (_: string, k: string) => merge[k] || `[${k}]`)
 
 type AddCites = (sourceText: string) => number[]
-const pushListItems = (out: RBlock[], items: ListItem[], merge: Record<string, string>, addCites: AddCites, level = 0) => {
+const pushListItems = (out: RBlock[], items: ListItem[], merge: Record<string, string>, addCites: AddCites, hotma: boolean, level = 0) => {
+  const variant = hotma ? 'hotma' : 'base'
   for (const it of items) {
     if (typeof it === 'string') out.push({ k: 'li', text: resolveText(it, merge), level, cites: addCites(it) })
     else {
+      if (it.only && it.only !== variant) continue
       out.push({ k: 'li', text: resolveText(it.text, merge), level, cites: addCites(it.text) })
-      if (it.sub) pushListItems(out, it.sub, merge, addCites, level + 1)
+      if (it.sub) pushListItems(out, it.sub, merge, addCites, hotma, level + 1)
     }
   }
 }
 
 // withCites attaches HUD endnote markers (EIV_FN_BY_KEY keyed on the raw
 // template text) and returns the collected endnotes in document order.
-function composeEiv(merge: Record<string, string>, overrides: Record<string, string>, customItems: any[], withCites = false): { blocks: RBlock[]; endnotes: Endnote[] } {
+function composeEiv(merge: Record<string, string>, overrides: Record<string, string>, customItems: any[], hotma: boolean, withCites = false): { blocks: RBlock[]; endnotes: Endnote[] } {
   const out: RBlock[] = []
   const endnotes: Endnote[] = []
+  const variant = hotma ? 'hotma' : 'base'
+  const okOnly = (only?: string) => !only || only === variant
   let counter = 0
   const addCites: AddCites = (sourceText) => {
     if (!withCites) return []
@@ -77,9 +81,10 @@ function composeEiv(merge: Record<string, string>, overrides: Record<string, str
       for (const para of ov.split(/\n{2,}/)) if (para.trim()) out.push({ k: 'p', text: para.trim() })
     } else {
       for (const b of section.blocks) {
+        if (!okOnly((b as any).only)) continue
         if (b.k === 'p') out.push({ k: 'p', text: resolveText(b.text, merge), cites: addCites(b.text) })
         else if (b.k === 'h') out.push({ k: 'h3', text: b.text, cites: addCites(b.text) })
-        else if (b.k === 'ul') pushListItems(out, b.items, merge, addCites)
+        else if (b.k === 'ul') pushListItems(out, b.items, merge, addCites, hotma)
         else if (b.k === 'schedule') out.push({ k: 'schedule' })
       }
     }
@@ -231,10 +236,13 @@ function EivDocument({ propertyId, property, onDirtyChange }: any) {
     address: property?.address || '',
     phone: settings.merge?.phone || '',
     company: property?.companies?.name || '',
+    hotmaDate: settings.merge?.hotmaDate || 'January 1, 2025',
   }
+  const hotma = !!settings.hotma
   const effSettings: EivSettings = {
     merge: settings.merge,
     schedule: mergeSchedules(co.schedule, settings.schedule),
+    hotma,
   }
   const effOverrides = { ...(co.overrides || {}), ...overrides }
   const effCustom = [...(co.customItems || []), ...customItems]
@@ -252,7 +260,7 @@ function EivDocument({ propertyId, property, onDirtyChange }: any) {
 
   // --- Overrides ----------------------------------------------------------
   const defaultSectionText = (sectionId: string) => {
-    const { blocks } = composeEiv(merge, {}, []) // rendered with no overrides, no cites
+    const { blocks } = composeEiv(merge, {}, [], hotma) // rendered with no overrides, no cites
     const lines: string[] = []
     let inSection = false
     for (const b of blocks) {
@@ -281,7 +289,7 @@ function EivDocument({ propertyId, property, onDirtyChange }: any) {
 
   // --- Generation ---------------------------------------------------------
   const esc = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  const title = 'EIV Policies & Procedures'
+  const title = hotma ? 'EIV Policies & Procedures (HOTMA)' : 'EIV Policies & Procedures'
   const headerLines = [merge.sitename, merge.company, merge.address, merge.phone].filter(Boolean)
   const metaLine = `Effective ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`
 
@@ -338,7 +346,7 @@ function EivDocument({ propertyId, property, onDirtyChange }: any) {
   const sup = (cites?: number[]) => (cites && cites.length ? `<sup>${cites.join(',')}</sup>` : '')
 
   const generatePDF = () => {
-    const { blocks } = composeEiv(merge, effOverrides, effCustom, true)
+    const { blocks } = composeEiv(merge, effOverrides, effCustom, hotma, true)
     let body = `<h1>${esc(title)}</h1><p class="sub">for the use of HUD’s Enterprise Income Verification (EIV) System</p>`
     body += `<p class="hdr">${headerLines.map(esc).join('<br>')}</p>`
     if (metaLine) body += `<p class="meta">${esc(metaLine)}</p>`
@@ -398,7 +406,7 @@ function EivDocument({ propertyId, property, onDirtyChange }: any) {
   }
 
   const generateWord = async () => {
-    const { blocks } = composeEiv(merge, effOverrides, effCustom, true)
+    const { blocks } = composeEiv(merge, effOverrides, effCustom, hotma, true)
     const children: any[] = []
     const supRuns = (cites?: number[]) => (cites && cites.length ? [new TextRun({ text: cites.join(','), superScript: true, size: 14, color: '555555' })] : [])
     children.push(new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: title, bold: true, size: 40 })] }))
@@ -466,7 +474,7 @@ function EivDocument({ propertyId, property, onDirtyChange }: any) {
       })
     }
     const blob = await Packer.toBlob(new Document({ sections }))
-    saveAs(blob, `EIV-Policy-and-Procedure-${(property?.name || 'Property').replace(/[^a-zA-Z0-9]/g, '_')}.docx`)
+    saveAs(blob, `EIV-Policy-and-Procedure${hotma ? '-HOTMA' : ''}-${(property?.name || 'Property').replace(/[^a-zA-Z0-9]/g, '_')}.docx`)
   }
 
   if (loading) return <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 text-slate-500">Loading documents…</div>
@@ -537,6 +545,24 @@ function EivDocument({ propertyId, property, onDirtyChange }: any) {
             </div>
           </div>
           <p className="text-xs text-slate-400 mt-2">Name, company, and address come from the property record (edit them on the Overview tab).</p>
+        </div>
+      )}
+
+      {/* HOTMA version toggle — property scope only */}
+      {!isCompany && (
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+          <h3 className="text-sm font-semibold text-slate-800 mb-1">HOTMA version</h3>
+          <label className="flex items-start gap-2 mt-2">
+            <input type="checkbox" className="mt-1 accent-indigo-600" checked={hotma} onChange={(e: any) => setSettings({ ...settings, hotma: e.target.checked })} />
+            <span className="text-sm text-slate-700">Generate the HOTMA version<span className="block text-xs text-slate-400">Adds the one-time 9887 consent + revocation rules, the “run at annual, not interim” report note, Safe Harbor, and the New-Hires-not-quarterly change; the schedule drops interim runs. Leave off for the current (pre-HOTMA) EIV P&P.</span></span>
+          </label>
+          {hotma && (
+            <div className="mt-3 max-w-xs">
+              <label className="block text-xs text-slate-500 mb-1">HOTMA implementation (effective) date</label>
+              <input key={`hotmaDate-${formRev}`} defaultValue={settings.merge?.hotmaDate || ''} onBlur={(e: any) => { if (e.target.value !== (settings.merge?.hotmaDate || '')) setMerge('hotmaDate', e.target.value) }} placeholder="January 1, 2025" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none" />
+              <p className="text-xs text-slate-400 mt-1">Shown in the HOTMA paragraphs. Defaults to January 1, 2025.</p>
+            </div>
+          )}
         </div>
       )}
 

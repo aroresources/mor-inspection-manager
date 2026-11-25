@@ -8,18 +8,21 @@
 // Everything else is fixed HUD text. No per-person or per-site specifics are
 // embedded in the body (role-only language, generic storage wording).
 
-export type ListItem = string | { text: string; sub?: ListItem[] }
+// `only` gates a block/item to one variant: 'base' (HOTMA off) or 'hotma' (on).
+export type Variant = 'base' | 'hotma'
+export type ListItem = string | { text: string; sub?: ListItem[]; only?: Variant }
 export type Block =
-  | { k: 'p'; text: string }
-  | { k: 'h'; text: string }
-  | { k: 'ul'; items: ListItem[] }
-  | { k: 'schedule' }
+  | { k: 'p'; text: string; only?: Variant }
+  | { k: 'h'; text: string; only?: Variant }
+  | { k: 'ul'; items: ListItem[]; only?: Variant }
+  | { k: 'schedule'; only?: Variant }
 export interface Section { id: string; title: string; blocks: Block[] }
 
 export interface ScheduleChoice { frequency?: 'Quarterly' | 'Monthly'; file?: boolean; include?: boolean }
 export interface EivSettings {
   merge?: Record<string, string>
   schedule?: Record<string, ScheduleChoice>
+  hotma?: boolean   // generate the HOTMA version
 }
 
 export const EIV_MERGE_FIELDS = [
@@ -63,6 +66,12 @@ export const EIV_SCHEDULE: ScheduleRow[] = [
 
 export const scheduleFrequency = (row: ScheduleRow, settings?: EivSettings): string => {
   const choice = settings?.schedule?.[row.key || '']
+  // HOTMA: income-matching reports run at the Annual Reexam, not at Interim; the
+  // New Hires Report is run at the AR rather than quarterly.
+  if (settings?.hotma) {
+    if (row.key === 'income_summary' || row.key === 'income_report' || row.key === 'income_discrepancy') return 'MI/IC (within 90 days), AR'
+    if (row.key === 'new_hires') return 'AR'
+  }
   if (row.monthlyOption && choice?.frequency === 'Monthly') return 'Monthly'
   return row.freq || ''
 }
@@ -84,6 +93,7 @@ export const EIV_SECTIONS: Section[] = [
       { k: 'p', text: 'As per HUD Guidelines, Owner/Agents must have written policies & procedures for staff to follow to ensure that applicants and tenants are treated fairly and are not being discriminated against.' },
       { k: 'p', text: 'It is critical that all EIV users become familiar with these policies and procedures as well as with each report, how often it must be used, and what actions are required. HUD’s EIV requirements are set out in HUD Handbook 4350.3 REV-1, Chapter 9, and HUD Notice H 2013-06 (issued March 8, 2013, which superseded Notice H 2010-10). HUD updates these requirements on occasion. Our Policies & Procedures will be updated accordingly.' },
       { k: 'p', text: 'Be Advised: On your MOR, the reviewer will make sure you have written EIV policies and procedures in place, an EIV file containing all required items, and that you are using EIV and using it correctly. Your reviewer will also check security procedures to ensure that you are following HUD-required procedures for security. Failure to use EIV as required can result in an MOR finding and a five percent reduction in the monthly voucher payment until the violation is cured. A new owner or management agent must begin using EIV within 90 days of taking over the property.' },
+      { k: 'p', only: 'hotma', text: 'This property has implemented the HOTMA rules effective {{hotmaDate}}. The HOTMA-specific procedures in this document apply to certifications on or after that date.' },
     ],
   },
   {
@@ -137,7 +147,8 @@ export const EIV_SECTIONS: Section[] = [
   {
     id: 'disclosure', title: 'Disclosure to Tenants', blocks: [
       { k: 'ul', items: [
-        'At Move In, and at each subsequent certification, the head of household, spouse, and co-head (regardless of age) and every other adult household member will be asked to sign the HUD-9887 and HUD-9887A.',
+        { text: 'At Move In, and at each subsequent certification, the head of household, spouse, and co-head (regardless of age) and every other adult household member will be asked to sign the HUD-9887 and HUD-9887A.', only: 'base' },
+        { text: 'At Move In and at the initial certification, the head of household, spouse, and co-head (regardless of age) and every other adult household member will be asked to sign the HUD-9887 and HUD-9887A.', only: 'hotma' },
         'The HUD-9887, Notice and Consent for the Release of Information, authorizes the owner/manager and HUD (among other government agencies) to provide and share income information with each other.',
         'The HUD-9887A, Applicant’s/Tenant’s Consent to the Release of Information, authorizes the owner/manager to request information about the applicant/tenant directly from third parties (e.g., employers and benefit providers).',
         'A copy of the signed HUD-9887/A will be provided to each adult applicant/tenant.',
@@ -145,11 +156,24 @@ export const EIV_SECTIONS: Section[] = [
         'The original signed 9887/A will be kept in the tenant file together with the tenant certification.',
         'If a disability prevents an applicant/tenant from being able to read or understand the forms, a reasonable accommodation will be made.',
         'At Move In, and at each subsequent certification, a copy of the “EIV and You” brochure will be given to each applicant/tenant. Receipt of the brochure will be documented in the tenant file.',
-        'Current, signed forms HUD-9887 and HUD-9887-A (the HUD-9887 is valid for 15 months from the date of signature) must be in the tenant file for each adult household member (except live-in aides) and for the head of household, spouse, and co-head regardless of age, before that member’s EIV Income Report information is viewed or used. The signed HUD-9887-A must also be on file before written third-party verification is requested.',
+        { text: 'Current, signed forms HUD-9887 and HUD-9887-A (the HUD-9887 is valid for 15 months from the date of signature) must be in the tenant file for each adult household member (except live-in aides) and for the head of household, spouse, and co-head regardless of age, before that member’s EIV Income Report information is viewed or used. The signed HUD-9887-A must also be on file before written third-party verification is requested.', only: 'base' },
+        { text: 'Signed forms HUD-9887 and HUD-9887-A must be in the tenant file for each adult household member (except live-in aides) and for the head of household, spouse, and co-head regardless of age, before that member’s EIV Income Report information is viewed or used. Under HOTMA, the signed HUD-9887/9887-A remains in effect until the household is denied assistance or assistance is terminated (see below). The signed HUD-9887-A must also be on file before written third-party verification is requested.', only: 'hotma' },
         'A signed HUD-9887/9887-A is not required to view or use the Existing Tenant Search or the other EIV Verification Reports (Multiple Subsidy, Identity Verification, and Deceased Tenants reports).',
         { text: 'When a household member turns 18, he/she must report to management and sign the HUD-9887 and HUD-9887-A within 60 days or by the next recertification, whichever is first. Management will not view or use the EIV Income Report for that member until the forms are signed.', sub: [
           'Failure to report and sign within this timeframe will constitute a lease non-compliance, and the household’s assistance and/or tenancy may be terminated. This notification requirement will be part of the house rules. Management will provide written notice of this requirement to each household with a 17-year-old member at the time of any Annual or Interim certification.',
         ] },
+      ] },
+      { k: 'p', only: 'hotma', text: 'Under HOTMA (effective {{hotmaDate}}), consent is a one-time requirement:' },
+      { k: 'ul', only: 'hotma', items: [
+        'All current residents will sign a revised HUD-9887/9887-A at their next certification following HOTMA implementation. Once signed, residents will not need to sign it again unless a person 18 years or older becomes a member of the family, a member of the family turns 18 years of age, or HUD or the PHA requires it in administrative instructions. Failure to sign may result in the denial of assistance or termination of assisted housing benefits, following the procedures set forth by HUD/the lease agreement.',
+        'The consent will remain in effect until the household is denied assistance or the assistance is terminated.',
+      ] },
+      { k: 'h', only: 'hotma', text: 'Revocation of Consent (HOTMA)' },
+      { k: 'ul', only: 'hotma', items: [
+        'A household may revoke its consent by providing a written revocation of consent to the office.',
+        'If a household revokes consent, applicants will be denied admission, and current residents will have their subsidy terminated right away, even before their next reexamination.',
+        'If consent is revoked, management will be unable to process examinations for the household, including interim reexaminations when income decreases.',
+        'Management will explain to the household what the consequences of this revocation are, and will report any revocation of consent to HUD.',
       ] },
     ],
   },
@@ -225,6 +249,13 @@ export const EIV_SECTIONS: Section[] = [
         'Independent third-party verification. Management will obtain written third-party verification directly from the income source, and will not rely on tenant-provided documents, when: the tenant cannot provide acceptable, current documentation; the tenant disputes the EIV data; there is an EIV income discrepancy; the EIV employment or income data is incomplete and management needs additional information (e.g., pay rate, hours, or effective date); or the tenant reports wages, unemployment, or Social Security/SSI income that does not appear in EIV. If third-party verification cannot be obtained, the reason will be documented in the tenant file. Tenant self-certification will be accepted only when no other acceptable verification method is available.',
         'Separate households. Any detail report kept in a tenant file must contain only that household’s information. When a printout includes more than one household, the pages will be separated before filing.',
         'Suspected fraud. Tenants who knowingly provided incomplete or inaccurate information will be handled in accordance with 4350.3, Chapter 8. Where fraud is suspected, management will report it to the HUD Office of Inspector General (OIG).',
+      ] },
+      { k: 'h', only: 'hotma', text: 'HOTMA — When These Reports Are Run' },
+      { k: 'ul', only: 'hotma', items: [
+        'Under HOTMA (effective {{hotmaDate}}), interim reexaminations are not conducted for increases in income. As a result, the Income (Summary) Report, Income Report, and Income Discrepancy Report are run at the Annual Reexamination and are not run at interim reexaminations.',
+        'Because earned-income increases are not acted on at an interim reexamination, the New Hires Report does not have to be run quarterly; it is run at each household’s annual reexamination.',
+        'If a household presents a Safe Harbor verification under the HOTMA guidelines, the Income Report will not need to be run (see the Tenant Selection Plan for details).',
+        'The Income Discrepancy Report’s $2,400 logic predates the HOTMA income rules, so it may not be valid under HOTMA. Management will file the report as usual and interpret any discrepancy in light of the HOTMA income rules; if HUD updates the report, the guidelines below will be considered as applicable.',
       ] },
       { k: 'h', text: 'Income Information' },
       { k: 'p', text: 'Summary Report: Summary of household information from the current, active certification in the TRACS files at the time of the income match. This report will be used to make sure that each tenant’s SSN is valid and to verify the identity of each tenant.' },
