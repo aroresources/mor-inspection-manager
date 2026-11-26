@@ -92,10 +92,43 @@ function DocumentsTab({ propertyId, morId }: any) {
   const [filterAssignee, setFilterAssignee] = useState('all')
   const [showCrossedOff, setShowCrossedOff] = useState(false)
   const [openDocId, setOpenDocId] = useState<string | null>(null)
+  const [zipping, setZipping] = useState(false)
 
   useEffect(() => {
     if (morId) fetchDocuments()
   }, [morId])
+
+  // Download every uploaded file in the binder as a single ZIP, foldered by item.
+  const downloadAllUploads = async () => {
+    const withFiles = documents.filter((d: any) => parseAttachmentUrls(d.file_url).length > 0)
+    if (!withFiles.length) { toast('No uploaded files in this binder yet.', 'warning'); return }
+    setZipping(true)
+    try {
+      const zip = new JSZip()
+      const used = new Set<string>()
+      let ok = 0, failed = 0
+      for (const d of withFiles) {
+        const folder = (d.name || 'Document').replace(/[^a-zA-Z0-9 ._-]/g, '_').trim().slice(0, 80) || 'Document'
+        for (const url of parseAttachmentUrls(d.file_url)) {
+          try {
+            const res = await fetch(url)
+            if (!res.ok) throw new Error(String(res.status))
+            const blob = await res.blob()
+            const base = decodeURIComponent((url.split('/').pop() || 'file').split('?')[0])
+            let path = `${folder}/${base}`
+            if (used.has(path)) { const dot = base.lastIndexOf('.'); let n = 2; while (used.has(path)) { path = dot > 0 ? `${folder}/${base.slice(0, dot)} (${n})${base.slice(dot)}` : `${folder}/${base} (${n})`; n++ } }
+            used.add(path)
+            zip.file(path, blob)
+            ok++
+          } catch { failed++ }
+        }
+      }
+      if (!ok) { toast('Could not download any files. Please try again.', 'error'); return }
+      const out = await zip.generateAsync({ type: 'blob' })
+      saveAs(out, 'MOR-Binder-Uploads.zip')
+      toast(`Downloaded ${ok} file${ok > 1 ? 's' : ''}${failed ? ` (${failed} could not be fetched)` : ''}.`, failed ? 'warning' : 'success')
+    } finally { setZipping(false) }
+  }
 
    const fetchDocuments = async () => {
     setLoading(true)
@@ -286,6 +319,7 @@ function DocumentsTab({ propertyId, morId }: any) {
         <div className="flex flex-wrap justify-between items-center gap-2 mb-3">
           <span className="text-sm font-medium text-slate-700">Progress: <span className="text-slate-900 font-semibold">{completed} of {total}</span> handled <span className="text-slate-400 font-normal">(submitted or at property)</span></span>
           <div className="flex gap-2 flex-wrap">
+            <Button variant="neutral" onClick={downloadAllUploads} disabled={zipping}><Icon name="download" /> {zipping ? 'Preparing ZIP…' : 'Download uploads (ZIP)'}</Button>
             <Button variant="neutral" onClick={() => setShowPacket(true)}><Icon name="file" /> Submission packet</Button>
             <Button variant="primary" onClick={() => setShowAddCustom(true)}><Icon name="plus" /> Add custom document</Button>
           </div>
