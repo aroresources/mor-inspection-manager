@@ -254,8 +254,8 @@ export default function VawaDocument({ propertyId, property, morId, onDirtyChang
     try {
       const ready = VAWA_FORMS.filter(f => f.ready).map(f => VAWA_FORM_BY_ID[f.id]).filter(Boolean)
       let res
-      for (const f of ready) res = await addGeneratedToBinder({ propertyId, morId, match: /vawa|5380|5381|5382|5383|occupancy rights|emergency transfer|certification/i, cardName: 'VAWA Notices', filename: wordName(f), blob: await buildWordBlob(f) })
-      toast(`Added ${ready.length} VAWA forms to the “${res?.cardName || 'VAWA Notices'}” binder card.`, 'success')
+      for (const f of ready) res = await addGeneratedToBinder({ propertyId, morId, targetName: 'Other VAWA Documents Including Emergency Transfer Plan, Forms HUD 5380, etc.', key: 'vawa', filename: wordName(f), blob: await buildWordBlob(f) })
+      toast(`Added ${ready.length} VAWA forms to the “${res?.cardName || 'Other VAWA Documents'}” binder card.`, 'success')
     } catch (e: any) { toast('Could not add to binder. ' + (e?.message || ''), 'error') }
     setBinding(false)
   }

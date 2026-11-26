@@ -483,7 +483,7 @@ function EivDocument({ propertyId, property, morId, onDirtyChange }: any) {
     if (!morId) { toast('No active MOR — open a MOR first.', 'warning'); return }
     setBinding(true)
     try {
-      const r = await addGeneratedToBinder({ propertyId, morId, match: /\beiv\b|enterprise income/i, cardName: 'EIV Policies & Procedures', filename: eivFilename, blob: await buildWordBlob() })
+      const r = await addGeneratedToBinder({ propertyId, morId, targetName: 'EIV Policies and Procedures', key: 'eivpolicies', filename: eivFilename, blob: await buildWordBlob() })
       toast(`Added to the “${r.cardName}” binder card.`, 'success')
     } catch (e: any) { toast('Could not add to binder. ' + (e?.message || ''), 'error') }
     setBinding(false)
@@ -732,7 +732,7 @@ export default function PropertyDocumentsTab(props: any) {
           {tab('vawa', 'VAWA Notices')}
         </div>
       </div>
-      {docType === 'pm' && <PreventiveMaintenanceTab propertyId={props.propertyId} property={props.property} onSaved={props.onSaved} />}
+      {docType === 'pm' && <PreventiveMaintenanceTab propertyId={props.propertyId} property={props.property} morId={props.morId} onSaved={props.onSaved} />}
       {docType === 'eiv' && <EivDocument {...props} onDirtyChange={onDirtyChange} />}
       {docType === 'tsp' && <TspDocument {...props} onDirtyChange={onDirtyChange} />}
       {docType === 'vawa' && <VawaDocument {...props} onDirtyChange={onDirtyChange} />}

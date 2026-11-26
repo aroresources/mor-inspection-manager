@@ -327,7 +327,7 @@ export default function TspDocument({ propertyId, property, morId, onDirtyChange
     if (!morId) { toast('No active MOR — open a MOR first.', 'warning'); return }
     setBinding(true)
     try {
-      const r = await addGeneratedToBinder({ propertyId, morId, match: /tenant selection|\btsp\b/i, cardName: 'Tenant Selection Plan', filename: tspFilename, blob: await buildWordBlob() })
+      const r = await addGeneratedToBinder({ propertyId, morId, targetName: 'Tenant Selection Plan including any approved residency preference', key: 'tenantselectionplan', filename: tspFilename, blob: await buildWordBlob() })
       toast(`Added to the “${r.cardName}” binder card.`, 'success')
     } catch (e: any) { toast('Could not add to binder. ' + (e?.message || ''), 'error') }
     setBinding(false)

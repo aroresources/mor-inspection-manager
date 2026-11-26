@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { useToast } from '../../components/ToastProvider'
 import { Button, Drawer, Icon } from '../../components/ui'
+import { addGeneratedToBinder } from '../../../lib/binder'
 
 // ---------------------------------------------------------------------------
 // Preventive Maintenance Plan
@@ -108,8 +109,9 @@ const dueOnDate = (freqs: any[], y: number, m: number, d: number): boolean => {
 
 const itemName = (it: any) => it.category
 
-export default function PreventiveMaintenanceTab({ propertyId, property, onSaved }: any) {
+export default function PreventiveMaintenanceTab({ propertyId, property, morId, onSaved }: any) {
   const { toast, confirm } = useToast()
+  const [binding, setBinding] = useState(false)
   const [items, setItems] = useState<any[]>([])
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [saving, setSaving] = useState(false)
@@ -220,9 +222,9 @@ export default function PreventiveMaintenanceTab({ propertyId, property, onSaved
   const planHeader = (title: string) =>
     `<h1>${esc(title)}</h1><p class="muted">${esc(property?.name || '')}${property?.address ? ' · ' + esc(property.address) : ''} · Generated ${esc(new Date().toLocaleDateString())}</p>`
 
-  const generatePlan = () => {
+  const planBodyHtml = () => {
     const its = plannedItems()
-    if (!its.length) { toast('Add at least one item with a location first.', 'warning'); return }
+    if (!its.length) return ''
     let body = planHeader('Preventive Maintenance Plan')
     for (const it of its) {
       body += `<h2>${esc(itemName(it))}</h2>`
@@ -239,7 +241,37 @@ export default function PreventiveMaintenanceTab({ propertyId, property, onSaved
         </table>`
       })
     }
+    return body
+  }
+  const generatePlan = () => {
+    const body = planBodyHtml()
+    if (!body) { toast('Add at least one item with a location first.', 'warning'); return }
     printDoc('Preventive Maintenance Plan', body)
+  }
+  const PLAN_CSS = `body{font-family:Arial,Helvetica,sans-serif;color:#111;font-size:12px;line-height:1.5;margin:0;}
+    h1{font-size:20px;margin:0 0 4px;} h2{font-size:15px;margin:22px 0 6px;border-bottom:2px solid #333;padding-bottom:3px;}
+    h3{font-size:13px;margin:14px 0 4px;color:#1d4ed8;}
+    table{border-collapse:collapse;width:100%;margin:6px 0 14px;} th,td{border:1px solid #999;padding:5px 7px;text-align:left;vertical-align:top;}
+    th{background:#f0f0f0;font-size:11px;} .muted{color:#666;}`
+  const addPlanToBinder = async () => {
+    if (!morId) { toast('No active MOR — open a MOR first.', 'warning'); return }
+    const body = planBodyHtml()
+    if (!body) { toast('Add at least one item with a location first.', 'warning'); return }
+    setBinding(true)
+    try {
+      const html2pdf = (await import('html2pdf.js')).default
+      const el = document.createElement('div')
+      el.innerHTML = `<style>${PLAN_CSS}</style>${body}`
+      el.style.cssText = 'position:fixed;left:-9999px;top:0;width:7.5in;background:#fff;padding:0;'
+      document.body.appendChild(el)
+      let blob: Blob
+      try {
+        blob = await (html2pdf() as any).set({ margin: 12, html2canvas: { scale: 2, useCORS: true }, jsPDF: { unit: 'pt', format: 'letter', orientation: 'portrait' } }).from(el).outputPdf('blob')
+      } finally { document.body.removeChild(el) }
+      const r = await addGeneratedToBinder({ propertyId, morId, targetName: 'Preventative Maintenance Schedules/Procedures', key: 'maintenanceschedules', filename: `Preventive Maintenance Plan — ${property?.name || 'property'}.pdf`, blob })
+      toast(`Added to the “${r.cardName}” binder card.`, 'success')
+    } catch (e: any) { toast('Could not add to binder. ' + (e?.message || ''), 'error') }
+    setBinding(false)
   }
 
   // Flatten the plan into individual maintenance/inspection tasks.
@@ -424,6 +456,7 @@ export default function PreventiveMaintenanceTab({ propertyId, property, onSaved
           <div className="flex gap-2 flex-wrap">
             <Button variant="primary" onClick={generatePlan}><Icon name="file" /> Generate plan</Button>
             <Button variant="neutral" onClick={() => setShowScheduleDrawer(true)}><Icon name="calendar" /> Print schedule</Button>
+            {morId && <Button variant="neutral" onClick={addPlanToBinder} disabled={binding}><Icon name="plus" /> {binding ? 'Adding…' : 'Add plan to MOR binder'}</Button>}
           </div>
         </div>
       </div>
