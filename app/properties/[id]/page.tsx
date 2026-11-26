@@ -2814,7 +2814,7 @@ const fetchMors = async () => {
         )}
 
         {activeTab === 'property documents' && (
-          <PropertyDocumentsTab propertyId={id} property={property} onSaved={fetchProperty} onDirtyChange={(d: boolean) => { docsDirtyRef.current = d }} />
+          <PropertyDocumentsTab propertyId={id} property={property} morId={currentMorId} onSaved={fetchProperty} onDirtyChange={(d: boolean) => { docsDirtyRef.current = d }} />
         )}
 
         {activeTab === 'mor binder' && (

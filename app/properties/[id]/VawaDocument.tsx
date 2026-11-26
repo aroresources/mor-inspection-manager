@@ -6,6 +6,7 @@ import { saveAs } from 'file-saver'
 import { Document, Packer, Paragraph, TextRun, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle } from 'docx'
 import { Button, Icon } from '../../components/ui'
 import { VAWA_FORMS, VAWA_FORM_BY_ID, VAWA_FILLS_BY_FORM, VAWA_DEFAULT_FILLS, vawaMerge, parseRich, type VawaForm, type VawaFill } from '../../../lib/vawaTemplate'
+import { addGeneratedToBinder } from '../../../lib/binder'
 
 const ALL_FILLS: VawaFill[] = Object.values(VAWA_FILLS_BY_FORM).flat()
 
@@ -13,9 +14,10 @@ const esc = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&l
 const TNR = 'Times New Roman'
 type Scope = 'property' | 'company'
 
-export default function VawaDocument({ propertyId, property, onDirtyChange }: any) {
+export default function VawaDocument({ propertyId, property, morId, onDirtyChange }: any) {
   const { toast } = useToast()
   const companyId = property?.company_id || null
+  const [binding, setBinding] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [role, setRole] = useState('')
@@ -246,6 +248,17 @@ export default function VawaDocument({ propertyId, property, onDirtyChange }: an
     for (const f of ready) { saveAs(await buildWordBlob(f), wordName(f)); await new Promise(r => setTimeout(r, 400)) }
     toast(`Generated ${ready.length} VAWA forms.`, 'success')
   }
+  const addAllToBinder = async () => {
+    if (!morId) { toast('No active MOR — open a MOR first.', 'warning'); return }
+    setBinding(true)
+    try {
+      const ready = VAWA_FORMS.filter(f => f.ready).map(f => VAWA_FORM_BY_ID[f.id]).filter(Boolean)
+      let res
+      for (const f of ready) res = await addGeneratedToBinder({ propertyId, morId, match: /vawa|5380|5381|5382|5383|occupancy rights|emergency transfer|certification/i, cardName: 'VAWA Notices', filename: wordName(f), blob: await buildWordBlob(f) })
+      toast(`Added ${ready.length} VAWA forms to the “${res?.cardName || 'VAWA Notices'}” binder card.`, 'success')
+    } catch (e: any) { toast('Could not add to binder. ' + (e?.message || ''), 'error') }
+    setBinding(false)
+  }
 
   if (loading) return <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 text-slate-500">Loading…</div>
 
@@ -265,6 +278,7 @@ export default function VawaDocument({ propertyId, property, onDirtyChange }: an
             <Button variant="neutral" onClick={generatePDF} disabled={!form}><Icon name="file" /> Print / PDF</Button>
             <Button variant="neutral" onClick={generateWord} disabled={!form}><Icon name="file" /> Word</Button>
             <Button variant="neutral" onClick={generateAllWord}><Icon name="file" /> All 4 (Word)</Button>
+            {morId && <Button variant="neutral" onClick={addAllToBinder} disabled={binding}><Icon name="plus" /> {binding ? 'Adding…' : 'Add all 4 to MOR binder'}</Button>}
           </div>
         </div>
         {/* Scope switcher */}

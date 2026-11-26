@@ -4,6 +4,7 @@ import { supabase } from '../../../lib/supabase'
 import TspDocument from './TspDocument'
 import VawaDocument from './VawaDocument'
 import PreventiveMaintenanceTab from './PreventiveMaintenanceTab'
+import { addGeneratedToBinder } from '../../../lib/binder'
 import { useToast } from '../../components/ToastProvider'
 import { saveAs } from 'file-saver'
 import { Document, Packer, Paragraph, TextRun, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle, PageOrientation } from 'docx'
@@ -118,9 +119,10 @@ const filingParts = (line: string): [string | null, string] => {
 
 type Scope = 'property' | 'company'
 
-function EivDocument({ propertyId, property, onDirtyChange }: any) {
+function EivDocument({ propertyId, property, morId, onDirtyChange }: any) {
   const { toast } = useToast()
   const companyId = property?.company_id || null
+  const [binding, setBinding] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [docType] = useState('eiv')
@@ -405,7 +407,7 @@ function EivDocument({ propertyId, property, onDirtyChange }: any) {
     w.document.close()
   }
 
-  const generateWord = async () => {
+  const buildWordBlob = async () => {
     const { blocks } = composeEiv(merge, effOverrides, effCustom, hotma, true)
     const children: any[] = []
     const supRuns = (cites?: number[]) => (cites && cites.length ? [new TextRun({ text: cites.join(','), superScript: true, size: 14, color: '555555' })] : [])
@@ -473,8 +475,18 @@ function EivDocument({ propertyId, property, onDirtyChange }: any) {
         children: posterChildren,
       })
     }
-    const blob = await Packer.toBlob(new Document({ sections }))
-    saveAs(blob, `EIV-Policy-and-Procedure${hotma ? '-HOTMA' : ''}-${(property?.name || 'Property').replace(/[^a-zA-Z0-9]/g, '_')}.docx`)
+    return Packer.toBlob(new Document({ sections }))
+  }
+  const eivFilename = `EIV-Policy-and-Procedure${hotma ? '-HOTMA' : ''}-${(property?.name || 'Property').replace(/[^a-zA-Z0-9]/g, '_')}.docx`
+  const generateWord = async () => { saveAs(await buildWordBlob(), eivFilename) }
+  const addToBinder = async () => {
+    if (!morId) { toast('No active MOR — open a MOR first.', 'warning'); return }
+    setBinding(true)
+    try {
+      const r = await addGeneratedToBinder({ propertyId, morId, match: /\beiv\b|enterprise income/i, cardName: 'EIV Policies & Procedures', filename: eivFilename, blob: await buildWordBlob() })
+      toast(`Added to the “${r.cardName}” binder card.`, 'success')
+    } catch (e: any) { toast('Could not add to binder. ' + (e?.message || ''), 'error') }
+    setBinding(false)
   }
 
   if (loading) return <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 text-slate-500">Loading documents…</div>
@@ -503,6 +515,7 @@ function EivDocument({ propertyId, property, onDirtyChange }: any) {
             <Button variant="neutral" onClick={generateSchedulePoster}><Icon name="calendar" /> Schedule</Button>
             <Button variant="neutral" onClick={generateWord}><Icon name="file" /> Word</Button>
             <Button variant="neutral" onClick={generatePDF}><Icon name="download" /> PDF</Button>
+            {morId && <Button variant="neutral" onClick={addToBinder} disabled={binding}><Icon name="plus" /> {binding ? 'Adding…' : 'Add to MOR binder'}</Button>}
           </div>
         </div>
 

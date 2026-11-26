@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { useToast } from '../../components/ToastProvider'
 import { saveAs } from 'file-saver'
+import { addGeneratedToBinder } from '../../../lib/binder'
 import JSZip from 'jszip'
 import { Document, Packer, Paragraph, TextRun, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle } from 'docx'
 import { Button, Icon } from '../../components/ui'
@@ -81,8 +82,9 @@ const FLAGS: { id: TspFlag; label: string; help: string }[] = [
   { id: 'noSmallerUnitHold', label: 'Remove the smaller-unit transfer-hold rule (§IV)', help: 'For properties that allow no non-mandated transfers. Leave off to keep the rule.' },
 ]
 
-export default function TspDocument({ propertyId, property, onDirtyChange }: any) {
+export default function TspDocument({ propertyId, property, morId, onDirtyChange }: any) {
   const { toast } = useToast()
+  const [binding, setBinding] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [s, setS] = useState<TspSettings>({})
@@ -267,7 +269,7 @@ export default function TspDocument({ propertyId, property, onDirtyChange }: any
   // ---- Word ----------------------------------------------------------------
   const BRAND = '312E81'
   const supRun = (nums: number[]) => nums.length ? [new TextRun({ text: nums.join(','), superScript: true, size: 14, color: '4338CA' })] : []
-  const generateWord = async () => {
+  const buildWordBlob = async () => {
     const secs = composeTsp(effSettings())
     const ct = makeCiter()
     const children: any[] = []
@@ -317,8 +319,18 @@ export default function TspDocument({ propertyId, property, onDirtyChange }: any
       }
     }
     const doc = new Document({ sections: [{ properties: { page: { margin: { top: 1080, bottom: 1080, left: 1080, right: 1080 } } }, children }] })
-    const blob = await Packer.toBlob(doc)
-    saveAs(blob, `Tenant Selection Plan — ${property?.name || 'property'}.docx`)
+    return Packer.toBlob(doc)
+  }
+  const tspFilename = `Tenant Selection Plan — ${property?.name || 'property'}.docx`
+  const generateWord = async () => { saveAs(await buildWordBlob(), tspFilename) }
+  const addToBinder = async () => {
+    if (!morId) { toast('No active MOR — open a MOR first.', 'warning'); return }
+    setBinding(true)
+    try {
+      const r = await addGeneratedToBinder({ propertyId, morId, match: /tenant selection|\btsp\b/i, cardName: 'Tenant Selection Plan', filename: tspFilename, blob: await buildWordBlob() })
+      toast(`Added to the “${r.cardName}” binder card.`, 'success')
+    } catch (e: any) { toast('Could not add to binder. ' + (e?.message || ''), 'error') }
+    setBinding(false)
   }
 
   if (loading) return <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 text-slate-500">Loading…</div>
@@ -345,6 +357,7 @@ export default function TspDocument({ propertyId, property, onDirtyChange }: any
             <Button variant="primary" onClick={save} disabled={saving || !dirty}>{saving ? 'Saving…' : 'Save'}</Button>
             <Button variant="neutral" onClick={generatePDF}><Icon name="file" /> Print / PDF</Button>
             <Button variant="neutral" onClick={generateWord}><Icon name="file" /> Word</Button>
+            {morId && <Button variant="neutral" onClick={addToBinder} disabled={binding}><Icon name="plus" /> {binding ? 'Adding…' : 'Add to MOR binder'}</Button>}
           </div>
         </div>
       </div>
