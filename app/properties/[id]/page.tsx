@@ -115,8 +115,9 @@ function DocumentsTab({ propertyId, morId }: any) {
             if (!res.ok) throw new Error(String(res.status))
             const blob = await res.blob()
             const base = decodeURIComponent((url.split('/').pop() || 'file').split('?')[0])
-            let path = `${folder}/${base}`
-            if (used.has(path)) { const dot = base.lastIndexOf('.'); let n = 2; while (used.has(path)) { path = dot > 0 ? `${folder}/${base.slice(0, dot)} (${n})${base.slice(dot)}` : `${folder}/${base} (${n})`; n++ } }
+            const name = `${folder} - ${base}`
+            let path = name
+            if (used.has(path)) { const dot = name.lastIndexOf('.'); let n = 2; while (used.has(path)) { path = dot > 0 ? `${name.slice(0, dot)} (${n})${name.slice(dot)}` : `${name} (${n})`; n++ } }
             used.add(path)
             zip.file(path, blob)
             ok++
